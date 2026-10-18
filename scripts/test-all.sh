@@ -124,7 +124,7 @@ run_analytic() {
     -e CLICKHOUSE_ADDR=analytic_clickhouse:9000 \
     -e CLICKHOUSE_DATABASE=analytics_test \
     -e CLICKHOUSE_USER=default \
-    -e CLICKHOUSE_PASSWORD= \
+    -e CLICKHOUSE_PASSWORD=analytic_local_secret \
     -e KAFKA_BROKERS=kafka:29092 \
     -e MIGRATIONS_DIR=/src/migrations \
     "$GOLANG_IMAGE" \

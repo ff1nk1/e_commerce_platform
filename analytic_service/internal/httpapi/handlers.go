@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,11 +11,21 @@ import (
 	"analytic_service/internal/store"
 )
 
-type Server struct {
-	store *store.Store
+// MetricsReader is the read port for analytics HTTP handlers (DIP).
+type MetricsReader interface {
+	Ping(ctx context.Context) error
+	UsersMetrics(ctx context.Context, from, to *time.Time) (store.UsersMetrics, error)
+	OrdersMetrics(ctx context.Context, from, to *time.Time) (store.OrdersMetrics, error)
+	SearchMetrics(ctx context.Context, from, to *time.Time, limit int) (store.SearchMetrics, error)
+	OrdersByStore(ctx context.Context, storeID *uint64, from, to *time.Time, limit int) (store.DimensionMetrics, error)
+	OrdersByCategory(ctx context.Context, categoryID *uint64, from, to *time.Time, limit int) (store.DimensionMetrics, error)
 }
 
-func NewServer(st *store.Store) *Server {
+type Server struct {
+	store MetricsReader
+}
+
+func NewServer(st MetricsReader) *Server {
 	return &Server{store: st}
 }
 
@@ -41,37 +52,20 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
-	from, to, err := parseRange(r)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	m, err := s.store.UsersMetrics(r.Context(), from, to)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, m)
+	s.withRange(w, r, func(ctx context.Context, from, to *time.Time) (any, error) {
+		return s.store.UsersMetrics(ctx, from, to)
+	})
 }
 
 func (s *Server) handleOrders(w http.ResponseWriter, r *http.Request) {
-	from, to, err := parseRange(r)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	m, err := s.store.OrdersMetrics(r.Context(), from, to)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, m)
+	s.withRange(w, r, func(ctx context.Context, from, to *time.Time) (any, error) {
+		return s.store.OrdersMetrics(ctx, from, to)
+	})
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	from, to, err := parseRange(r)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	from, to, ok := s.parseRangeOrBadRequest(w, r)
+	if !ok {
 		return
 	}
 	limit, err := parseLimit(r, 20)
@@ -88,12 +82,21 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOrdersByStore(w http.ResponseWriter, r *http.Request) {
-	from, to, err := parseRange(r)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	s.handleDimension(w, r, "store_id", s.store.OrdersByStore)
+}
+
+func (s *Server) handleOrdersByCategory(w http.ResponseWriter, r *http.Request) {
+	s.handleDimension(w, r, "category_id", s.store.OrdersByCategory)
+}
+
+type dimensionQuery func(ctx context.Context, id *uint64, from, to *time.Time, limit int) (store.DimensionMetrics, error)
+
+func (s *Server) handleDimension(w http.ResponseWriter, r *http.Request, idParam string, query dimensionQuery) {
+	from, to, ok := s.parseRangeOrBadRequest(w, r)
+	if !ok {
 		return
 	}
-	storeID, err := parseOptionalUint64(r, "store_id")
+	dimID, err := parseOptionalUint64(r, idParam)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -103,7 +106,7 @@ func (s *Server) handleOrdersByStore(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	m, err := s.store.OrdersByStore(r.Context(), storeID, from, to, limit)
+	m, err := query(r.Context(), dimID, from, to, limit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -111,28 +114,26 @@ func (s *Server) handleOrdersByStore(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, m)
 }
 
-func (s *Server) handleOrdersByCategory(w http.ResponseWriter, r *http.Request) {
-	from, to, err := parseRange(r)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+func (s *Server) withRange(w http.ResponseWriter, r *http.Request, fn func(ctx context.Context, from, to *time.Time) (any, error)) {
+	from, to, ok := s.parseRangeOrBadRequest(w, r)
+	if !ok {
 		return
 	}
-	categoryID, err := parseOptionalUint64(r, "category_id")
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	limit, err := parseLimit(r, 20)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	m, err := s.store.OrdersByCategory(r.Context(), categoryID, from, to, limit)
+	m, err := fn(r.Context(), from, to)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, m)
+}
+
+func (s *Server) parseRangeOrBadRequest(w http.ResponseWriter, r *http.Request) (from, to *time.Time, ok bool) {
+	from, to, err := parseRange(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return nil, nil, false
+	}
+	return from, to, true
 }
 
 func parseLimit(r *http.Request, def int) (int, error) {
@@ -175,7 +176,7 @@ func parseRange(r *http.Request) (*time.Time, *time.Time, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		// exclusive end-of-day if date-only
+		// exclusive end-of-day if date-only (YYYY-MM-DD)
 		if len(raw) == 10 {
 			t = t.Add(24 * time.Hour)
 		}

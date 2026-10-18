@@ -1,5 +1,4 @@
-//CLICKHOUSE GET ONLY ONE ROW INSTEAD OF MANY AT ONE TIME BECAUSE ITS A DEV MODE
-
+// CLICKHOUSE GET ONLY ONE ROW INSTEAD OF MANY AT ONE TIME BECAUSE ITS A DEV MODE
 
 package store
 
@@ -24,6 +23,67 @@ func New(conn driver.Conn) *Store {
 
 func (s *Store) Ping(ctx context.Context) error {
 	return s.conn.Ping(ctx)
+}
+
+func appendTimeRange(q string, args []any, col string, from, to *time.Time) (string, []any) {
+	if from != nil {
+		q += fmt.Sprintf(" AND %s >= ?", col)
+		args = append(args, *from)
+	}
+	if to != nil {
+		q += fmt.Sprintf(" AND %s < ?", col)
+		args = append(args, *to)
+	}
+	return q, args
+}
+
+func conversionsFromFunnel(funnel OrderFunnel) OrderConversions {
+	var conv OrderConversions
+	if funnel.Created > 0 {
+		conv.CreatedToPaid = float64(funnel.Paid) / float64(funnel.Created)
+		conv.CreatedToCancelled = float64(funnel.Cancelled) / float64(funnel.Created)
+	}
+	return conv
+}
+
+// funnelForCohort aggregates funnel outcomes for orders matching cohortWhere
+// (filter on order_funnel_events for selecting order_ids, typically including event_type = 'created').
+// Semantics: cancelled wins over paid; open = neither paid nor cancelled; completed is independent.
+func (s *Store) funnelForCohort(ctx context.Context, cohortWhere string, args []any) (OrderFunnel, OrderConversions, error) {
+	funnelQ := fmt.Sprintf(`
+		SELECT
+			count() AS created,
+			countIf(has_cancelled) AS cancelled,
+			countIf(has_paid AND NOT has_cancelled) AS paid,
+			countIf(NOT has_paid AND NOT has_cancelled) AS open,
+			countIf(has_completed) AS completed
+		FROM (
+			SELECT
+				order_id,
+				max(event_type = 'paid') AS has_paid,
+				max(event_type = 'cancelled') AS has_cancelled,
+				max(event_type = 'completed') AS has_completed
+			FROM order_funnel_events FINAL
+			WHERE order_id IN (
+				SELECT order_id
+				FROM order_funnel_events FINAL
+				WHERE %s
+			)
+			GROUP BY order_id
+		)
+	`, cohortWhere)
+
+	var funnel OrderFunnel
+	if err := s.conn.QueryRow(ctx, funnelQ, args...).Scan(
+		&funnel.Created,
+		&funnel.Cancelled,
+		&funnel.Paid,
+		&funnel.Open,
+		&funnel.Completed,
+	); err != nil {
+		return funnel, OrderConversions{}, fmt.Errorf("funnel: %w", err)
+	}
+	return funnel, conversionsFromFunnel(funnel), nil
 }
 
 func (s *Store) InsertUserRegistration(ctx context.Context, row UserRegistration) error {
@@ -188,19 +248,9 @@ func (s *Store) InsertSearchQuery(ctx context.Context, row SearchQuery) error {
 func (s *Store) UsersMetrics(ctx context.Context, from, to *time.Time) (UsersMetrics, error) {
 	var out UsersMetrics
 
-	totalQ := `SELECT count() FROM user_registrations FINAL`
+	totalQ := `SELECT count() FROM user_registrations FINAL WHERE 1=1`
 	args := []any{}
-	if from != nil || to != nil {
-		totalQ += ` WHERE 1=1`
-		if from != nil {
-			totalQ += ` AND registered_at >= ?`
-			args = append(args, *from)
-		}
-		if to != nil {
-			totalQ += ` AND registered_at < ?`
-			args = append(args, *to)
-		}
-	}
+	totalQ, args = appendTimeRange(totalQ, args, "registered_at", from, to)
 	if err := s.conn.QueryRow(ctx, totalQ, args...).Scan(&out.TotalUsers); err != nil {
 		return out, fmt.Errorf("total users: %w", err)
 	}
@@ -211,14 +261,7 @@ func (s *Store) UsersMetrics(ctx context.Context, from, to *time.Time) (UsersMet
 		WHERE 1=1
 	`
 	growthArgs := []any{}
-	if from != nil {
-		growthQ += ` AND registered_at >= ?`
-		growthArgs = append(growthArgs, *from)
-	}
-	if to != nil {
-		growthQ += ` AND registered_at < ?`
-		growthArgs = append(growthArgs, *to)
-	}
+	growthQ, growthArgs = appendTimeRange(growthQ, growthArgs, "registered_at", from, to)
 	growthQ += ` GROUP BY d ORDER BY d`
 
 	rows, err := s.conn.Query(ctx, growthQ, growthArgs...)
@@ -248,56 +291,16 @@ func (s *Store) UsersMetrics(ctx context.Context, from, to *time.Time) (UsersMet
 func (s *Store) OrdersMetrics(ctx context.Context, from, to *time.Time) (OrdersMetrics, error) {
 	var out OrdersMetrics
 
-	// Cohort: orders created in [from, to). Outcomes are exclusive:
-	// cancelled wins over paid; open = neither paid nor cancelled.
 	cohortFilter := `event_type = 'created'`
 	args := []any{}
-	if from != nil {
-		cohortFilter += ` AND occurred_at >= ?`
-		args = append(args, *from)
-	}
-	if to != nil {
-		cohortFilter += ` AND occurred_at < ?`
-		args = append(args, *to)
-	}
+	cohortFilter, args = appendTimeRange(cohortFilter, args, "occurred_at", from, to)
 
-	funnelQ := fmt.Sprintf(`
-		SELECT
-			count() AS created,
-			countIf(has_cancelled) AS cancelled,
-			countIf(has_paid AND NOT has_cancelled) AS paid,
-			countIf(NOT has_paid AND NOT has_cancelled) AS open,
-			countIf(has_completed) AS completed
-		FROM (
-			SELECT
-				order_id,
-				max(event_type = 'paid') AS has_paid,
-				max(event_type = 'cancelled') AS has_cancelled,
-				max(event_type = 'completed') AS has_completed
-			FROM order_funnel_events FINAL
-			WHERE order_id IN (
-				SELECT order_id
-				FROM order_funnel_events FINAL
-				WHERE %s
-			)
-			GROUP BY order_id
-		)
-	`, cohortFilter)
-
-	if err := s.conn.QueryRow(ctx, funnelQ, args...).Scan(
-		&out.Funnel.Created,
-		&out.Funnel.Cancelled,
-		&out.Funnel.Paid,
-		&out.Funnel.Open,
-		&out.Funnel.Completed,
-	); err != nil {
-		return out, fmt.Errorf("funnel: %w", err)
+	funnel, conv, err := s.funnelForCohort(ctx, cohortFilter, args)
+	if err != nil {
+		return out, err
 	}
-
-	if out.Funnel.Created > 0 {
-		out.Conversions.CreatedToPaid = float64(out.Funnel.Paid) / float64(out.Funnel.Created)
-		out.Conversions.CreatedToCancelled = float64(out.Funnel.Cancelled) / float64(out.Funnel.Created)
-	}
+	out.Funnel = funnel
+	out.Conversions = conv
 
 	revQ := `
 		SELECT
@@ -307,14 +310,7 @@ func (s *Store) OrdersMetrics(ctx context.Context, from, to *time.Time) (OrdersM
 		WHERE event_type = 'paid'
 	`
 	revArgs := []any{}
-	if from != nil {
-		revQ += ` AND occurred_at >= ?`
-		revArgs = append(revArgs, *from)
-	}
-	if to != nil {
-		revQ += ` AND occurred_at < ?`
-		revArgs = append(revArgs, *to)
-	}
+	revQ, revArgs = appendTimeRange(revQ, revArgs, "occurred_at", from, to)
 
 	var total, aov float64
 	if err := s.conn.QueryRow(ctx, revQ, revArgs...).Scan(&total, &aov); err != nil {
@@ -329,14 +325,7 @@ func (s *Store) OrdersMetrics(ctx context.Context, from, to *time.Time) (OrdersM
 		WHERE event_type = 'paid'
 	`
 	byDayArgs := []any{}
-	if from != nil {
-		byDayQ += ` AND occurred_at >= ?`
-		byDayArgs = append(byDayArgs, *from)
-	}
-	if to != nil {
-		byDayQ += ` AND occurred_at < ?`
-		byDayArgs = append(byDayArgs, *to)
-	}
+	byDayQ, byDayArgs = appendTimeRange(byDayQ, byDayArgs, "occurred_at", from, to)
 	byDayQ += ` GROUP BY d ORDER BY d`
 
 	rows, err := s.conn.Query(ctx, byDayQ, byDayArgs...)
@@ -374,14 +363,7 @@ func (s *Store) SearchMetrics(ctx context.Context, from, to *time.Time, limit in
 		WHERE 1=1
 	`
 	args := []any{}
-	if from != nil {
-		statsQ += ` AND occurred_at >= ?`
-		args = append(args, *from)
-	}
-	if to != nil {
-		statsQ += ` AND occurred_at < ?`
-		args = append(args, *to)
-	}
+	statsQ, args = appendTimeRange(statsQ, args, "occurred_at", from, to)
 	if err := s.conn.QueryRow(ctx, statsQ, args...).Scan(&out.TotalSearches, &out.ZeroResultCount); err != nil {
 		return out, fmt.Errorf("search stats: %w", err)
 	}
@@ -405,29 +387,22 @@ func (s *Store) SearchMetrics(ctx context.Context, from, to *time.Time, limit in
 }
 
 func (s *Store) OrdersByStore(ctx context.Context, storeID *uint64, from, to *time.Time, limit int) (DimensionMetrics, error) {
-	return s.ordersByDimension(ctx, "store_id", storeID, from, to, limit)
+	return s.ordersByDimension(ctx, DimStore, storeID, from, to, limit)
 }
 
 func (s *Store) OrdersByCategory(ctx context.Context, categoryID *uint64, from, to *time.Time, limit int) (DimensionMetrics, error) {
-	return s.ordersByDimension(ctx, "category_id", categoryID, from, to, limit)
+	return s.ordersByDimension(ctx, DimCategory, categoryID, from, to, limit)
 }
 
 func (s *Store) ListStoreOptions(ctx context.Context) ([]DimensionOption, error) {
-	return s.listDimensionOptions(ctx, "store_id")
+	return s.listDimensionOptions(ctx, DimStore)
 }
 
 func (s *Store) ListCategoryOptions(ctx context.Context) ([]DimensionOption, error) {
-	return s.listDimensionOptions(ctx, "category_id")
+	return s.listDimensionOptions(ctx, DimCategory)
 }
 
-func (s *Store) listDimensionOptions(ctx context.Context, dimCol string) ([]DimensionOption, error) {
-	nameCol := "store_name"
-	slugCol := "cast('' AS String)"
-	if dimCol == "category_id" {
-		nameCol = "category_name"
-		slugCol = "anyLast(nullIf(category_slug, ''))"
-	}
-
+func (s *Store) listDimensionOptions(ctx context.Context, dim Dimension) ([]DimensionOption, error) {
 	q := fmt.Sprintf(`
 		SELECT
 			%s AS dim_id,
@@ -438,11 +413,11 @@ func (s *Store) listDimensionOptions(ctx context.Context, dimCol string) ([]Dime
 		GROUP BY dim_id
 		HAVING dim_name != ''
 		ORDER BY dim_name ASC
-	`, dimCol, nameCol, slugCol, dimCol)
+	`, dim.IDCol, dim.NameCol, dim.optionsSlugExpr(), dim.IDCol)
 
 	rows, err := s.conn.Query(ctx, q)
 	if err != nil {
-		return nil, fmt.Errorf("%s options: %w", dimCol, err)
+		return nil, fmt.Errorf("%s options: %w", dim.IDCol, err)
 	}
 	defer rows.Close()
 
@@ -450,32 +425,26 @@ func (s *Store) listDimensionOptions(ctx context.Context, dimCol string) ([]Dime
 	for rows.Next() {
 		var opt DimensionOption
 		if err := rows.Scan(&opt.ID, &opt.Name, &opt.Slug); err != nil {
-			return nil, fmt.Errorf("%s options scan: %w", dimCol, err)
+			return nil, fmt.Errorf("%s options scan: %w", dim.IDCol, err)
 		}
 		out = append(out, opt)
 	}
 	return out, rows.Err()
 }
 
-func (s *Store) ordersByDimension(ctx context.Context, dimCol string, dimID *uint64, from, to *time.Time, limit int) (DimensionMetrics, error) {
+func (s *Store) ordersByDimension(ctx context.Context, dim Dimension, dimID *uint64, from, to *time.Time, limit int) (DimensionMetrics, error) {
 	var out DimensionMetrics
 	if limit <= 0 {
 		limit = 20
 	}
 
-	var options []DimensionOption
-	var optErr error
-	if dimCol == "category_id" {
-		options, optErr = s.ListCategoryOptions(ctx)
-	} else {
-		options, optErr = s.ListStoreOptions(ctx)
-	}
+	options, optErr := s.listDimensionOptions(ctx, dim)
 	if optErr != nil {
 		return out, optErr
 	}
 
 	if dimID != nil {
-		detail, err := s.dimensionDetail(ctx, dimCol, *dimID, from, to)
+		detail, err := s.dimensionDetail(ctx, dim, *dimID, from, to)
 		if err != nil {
 			return out, err
 		}
@@ -483,7 +452,7 @@ func (s *Store) ordersByDimension(ctx context.Context, dimCol string, dimID *uin
 		return detail, nil
 	}
 
-	items, err := s.dimensionRanking(ctx, dimCol, from, to, limit)
+	items, err := s.dimensionRanking(ctx, dim, from, to, limit)
 	if err != nil {
 		return out, err
 	}
@@ -494,8 +463,8 @@ func (s *Store) ordersByDimension(ctx context.Context, dimCol string, dimID *uin
 	return out, nil
 }
 
-func (s *Store) dimensionRanking(ctx context.Context, dimCol string, from, to *time.Time, limit int) ([]DimensionBreakdown, error) {
-	dimJoin, nameExpr, slugExpr := dimensionNameExprs(dimCol)
+func (s *Store) dimensionRanking(ctx context.Context, dim Dimension, from, to *time.Time, limit int) ([]DimensionBreakdown, error) {
+	dimJoin, nameExpr, slugExpr := dim.nameExprs()
 
 	q := fmt.Sprintf(`
 		SELECT
@@ -514,22 +483,15 @@ func (s *Store) dimensionRanking(ctx context.Context, dimCol string, from, to *t
 		) AS paid ON paid.order_id = li.order_id
 		%s
 		WHERE li.%s != 0
-	`, dimCol, nameExpr, slugExpr, dimJoin, dimCol)
+	`, dim.IDCol, nameExpr, slugExpr, dimJoin, dim.IDCol)
 	args := []any{}
-	if from != nil {
-		q += ` AND li.occurred_at >= ?`
-		args = append(args, *from)
-	}
-	if to != nil {
-		q += ` AND li.occurred_at < ?`
-		args = append(args, *to)
-	}
+	q, args = appendTimeRange(q, args, "li.occurred_at", from, to)
 	q += ` GROUP BY dim_id ORDER BY orders_count DESC, paid_line_amount DESC LIMIT ?`
 	args = append(args, limit)
 
 	rows, err := s.conn.Query(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("%s ranking: %w", dimCol, err)
+		return nil, fmt.Errorf("%s ranking: %w", dim.IDCol, err)
 	}
 	defer rows.Close()
 
@@ -538,11 +500,9 @@ func (s *Store) dimensionRanking(ctx context.Context, dimCol string, from, to *t
 		var item DimensionBreakdown
 		var lineAmt, paidAmt float64
 		if err := rows.Scan(&item.ID, &item.Name, &item.Slug, &item.OrdersCount, &item.ItemsQuantity, &lineAmt, &paidAmt); err != nil {
-			return nil, fmt.Errorf("%s ranking scan: %w", dimCol, err)
+			return nil, fmt.Errorf("%s ranking scan: %w", dim.IDCol, err)
 		}
-		if item.Name == "" {
-			item.Name = fmt.Sprintf("#%d", item.ID)
-		}
+		item.Name = displayDimName(item.Name, item.ID)
 		item.LineAmount = formatMoney(lineAmt)
 		item.PaidLineAmount = formatMoney(paidAmt)
 		out = append(out, item)
@@ -550,44 +510,13 @@ func (s *Store) dimensionRanking(ctx context.Context, dimCol string, from, to *t
 	return out, rows.Err()
 }
 
-func dimensionNameExprs(dimCol string) (dimJoin, nameExpr, slugExpr string) {
-	if dimCol == "category_id" {
-		dimJoin = `
-		LEFT JOIN (
-			SELECT
-				category_id AS join_id,
-				anyLast(nullIf(category_name, '')) AS dim_name,
-				anyLast(nullIf(category_slug, '')) AS dim_slug
-			FROM product_dim FINAL
-			WHERE category_id != 0
-			GROUP BY category_id
-		) AS dim ON dim.join_id = li.category_id`
-		nameExpr = `ifNull(nullIf(anyLast(nullIf(li.category_name, '')), ''), ifNull(any(dim.dim_name), ''))`
-		slugExpr = `ifNull(nullIf(anyLast(nullIf(li.category_slug, '')), ''), ifNull(any(dim.dim_slug), ''))`
-		return dimJoin, nameExpr, slugExpr
-	}
-
-	dimJoin = `
-		LEFT JOIN (
-			SELECT
-				store_id AS join_id,
-				anyLast(nullIf(store_name, '')) AS dim_name
-			FROM product_dim FINAL
-			WHERE store_id != 0
-			GROUP BY store_id
-		) AS dim ON dim.join_id = li.store_id`
-	nameExpr = `ifNull(nullIf(anyLast(nullIf(li.store_name, '')), ''), ifNull(any(dim.dim_name), ''))`
-	slugExpr = `cast('' AS String)`
-	return dimJoin, nameExpr, slugExpr
-}
-
-func (s *Store) dimensionDetail(ctx context.Context, dimCol string, dimID uint64, from, to *time.Time) (DimensionMetrics, error) {
+func (s *Store) dimensionDetail(ctx context.Context, dim Dimension, dimID uint64, from, to *time.Time) (DimensionMetrics, error) {
 	var out DimensionMetrics
 	out.ID = dimID
 	out.LineAmount = "0.00"
 	out.PaidLineAmount = "0.00"
 
-	dimJoin, nameExpr, slugExpr := dimensionNameExprs(dimCol)
+	dimJoin, nameExpr, slugExpr := dim.nameExprs()
 
 	lineQ := fmt.Sprintf(`
 		SELECT
@@ -605,16 +534,9 @@ func (s *Store) dimensionDetail(ctx context.Context, dimCol string, dimID uint64
 		) AS paid ON paid.order_id = li.order_id
 		%s
 		WHERE li.%s = ?
-	`, nameExpr, slugExpr, dimJoin, dimCol)
+	`, nameExpr, slugExpr, dimJoin, dim.IDCol)
 	lineArgs := []any{dimID}
-	if from != nil {
-		lineQ += ` AND li.occurred_at >= ?`
-		lineArgs = append(lineArgs, *from)
-	}
-	if to != nil {
-		lineQ += ` AND li.occurred_at < ?`
-		lineArgs = append(lineArgs, *to)
-	}
+	lineQ, lineArgs = appendTimeRange(lineQ, lineArgs, "li.occurred_at", from, to)
 
 	var lineAmt, paidAmt float64
 	if err := s.conn.QueryRow(ctx, lineQ, lineArgs...).Scan(
@@ -625,13 +547,11 @@ func (s *Store) dimensionDetail(ctx context.Context, dimCol string, dimID uint64
 		&out.Name,
 		&out.Slug,
 	); err != nil {
-		return out, fmt.Errorf("%s detail lines: %w", dimCol, err)
+		return out, fmt.Errorf("%s detail lines: %w", dim.IDCol, err)
 	}
 	out.LineAmount = formatMoney(lineAmt)
 	out.PaidLineAmount = formatMoney(paidAmt)
-	if out.Name == "" {
-		out.Name = fmt.Sprintf("#%d", dimID)
-	}
+	out.Name = displayDimName(out.Name, dimID)
 
 	cohortFilter := fmt.Sprintf(`
 		order_id IN (
@@ -640,57 +560,15 @@ func (s *Store) dimensionDetail(ctx context.Context, dimCol string, dimID uint64
 			WHERE %s = ?
 		)
 		AND event_type = 'created'
-	`, dimCol)
+	`, dim.IDCol)
 	args := []any{dimID}
-	if from != nil {
-		cohortFilter += ` AND occurred_at >= ?`
-		args = append(args, *from)
-	}
-	if to != nil {
-		cohortFilter += ` AND occurred_at < ?`
-		args = append(args, *to)
-	}
+	cohortFilter, args = appendTimeRange(cohortFilter, args, "occurred_at", from, to)
 
-	funnelQ := fmt.Sprintf(`
-		SELECT
-			count() AS created,
-			countIf(has_cancelled) AS cancelled,
-			countIf(has_paid AND NOT has_cancelled) AS paid,
-			countIf(NOT has_paid AND NOT has_cancelled) AS open,
-			countIf(has_completed) AS completed
-		FROM (
-			SELECT
-				order_id,
-				max(event_type = 'paid') AS has_paid,
-				max(event_type = 'cancelled') AS has_cancelled,
-				max(event_type = 'completed') AS has_completed
-			FROM order_funnel_events FINAL
-			WHERE order_id IN (
-				SELECT order_id
-				FROM order_funnel_events FINAL
-				WHERE %s
-			)
-			GROUP BY order_id
-		)
-	`, cohortFilter)
-
-	var funnel OrderFunnel
-	if err := s.conn.QueryRow(ctx, funnelQ, args...).Scan(
-		&funnel.Created,
-		&funnel.Cancelled,
-		&funnel.Paid,
-		&funnel.Open,
-		&funnel.Completed,
-	); err != nil {
-		return out, fmt.Errorf("%s detail funnel: %w", dimCol, err)
+	funnel, conv, err := s.funnelForCohort(ctx, cohortFilter, args)
+	if err != nil {
+		return out, fmt.Errorf("%s detail funnel: %w", dim.IDCol, err)
 	}
 	out.Funnel = &funnel
-
-	conv := OrderConversions{}
-	if funnel.Created > 0 {
-		conv.CreatedToPaid = float64(funnel.Paid) / float64(funnel.Created)
-		conv.CreatedToCancelled = float64(funnel.Cancelled) / float64(funnel.Created)
-	}
 	out.Conversions = &conv
 
 	return out, nil
@@ -706,14 +584,7 @@ func (s *Store) topQueries(ctx context.Context, from, to *time.Time, zeroOnly bo
 	if zeroOnly {
 		q += ` AND results_count = 0`
 	}
-	if from != nil {
-		q += ` AND occurred_at >= ?`
-		args = append(args, *from)
-	}
-	if to != nil {
-		q += ` AND occurred_at < ?`
-		args = append(args, *to)
-	}
+	q, args = appendTimeRange(q, args, "occurred_at", from, to)
 	q += ` GROUP BY q ORDER BY c DESC LIMIT ?`
 	args = append(args, limit)
 

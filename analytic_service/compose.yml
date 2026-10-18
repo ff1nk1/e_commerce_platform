@@ -6,6 +6,7 @@ services:
     environment:
       CLICKHOUSE_DB: analytics
       CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-analytic_local_secret}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports:
       # HTTP only on host — native 9000 stays internal (9000 used by MinIO)
@@ -40,7 +41,7 @@ services:
       CLICKHOUSE_ADDR: analytic_clickhouse:9000
       CLICKHOUSE_DATABASE: analytics
       CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-analytic_local_secret}
       MIGRATIONS_DIR: /app/migrations
     depends_on:
       analytic_clickhouse:
@@ -62,7 +63,7 @@ services:
       CLICKHOUSE_ADDR: analytic_clickhouse:9000
       CLICKHOUSE_DATABASE: analytics
       CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-analytic_local_secret}
       MIGRATIONS_DIR: /app/migrations
     depends_on:
       analytic_clickhouse:

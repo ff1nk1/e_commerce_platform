@@ -9,15 +9,6 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-func headerEventType(msg kafka.Message) string {
-	for _, h := range msg.Headers {
-		if strings.EqualFold(h.Key, "event-type") {
-			return string(h.Value)
-		}
-	}
-	return ""
-}
-
 func headerValue(msg kafka.Message, key string) string {
 	for _, h := range msg.Headers {
 		if strings.EqualFold(h.Key, key) {
@@ -25,6 +16,10 @@ func headerValue(msg kafka.Message, key string) string {
 		}
 	}
 	return ""
+}
+
+func headerEventType(msg kafka.Message) string {
+	return headerValue(msg, "event-type")
 }
 
 func isSkipAnalytics(msg kafka.Message, body map[string]any) bool {

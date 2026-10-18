@@ -2,65 +2,62 @@ package store
 
 import "time"
 
-type UserRegistration struct {
-	UserID         uint64
-	Email          string
-	Name           string
-	RegisteredAt   time.Time
+// KafkaProvenance tracks the source message for ClickHouse dedup / audit columns.
+type KafkaProvenance struct {
 	KafkaTopic     string
 	KafkaPartition int32
 	KafkaOffset    int64
+}
+
+type UserRegistration struct {
+	UserID       uint64
+	Email        string
+	Name         string
+	RegisteredAt time.Time
+	KafkaProvenance
 }
 
 type OrderFunnelEvent struct {
-	OrderID        uint64
-	UserID         uint64
-	EventType      string // created | paid | completed | cancelled
-	TotalAmount    string
-	Reason         string
-	OccurredAt     time.Time
-	KafkaTopic     string
-	KafkaPartition int32
-	KafkaOffset    int64
+	OrderID     uint64
+	UserID      uint64
+	EventType   string // created | paid | completed | cancelled
+	TotalAmount string
+	Reason      string
+	OccurredAt  time.Time
+	KafkaProvenance
 }
 
 type OrderLineItem struct {
-	OrderID        uint64
-	ProductID      uint64
-	StoreID        uint64
-	StoreName      string
-	CategoryID     uint64
-	CategoryName   string
-	CategorySlug   string
-	Quantity       uint32
-	UnitPrice      string
-	OccurredAt     time.Time
-	KafkaTopic     string
-	KafkaPartition int32
-	KafkaOffset    int64
+	OrderID      uint64
+	ProductID    uint64
+	StoreID      uint64
+	StoreName    string
+	CategoryID   uint64
+	CategoryName string
+	CategorySlug string
+	Quantity     uint32
+	UnitPrice    string
+	OccurredAt   time.Time
+	KafkaProvenance
 }
 
 type ProductDim struct {
-	ProductID      uint64
-	StoreID        uint64
-	StoreName      string
-	CategoryID     uint64
-	CategoryName   string
-	CategorySlug   string
-	KafkaTopic     string
-	KafkaPartition int32
-	KafkaOffset    int64
+	ProductID    uint64
+	StoreID      uint64
+	StoreName    string
+	CategoryID   uint64
+	CategoryName string
+	CategorySlug string
+	KafkaProvenance
 }
 
 type SearchQuery struct {
-	Query          string
-	ResultsCount   uint32
-	Filters        string
-	Sort           string
-	OccurredAt     time.Time
-	KafkaTopic     string
-	KafkaPartition int32
-	KafkaOffset    int64
+	Query        string
+	ResultsCount uint32
+	Filters      string
+	Sort         string
+	OccurredAt   time.Time
+	KafkaProvenance
 }
 
 type DayCount struct {
@@ -98,10 +95,10 @@ type RevenueMetrics struct {
 }
 
 type OrdersMetrics struct {
-	Funnel        OrderFunnel       `json:"funnel"`
-	Conversions   OrderConversions  `json:"conversions"`
-	Revenue       RevenueMetrics    `json:"revenue"`
-	AvgOrderValue string            `json:"avg_order_value"`
+	Funnel        OrderFunnel      `json:"funnel"`
+	Conversions   OrderConversions `json:"conversions"`
+	Revenue       RevenueMetrics   `json:"revenue"`
+	AvgOrderValue string           `json:"avg_order_value"`
 }
 
 type QueryCount struct {
@@ -110,11 +107,11 @@ type QueryCount struct {
 }
 
 type SearchMetrics struct {
-	TotalSearches      uint64       `json:"total_searches"`
-	ZeroResultCount    uint64       `json:"zero_result_count"`
-	ZeroResultRate     float64      `json:"zero_result_rate"`
-	PopularQueries     []QueryCount `json:"popular_queries"`
-	ZeroResultQueries  []QueryCount `json:"zero_result_queries"`
+	TotalSearches     uint64       `json:"total_searches"`
+	ZeroResultCount   uint64       `json:"zero_result_count"`
+	ZeroResultRate    float64      `json:"zero_result_rate"`
+	PopularQueries    []QueryCount `json:"popular_queries"`
+	ZeroResultQueries []QueryCount `json:"zero_result_queries"`
 }
 
 type DimensionOption struct {

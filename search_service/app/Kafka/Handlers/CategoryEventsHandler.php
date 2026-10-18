@@ -2,21 +2,22 @@
 
 namespace App\Kafka\Handlers;
 
+use App\Kafka\Concerns\ResolvesEventType;
 use App\Services\SearchIndexService;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
 class CategoryEventsHandler
 {
+    use ResolvesEventType;
+
     public function __construct(
         private readonly SearchIndexService $index,
     ) {}
 
     public function __invoke(ConsumerMessage $message): void
     {
-        $headers = $message->getHeaders();
-        $body = $message->getBody();
-        $eventType = $headers['event-type'] ?? ($body['event'] ?? null);
+        [$eventType, $body] = $this->resolveEventTypeAndBody($message);
 
         if (! in_array($eventType, ['category.created', 'category.updated', 'category.deleted'], true)) {
             Log::debug("Игнорируем неизвестное событие категории: {$eventType}");
@@ -26,14 +27,18 @@ class CategoryEventsHandler
 
         $data = $body['data'] ?? null;
         if (! is_array($data)) {
-            Log::warning('Kafka: category event без data', ['body' => $body]);
+            Log::warning('Kafka: category event без data', [
+                'event' => $eventType,
+            ]);
 
             return;
         }
 
         $id = $data['id'] ?? null;
         if ($id === null) {
-            Log::warning('Kafka: category event без id', ['data' => $data]);
+            Log::warning('Kafka: category event без id', [
+                'event' => $eventType,
+            ]);
 
             return;
         }
@@ -46,7 +51,10 @@ class CategoryEventsHandler
         }
 
         if (($data['name'] ?? null) === null) {
-            Log::warning('Kafka: category event с неполными полями', ['data' => $data]);
+            Log::warning('Kafka: category event с неполными полями', [
+                'event' => $eventType,
+                'category_id' => (int) $id,
+            ]);
 
             return;
         }

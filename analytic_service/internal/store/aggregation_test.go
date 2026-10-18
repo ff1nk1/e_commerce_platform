@@ -125,10 +125,10 @@ func TestSearchMetricsZeroRateAndEmptyLabel(t *testing.T) {
 	day := ts("2024-04-01")
 
 	for _, q := range []store.SearchQuery{
-		{Query: "boots", ResultsCount: 5, Filters: "{}", OccurredAt: day, KafkaTopic: "t", KafkaOffset: 1},
-		{Query: "boots", ResultsCount: 0, Filters: "{}", OccurredAt: day, KafkaTopic: "t", KafkaOffset: 2},
-		{Query: "", ResultsCount: 0, Filters: "{}", OccurredAt: day, KafkaTopic: "t", KafkaOffset: 3},
-		{Query: "hat", ResultsCount: 2, Filters: "{}", OccurredAt: day, KafkaTopic: "t", KafkaOffset: 4},
+		{Query: "boots", ResultsCount: 5, Filters: "{}", OccurredAt: day, KafkaProvenance: store.KafkaProvenance{KafkaTopic: "t", KafkaOffset: 1}},
+		{Query: "boots", ResultsCount: 0, Filters: "{}", OccurredAt: day, KafkaProvenance: store.KafkaProvenance{KafkaTopic: "t", KafkaOffset: 2}},
+		{Query: "", ResultsCount: 0, Filters: "{}", OccurredAt: day, KafkaProvenance: store.KafkaProvenance{KafkaTopic: "t", KafkaOffset: 3}},
+		{Query: "hat", ResultsCount: 2, Filters: "{}", OccurredAt: day, KafkaProvenance: store.KafkaProvenance{KafkaTopic: "t", KafkaOffset: 4}},
 	} {
 		require.NoError(t, st.InsertSearchQuery(ctx, q))
 	}
@@ -160,7 +160,8 @@ func TestProductDimLookup(t *testing.T) {
 
 	require.NoError(t, st.InsertProductDim(ctx, store.ProductDim{
 		ProductID: 42, StoreID: 7, StoreName: "Shop", CategoryID: 3,
-		CategoryName: "Cat", CategorySlug: "cat", KafkaTopic: "p", KafkaOffset: 1,
+		CategoryName: "Cat", CategorySlug: "cat",
+		KafkaProvenance: store.KafkaProvenance{KafkaTopic: "p", KafkaOffset: 1},
 	}))
 
 	dim, found, err := st.LookupProductDim(ctx, 42)

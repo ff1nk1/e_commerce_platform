@@ -56,18 +56,19 @@ class SearchIndexServiceTest extends TestCase
         ], $doc['attributes']);
     }
 
-    public function test_index_product_preserves_stock_when_document_exists(): void
+    public function test_index_product_preserves_stock_via_partial_update(): void
     {
         $client = $this->mockOpenSearchClient();
         $client->shouldReceive('exists')->once()->with(Mockery::on(function (array $params): bool {
             return $params['index'] === 'products' && $params['id'] === '10';
         }))->andReturn(true);
-        $client->shouldReceive('get')->once()->andReturn([
-            '_source' => [
-                'quantity' => 12,
-                'in_stock' => true,
-            ],
-        ]);
+
+        $updateDoc = null;
+        $client->shouldReceive('update')->once()->with(Mockery::on(function (array $params) use (&$updateDoc): bool {
+            $updateDoc = $params['body']['doc'] ?? null;
+
+            return $params['index'] === 'products' && $params['id'] === '10';
+        }))->andReturn(['result' => 'updated']);
 
         app(SearchIndexService::class)->indexProduct([
             'id' => 10,
@@ -77,10 +78,11 @@ class SearchIndexServiceTest extends TestCase
             'in_stock' => false,
         ], preserveStock: true);
 
-        $doc = $this->capturedIndexRequests[0]['body'];
-        $this->assertSame(12, $doc['quantity']);
-        $this->assertTrue($doc['in_stock']);
-        $this->assertSame('Updated', $doc['name']);
+        $this->assertSame([], $this->capturedIndexRequests);
+        $this->assertIsArray($updateDoc);
+        $this->assertSame('Updated', $updateDoc['name']);
+        $this->assertArrayNotHasKey('quantity', $updateDoc);
+        $this->assertArrayNotHasKey('in_stock', $updateDoc);
     }
 
     public function test_index_product_skips_invalid_id(): void

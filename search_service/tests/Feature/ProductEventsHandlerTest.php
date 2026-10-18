@@ -67,19 +67,15 @@ class ProductEventsHandlerTest extends TestCase
     {
         $client = $this->mockClientWithExistingIndices();
         $client->shouldReceive('exists')->once()->andReturn(true);
-        $client->shouldReceive('get')->once()->andReturn([
-            '_source' => [
-                'quantity' => 12,
-                'in_stock' => true,
-            ],
-        ]);
-        $client->shouldReceive('index')->once()->with(Mockery::on(function (array $params): bool {
-            $this->assertSame('New phone', $params['body']['name']);
-            $this->assertSame(12, $params['body']['quantity']);
-            $this->assertTrue($params['body']['in_stock']);
+        $client->shouldReceive('update')->once()->with(Mockery::on(function (array $params): bool {
+            $doc = $params['body']['doc'] ?? [];
+            $this->assertSame('New phone', $doc['name']);
+            $this->assertArrayNotHasKey('quantity', $doc);
+            $this->assertArrayNotHasKey('in_stock', $doc);
 
-            return true;
+            return $params['index'] === 'products' && $params['id'] === '42';
         }))->andReturn(['result' => 'updated']);
+        $client->shouldNotReceive('index');
 
         $this->app->instance(Client::class, $client);
 

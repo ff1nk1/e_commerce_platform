@@ -14,46 +14,76 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// EventStore is the ClickHouse write/lookup surface used by Kafka handlers.
-type EventStore interface {
+type UserRegistrar interface {
 	InsertUserRegistration(ctx context.Context, row store.UserRegistration) error
+}
+
+type OrderIngester interface {
 	InsertOrderFunnelEvent(ctx context.Context, row store.OrderFunnelEvent) error
 	InsertOrderLineItems(ctx context.Context, rows []store.OrderLineItem) error
-	InsertProductDim(ctx context.Context, row store.ProductDim) error
 	LookupProductDim(ctx context.Context, productID uint64) (store.ProductDim, bool, error)
+}
+
+type ProductDimStore interface {
+	InsertProductDim(ctx context.Context, row store.ProductDim) error
+}
+
+type SearchRecorder interface {
 	InsertSearchQuery(ctx context.Context, row store.SearchQuery) error
 }
 
+// EventStore composes all ingest ports (convenient wiring for *store.Store).
+type EventStore interface {
+	UserRegistrar
+	OrderIngester
+	ProductDimStore
+	SearchRecorder
+}
+
 type Consumers struct {
-	brokers []string
-	store   EventStore
-	log     *slog.Logger
+	brokers  []string
+	users    UserRegistrar
+	orders   OrderIngester
+	products ProductDimStore
+	search   SearchRecorder
+	log      *slog.Logger
 }
 
 func NewConsumers(brokers []string, st EventStore, log *slog.Logger) *Consumers {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Consumers{brokers: brokers, store: st, log: log}
+	return &Consumers{
+		brokers:  brokers,
+		users:    st,
+		orders:   st,
+		products: st,
+		search:   st,
+		log:      log,
+	}
+}
+
+type subscription struct {
+	GroupID string
+	Topics  []string
+	Handle  handlerFunc
 }
 
 func (c *Consumers) Run(ctx context.Context) error {
+	subs := []subscription{
+		{GroupID: "analytic-service-users-v3", Topics: []string{"user.events"}, Handle: c.handleUser},
+		{GroupID: "analytic-service-orders-v5", Topics: []string{"order.events"}, Handle: c.handleOrder},
+		{GroupID: "analytic-service-search-v3", Topics: []string{"search.events"}, Handle: c.handleSearch},
+		{GroupID: "analytic-service-products-v1", Topics: []string{"product.created", "product.updated"}, Handle: c.handleProduct},
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		return c.runReader(ctx, "analytic-service-users-v3", []string{"user.events"}, c.handleUser)
-	})
-	g.Go(func() error {
-		return c.runReader(ctx, "analytic-service-orders-v5", []string{"order.events"}, c.handleOrder)
-	})
-	g.Go(func() error {
-		return c.runReader(ctx, "analytic-service-search-v3", []string{"search.events"}, c.handleSearch)
-	})
-	g.Go(func() error {
-		return c.runReader(ctx, "analytic-service-products-v1",
-			[]string{"product.created", "product.updated"}, c.handleProduct)
-	})
-
+	for _, sub := range subs {
+		sub := sub
+		g.Go(func() error {
+			return c.runReader(ctx, sub.GroupID, sub.Topics, sub.Handle)
+		})
+	}
 	return g.Wait()
 }
 
@@ -129,19 +159,21 @@ func (c *Consumers) handleUser(ctx context.Context, msg kafka.Message) error {
 
 	ts := parseTime(asString(body["registered_at"]), messageTime(msg))
 	row := store.UserRegistration{
-		UserID:         asUint64(body["user_id"]),
-		Email:          asString(body["email"]),
-		Name:           asString(body["name"]),
-		RegisteredAt:   ts,
-		KafkaTopic:     msg.Topic,
-		KafkaPartition: int32(msg.Partition),
-		KafkaOffset:    msg.Offset,
+		UserID:       asUint64(body["user_id"]),
+		Email:        asString(body["email"]),
+		Name:         asString(body["name"]),
+		RegisteredAt: ts,
+		KafkaProvenance: store.KafkaProvenance{
+			KafkaTopic:     msg.Topic,
+			KafkaPartition: int32(msg.Partition),
+			KafkaOffset:    msg.Offset,
+		},
 	}
 	if row.UserID == 0 {
 		c.log.Warn("skip user.registered without user_id")
 		return nil
 	}
-	return c.store.InsertUserRegistration(ctx, row)
+	return c.users.InsertUserRegistration(ctx, row)
 }
 
 func (c *Consumers) handleProduct(ctx context.Context, msg kafka.Message) error {
@@ -187,16 +219,18 @@ func (c *Consumers) handleProduct(ctx context.Context, msg kafka.Message) error 
 		storeName = asString(st["name"])
 	}
 
-	return c.store.InsertProductDim(ctx, store.ProductDim{
-		ProductID:      productID,
-		StoreID:        storeID,
-		StoreName:      storeName,
-		CategoryID:     categoryID,
-		CategoryName:   categoryName,
-		CategorySlug:   categorySlug,
-		KafkaTopic:     msg.Topic,
-		KafkaPartition: int32(msg.Partition),
-		KafkaOffset:    msg.Offset,
+	return c.products.InsertProductDim(ctx, store.ProductDim{
+		ProductID:    productID,
+		StoreID:      storeID,
+		StoreName:    storeName,
+		CategoryID:   categoryID,
+		CategoryName: categoryName,
+		CategorySlug: categorySlug,
+		KafkaProvenance: store.KafkaProvenance{
+			KafkaTopic:     msg.Topic,
+			KafkaPartition: int32(msg.Partition),
+			KafkaOffset:    msg.Offset,
+		},
 	})
 }
 
@@ -215,6 +249,7 @@ func (c *Consumers) handleOrder(ctx context.Context, msg kafka.Message) error {
 	case "order.paid":
 		short = "paid"
 	case "order.shipped":
+		// Domain "shipped" is stored as funnel stage "completed".
 		short = "completed"
 	case "order.cancelled":
 		short = "cancelled"
@@ -229,15 +264,17 @@ func (c *Consumers) handleOrder(ctx context.Context, msg kafka.Message) error {
 	ts := parseTime(tsRaw, messageTime(msg))
 
 	row := store.OrderFunnelEvent{
-		OrderID:        asUint64(body["order_id"]),
-		UserID:         asUint64(body["user_id"]),
-		EventType:      short,
-		TotalAmount:    asString(body["total_amount"]),
-		Reason:         asString(body["reason"]),
-		OccurredAt:     ts,
-		KafkaTopic:     msg.Topic,
-		KafkaPartition: int32(msg.Partition),
-		KafkaOffset:    msg.Offset,
+		OrderID:     asUint64(body["order_id"]),
+		UserID:      asUint64(body["user_id"]),
+		EventType:   short,
+		TotalAmount: asString(body["total_amount"]),
+		Reason:      asString(body["reason"]),
+		OccurredAt:  ts,
+		KafkaProvenance: store.KafkaProvenance{
+			KafkaTopic:     msg.Topic,
+			KafkaPartition: int32(msg.Partition),
+			KafkaOffset:    msg.Offset,
+		},
 	}
 	if row.OrderID == 0 {
 		c.log.Warn("skip order event without order_id", "event_type", et)
@@ -246,7 +283,7 @@ func (c *Consumers) handleOrder(ctx context.Context, msg kafka.Message) error {
 	if row.TotalAmount == "" {
 		row.TotalAmount = "0.00"
 	}
-	if err := c.store.InsertOrderFunnelEvent(ctx, row); err != nil {
+	if err := c.orders.InsertOrderFunnelEvent(ctx, row); err != nil {
 		return err
 	}
 	if short != "created" {
@@ -283,7 +320,7 @@ func (c *Consumers) insertOrderLineItems(ctx context.Context, msg kafka.Message,
 
 		needDim := categoryID == 0 || storeName == "" || (categoryID != 0 && (categoryName == "" || categorySlug == ""))
 		if needDim {
-			dim, found, err := c.store.LookupProductDim(ctx, productID)
+			dim, found, err := c.orders.LookupProductDim(ctx, productID)
 			if err != nil {
 				return err
 			}
@@ -307,22 +344,24 @@ func (c *Consumers) insertOrderLineItems(ctx context.Context, msg kafka.Message,
 		}
 
 		lines = append(lines, store.OrderLineItem{
-			OrderID:        orderID,
-			ProductID:      productID,
-			StoreID:        storeID,
-			StoreName:      storeName,
-			CategoryID:     categoryID,
-			CategoryName:   categoryName,
-			CategorySlug:   categorySlug,
-			Quantity:       asUint32(item["quantity"]),
-			UnitPrice:      unitPrice,
-			OccurredAt:     ts,
-			KafkaTopic:     msg.Topic,
-			KafkaPartition: int32(msg.Partition),
-			KafkaOffset:    msg.Offset,
+			OrderID:      orderID,
+			ProductID:    productID,
+			StoreID:      storeID,
+			StoreName:    storeName,
+			CategoryID:   categoryID,
+			CategoryName: categoryName,
+			CategorySlug: categorySlug,
+			Quantity:     asUint32(item["quantity"]),
+			UnitPrice:    unitPrice,
+			OccurredAt:   ts,
+			KafkaProvenance: store.KafkaProvenance{
+				KafkaTopic:     msg.Topic,
+				KafkaPartition: int32(msg.Partition),
+				KafkaOffset:    msg.Offset,
+			},
 		})
 	}
-	return c.store.InsertOrderLineItems(ctx, lines)
+	return c.orders.InsertOrderLineItems(ctx, lines)
 }
 
 func (c *Consumers) handleSearch(ctx context.Context, msg kafka.Message) error {
@@ -360,14 +399,16 @@ func (c *Consumers) handleSearch(ctx context.Context, msg kafka.Message) error {
 	ts := parseTime(asString(body["timestamp"]), messageTime(msg))
 
 	row := store.SearchQuery{
-		Query:          query,
-		ResultsCount:   asUint32(data["results_count"]),
-		Filters:        filtersRaw,
-		Sort:           asString(data["sort"]),
-		OccurredAt:     ts,
-		KafkaTopic:     msg.Topic,
-		KafkaPartition: int32(msg.Partition),
-		KafkaOffset:    msg.Offset,
+		Query:        query,
+		ResultsCount: asUint32(data["results_count"]),
+		Filters:      filtersRaw,
+		Sort:         asString(data["sort"]),
+		OccurredAt:   ts,
+		KafkaProvenance: store.KafkaProvenance{
+			KafkaTopic:     msg.Topic,
+			KafkaPartition: int32(msg.Partition),
+			KafkaOffset:    msg.Offset,
+		},
 	}
-	return c.store.InsertSearchQuery(ctx, row)
+	return c.search.InsertSearchQuery(ctx, row)
 }

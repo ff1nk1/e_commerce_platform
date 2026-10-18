@@ -34,7 +34,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         $this->assertArrayHasKey('match_all', $body['query']['bool']['must'][0]);
         $this->assertArrayNotHasKey('post_filter', $body);
         $this->assertSame([['id' => ['order' => 'desc']]], $body['sort']);
-        $this->assertTrue($body['track_total_hits']);
+        $this->assertSame(10000, $body['track_total_hits']);
     }
 
     public function test_text_query_multi_match_shape(): void

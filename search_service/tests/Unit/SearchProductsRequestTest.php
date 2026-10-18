@@ -61,6 +61,23 @@ class SearchProductsRequestTest extends TestCase
         $this->assertSame(50, $params['per_page']);
 
         $this->assertNull($this->params(['q' => '   '])['q']);
+        $this->assertSame(
+            SearchProductsRequest::MAX_PAGE,
+            $this->params(['page' => 99999])['page']
+        );
+    }
+
+    public function test_skip_analytics_requires_config_flag(): void
+    {
+        $request = SearchProductsRequest::create('/api/search', 'GET', []);
+        $request->headers->set('X-Skip-Analytics', '1');
+        $request->setContainer($this->app);
+
+        config(['opensearch.allow_skip_analytics' => false]);
+        $this->assertFalse($request->shouldSkipAnalytics());
+
+        config(['opensearch.allow_skip_analytics' => true]);
+        $this->assertTrue($request->shouldSkipAnalytics());
     }
 
     public function test_price_fields_cast_to_float_when_filled(): void

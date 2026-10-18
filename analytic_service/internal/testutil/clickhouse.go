@@ -17,16 +17,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const defaultClickHousePassword = "analytic_local_secret"
+
 // OpenTestStore connects to ClickHouse (default localhost:19000 / analytics_test).
 // Skips the test when ClickHouse is unreachable.
 func OpenTestStore(t *testing.T) (*store.Store, driver.Conn) {
 	t.Helper()
 
 	cfg := config.Config{
-		ClickHouseAddr:     envOr("CLICKHOUSE_ADDR", "localhost:19000"),
-		ClickHouseDatabase: envOr("CLICKHOUSE_DATABASE", "analytics_test"),
-		ClickHouseUser:     envOr("CLICKHOUSE_USER", "default"),
-		ClickHousePassword: envOr("CLICKHOUSE_PASSWORD", ""),
+		ClickHouseAddr:     config.EnvOr("CLICKHOUSE_ADDR", "localhost:19000"),
+		ClickHouseDatabase: config.EnvOr("CLICKHOUSE_DATABASE", "analytics_test"),
+		ClickHouseUser:     config.EnvOr("CLICKHOUSE_USER", "default"),
+		ClickHousePassword: config.EnvOr("CLICKHOUSE_PASSWORD", defaultClickHousePassword),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -84,39 +86,9 @@ func MigrationsDir(t *testing.T) string {
 }
 
 func KafkaBrokers() []string {
-	raw := envOr("KAFKA_BROKERS", "localhost:9092")
-	parts := splitCSV(raw)
+	parts := config.SplitCSV(config.EnvOr("KAFKA_BROKERS", "localhost:9092"))
 	if len(parts) == 0 {
 		return []string{"localhost:9092"}
 	}
 	return parts
-}
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
-func splitCSV(s string) []string {
-	out := make([]string, 0)
-	start := 0
-	for i := 0; i <= len(s); i++ {
-		if i == len(s) || s[i] == ',' {
-			p := s[start:i]
-			// trim spaces
-			for len(p) > 0 && (p[0] == ' ' || p[0] == '\t') {
-				p = p[1:]
-			}
-			for len(p) > 0 && (p[len(p)-1] == ' ' || p[len(p)-1] == '\t') {
-				p = p[:len(p)-1]
-			}
-			if p != "" {
-				out = append(out, p)
-			}
-			start = i + 1
-		}
-	}
-	return out
 }

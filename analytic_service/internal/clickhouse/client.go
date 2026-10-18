@@ -14,19 +14,24 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 )
 
-func Connect(ctx context.Context, cfg config.Config) (driver.Conn, error) {
-	opts := &ch.Options{
-		Addr: []string{cfg.ClickHouseAddr},
-		Auth: ch.Auth{
-			Database: cfg.ClickHouseDatabase,
-			Username: cfg.ClickHouseUser,
-			Password: cfg.ClickHousePassword,
-		},
+func options(cfg config.Config, withDB bool) *ch.Options {
+	auth := ch.Auth{
+		Username: cfg.ClickHouseUser,
+		Password: cfg.ClickHousePassword,
+	}
+	if withDB {
+		auth.Database = cfg.ClickHouseDatabase
+	}
+	return &ch.Options{
+		Addr:             []string{cfg.ClickHouseAddr},
+		Auth:             auth,
 		DialTimeout:      10 * time.Second,
 		ConnOpenStrategy: ch.ConnOpenInOrder,
 	}
+}
 
-	conn, err := ch.Open(opts)
+func Connect(ctx context.Context, cfg config.Config) (driver.Conn, error) {
+	conn, err := ch.Open(options(cfg, true))
 	if err != nil {
 		return nil, fmt.Errorf("clickhouse open: %w", err)
 	}
@@ -43,15 +48,7 @@ func Connect(ctx context.Context, cfg config.Config) (driver.Conn, error) {
 
 // EnsureDatabase creates the database if missing (connects without DB first).
 func EnsureDatabase(ctx context.Context, cfg config.Config) error {
-	opts := &ch.Options{
-		Addr: []string{cfg.ClickHouseAddr},
-		Auth: ch.Auth{
-			Username: cfg.ClickHouseUser,
-			Password: cfg.ClickHousePassword,
-		},
-		DialTimeout: 10 * time.Second,
-	}
-	conn, err := ch.Open(opts)
+	conn, err := ch.Open(options(cfg, false))
 	if err != nil {
 		return fmt.Errorf("clickhouse open for ensure db: %w", err)
 	}

@@ -2,21 +2,22 @@
 
 namespace App\Kafka\Handlers;
 
+use App\Kafka\Concerns\ResolvesEventType;
 use App\Services\SearchIndexService;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
 class ProductEventsHandler
 {
+    use ResolvesEventType;
+
     public function __construct(
         private readonly SearchIndexService $index,
     ) {}
 
     public function __invoke(ConsumerMessage $message): void
     {
-        $headers = $message->getHeaders();
-        $body = $message->getBody();
-        $eventType = $headers['event-type'] ?? ($body['event'] ?? null);
+        [$eventType, $body] = $this->resolveEventTypeAndBody($message);
 
         if (! in_array($eventType, ['product.created', 'product.updated', 'product.deleted'], true)) {
             Log::debug("Игнорируем неизвестное событие продукта: {$eventType}");
@@ -26,14 +27,18 @@ class ProductEventsHandler
 
         $data = $body['data'] ?? null;
         if (! is_array($data)) {
-            Log::warning('Kafka: product event без data', ['body' => $body]);
+            Log::warning('Kafka: product event без data', [
+                'event' => $eventType,
+            ]);
 
             return;
         }
 
         $id = $data['id'] ?? null;
         if ($id === null) {
-            Log::warning('Kafka: product event без id', ['data' => $data]);
+            Log::warning('Kafka: product event без id', [
+                'event' => $eventType,
+            ]);
 
             return;
         }
@@ -46,7 +51,10 @@ class ProductEventsHandler
         }
 
         if (($data['name'] ?? null) === null || ($data['store_id'] ?? null) === null) {
-            Log::warning('Kafka: product event с неполными полями', ['data' => $data]);
+            Log::warning('Kafka: product event с неполными полями', [
+                'event' => $eventType,
+                'product_id' => (int) $id,
+            ]);
 
             return;
         }

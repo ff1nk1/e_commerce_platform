@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -20,12 +19,12 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		HTTPAddr:           envOr("HTTP_ADDR", ":8006"),
-		KafkaBrokers:       splitCSV(envOr("KAFKA_BROKERS", "kafka:29092")),
-		ClickHouseAddr:     envOr("CLICKHOUSE_ADDR", "analytic_clickhouse:9000"),
-		ClickHouseDatabase: envOr("CLICKHOUSE_DATABASE", "analytics"),
-		ClickHouseUser:     envOr("CLICKHOUSE_USER", "default"),
-		ClickHousePassword: envOr("CLICKHOUSE_PASSWORD", ""),
+		HTTPAddr:           EnvOr("HTTP_ADDR", ":8006"),
+		KafkaBrokers:       SplitCSV(EnvOr("KAFKA_BROKERS", "kafka:29092")),
+		ClickHouseAddr:     EnvOr("CLICKHOUSE_ADDR", "analytic_clickhouse:9000"),
+		ClickHouseDatabase: EnvOr("CLICKHOUSE_DATABASE", "analytics"),
+		ClickHouseUser:     EnvOr("CLICKHOUSE_USER", "default"),
+		ClickHousePassword: strings.TrimSpace(os.Getenv("CLICKHOUSE_PASSWORD")),
 	}
 
 	if len(cfg.KafkaBrokers) == 0 {
@@ -34,17 +33,22 @@ func Load() (Config, error) {
 	if cfg.ClickHouseAddr == "" {
 		return Config{}, fmt.Errorf("CLICKHOUSE_ADDR is empty")
 	}
+	if cfg.ClickHousePassword == "" {
+		return Config{}, fmt.Errorf("CLICKHOUSE_PASSWORD is required")
+	}
 	return cfg, nil
 }
 
-func envOr(key, fallback string) string {
+// EnvOr returns the trimmed env value or fallback when unset/blank.
+func EnvOr(key, fallback string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v
 	}
 	return fallback
 }
 
-func splitCSV(s string) []string {
+// SplitCSV splits a comma-separated list and trims empty parts.
+func SplitCSV(s string) []string {
 	parts := strings.Split(s, ",")
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
@@ -54,17 +58,4 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
-}
-
-// EnvInt is available for optional tunables.
-func EnvInt(key string, fallback int) int {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return fallback
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return fallback
-	}
-	return n
 }
