@@ -47,7 +47,9 @@ class StripeSessionExpiredCompensationTest extends IntegrationTestCase
             'status' => 'success',
         ]));
 
-        $pay = $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 21]);
+        $pay = $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 21], [
+            'Idempotency-Key' => 'it-expire-pay-'.Str::uuid(),
+        ]);
         $pay->assertOk();
         $paymentId = (int) $pay->json('payment_id');
         $payment = Payment::query()->findOrFail($paymentId);

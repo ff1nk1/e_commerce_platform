@@ -2,10 +2,11 @@
 
 namespace App\Kafka\Handlers;
 
+use App\Contracts\SagaStepStore;
+use App\Domain\OrderStatus;
 use App\Events\OrderCancelled;
 use App\Models\Order;
-use App\Services\OrderService;
-use App\Services\SagaStepGuard;
+use App\Services\Order\OrderPayloadFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
@@ -13,8 +14,8 @@ use Junges\Kafka\Contracts\ConsumerMessage;
 class StockEventsHandler
 {
     public function __construct(
-        private SagaStepGuard $saga,
-        private OrderService $orders,
+        private SagaStepStore $saga,
+        private OrderPayloadFactory $payloads,
     ) {}
 
     public function __invoke(ConsumerMessage $message): void
@@ -47,41 +48,61 @@ class StockEventsHandler
         }
 
         $sagaId = $this->sagaIdFrom($payload);
-        if ($sagaId !== null) {
-            $decision = $this->saga->tryBegin($sagaId, 'stock.reserved');
-            if ($decision !== 'run') {
-                Log::info('Saga step stock.reserved skipped', [
-                    'saga_id' => $sagaId,
-                    'decision' => $decision,
-                ]);
+        if ($sagaId === null) {
+            Log::warning('Kafka stock.reserved missing saga_id; ignoring', [
+                'order_id' => $orderId,
+            ]);
 
-                return;
-            }
+            return;
+        }
+
+        $decision = $this->saga->tryBegin($sagaId, 'stock.reserved');
+        if ($decision !== 'run') {
+            Log::info('Saga step stock.reserved skipped', [
+                'saga_id' => $sagaId,
+                'decision' => $decision,
+            ]);
+
+            return;
         }
 
         try {
-            DB::transaction(function () use ($orderId) {
+            $applied = DB::transaction(function () use ($orderId, $sagaId) {
                 $order = Order::query()->lockForUpdate()->find((int) $orderId);
-                if ($order === null || $order->status !== 'pending') {
-                    return;
+                if ($order === null) {
+                    return false;
                 }
 
-                $order->status = 'awaiting_payment';
+                if ($order->saga_id !== $sagaId) {
+                    Log::warning('Kafka stock.reserved saga_id mismatch; ignoring', [
+                        'order_id' => $orderId,
+                        'expected' => $order->saga_id,
+                        'got' => $sagaId,
+                    ]);
+
+                    return false;
+                }
+
+                if ($order->statusEnum() !== OrderStatus::Pending) {
+                    return false;
+                }
+
+                $order->markAwaitingPayment();
                 $order->save();
+
+                return true;
             });
 
-            if ($sagaId !== null) {
+            if ($applied) {
                 $this->saga->put(
                     $sagaId,
                     'stock.reserved',
-                    SagaStepGuard::STATUS_DONE,
+                    SagaStepStore::STATUS_DONE,
                     ['order_id' => (int) $orderId]
                 );
             }
         } finally {
-            if ($sagaId !== null) {
-                $this->saga->release($sagaId, 'stock.reserved');
-            }
+            $this->saga->release($sagaId, 'stock.reserved');
         }
     }
 
@@ -96,45 +117,65 @@ class StockEventsHandler
         }
 
         $sagaId = $this->sagaIdFrom($payload);
-        if ($sagaId !== null) {
-            $decision = $this->saga->tryBegin($sagaId, 'stock.reservation_failed');
-            if ($decision !== 'run') {
-                Log::info('Saga step stock.reservation_failed skipped', [
-                    'saga_id' => $sagaId,
-                    'decision' => $decision,
-                ]);
+        if ($sagaId === null) {
+            Log::warning('Kafka stock.reservation_failed missing saga_id; ignoring', [
+                'order_id' => $orderId,
+            ]);
 
-                return;
-            }
+            return;
+        }
+
+        $decision = $this->saga->tryBegin($sagaId, 'stock.reservation_failed');
+        if ($decision !== 'run') {
+            Log::info('Saga step stock.reservation_failed skipped', [
+                'saga_id' => $sagaId,
+                'decision' => $decision,
+            ]);
+
+            return;
         }
 
         try {
-            DB::transaction(function () use ($orderId) {
+            $applied = DB::transaction(function () use ($orderId, $sagaId) {
                 $order = Order::query()->lockForUpdate()->find((int) $orderId);
-                if ($order === null || $order->status !== 'pending') {
-                    return;
+                if ($order === null) {
+                    return false;
                 }
 
-                $order->status = 'cancelled';
+                if ($order->saga_id !== $sagaId) {
+                    Log::warning('Kafka stock.reservation_failed saga_id mismatch; ignoring', [
+                        'order_id' => $orderId,
+                        'expected' => $order->saga_id,
+                        'got' => $sagaId,
+                    ]);
+
+                    return false;
+                }
+
+                if ($order->statusEnum() !== OrderStatus::Pending) {
+                    return false;
+                }
+
+                $order->cancel();
                 $order->save();
 
                 event(new OrderCancelled(
-                    $this->orders->notificationPayload($order, ['reason' => 'insufficient_stock'])
+                    $this->payloads->notificationPayload($order, ['reason' => 'insufficient_stock'])
                 ));
+
+                return true;
             });
 
-            if ($sagaId !== null) {
+            if ($applied) {
                 $this->saga->put(
                     $sagaId,
                     'stock.reservation_failed',
-                    SagaStepGuard::STATUS_FAILED,
+                    SagaStepStore::STATUS_FAILED,
                     ['order_id' => (int) $orderId]
                 );
             }
         } finally {
-            if ($sagaId !== null) {
-                $this->saga->release($sagaId, 'stock.reservation_failed');
-            }
+            $this->saga->release($sagaId, 'stock.reservation_failed');
         }
     }
 

@@ -47,7 +47,9 @@ class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
             'status' => 'success',
         ]));
 
-        $pay = $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 20]);
+        $pay = $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 20], [
+            'Idempotency-Key' => 'it-stripe-pay-'.Str::uuid(),
+        ]);
         $pay->assertOk();
         $this->assertNotEmpty($pay->json('checkout_url'));
         $paymentId = (int) $pay->json('payment_id');
@@ -67,6 +69,9 @@ class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
                     'payment_intent' => is_string($session['payment_intent'] ?? null)
                         ? $session['payment_intent']
                         : 'pi_it_'.Str::random(8),
+                    'payment_status' => 'paid',
+                    'amount_total' => 500000,
+                    'currency' => 'rub',
                     'metadata' => [
                         'order_id' => (string) $orderId,
                         'payment_id' => (string) $paymentId,

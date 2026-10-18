@@ -2,204 +2,65 @@
 
 namespace App\Services;
 
-use App\Events\OrderCancelled;
-use App\Events\OrderCreated;
-use App\Events\OrderShipped;
-use App\Events\StockReleaseRequested;
 use App\Models\Order;
-use App\Models\ProductSnapshot;
+use App\Services\Order\CancelOrderService;
+use App\Services\Order\CreateOrderService;
+use App\Services\Order\OrderPayloadFactory;
+use App\Services\Order\OrderQueryService;
+use App\Services\Order\ShipOrderService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
+/**
+ * Facade over order use-cases for HTTP controllers and Kafka handlers.
+ */
 class OrderService
 {
     public function __construct(
-        private IdempotencyService $idempotency,
-        private SagaStepGuard $saga,
+        private CreateOrderService $create,
+        private OrderQueryService $query,
+        private CancelOrderService $cancel,
+        private ShipOrderService $ship,
+        private OrderPayloadFactory $payloads,
     ) {}
 
     public function create(int $userId, string $email, string $name, array $items, string $idempotencyKey): array
     {
-        $cached = $this->idempotency->get($idempotencyKey);
-        if ($cached !== null) {
-            return $cached;
-        }
-
-        if (! $this->idempotency->acquireLock($idempotencyKey)) {
-            for ($attempt = 0; $attempt < 2; $attempt++) {
-                usleep(50_000);
-                $cached = $this->idempotency->get($idempotencyKey);
-                if ($cached !== null) {
-                    return $cached;
-                }
-            }
-
-            throw new ConflictHttpException('Order creation already in progress for this idempotency key.');
-        }
-
-        try {
-            $cached = $this->idempotency->get($idempotencyKey);
-            if ($cached !== null) {
-                return $cached;
-            }
-
-            $order = $this->persistOrder($userId, $email, $name, $items);
-            $this->saga->put(
-                (string) $order->saga_id,
-                'order.created',
-                SagaStepGuard::STATUS_DONE,
-                ['order_id' => $order->id]
-            );
-            $body = $this->serializeOrder($order);
-            $result = ['status' => 201, 'body' => $body];
-            $this->idempotency->put($idempotencyKey, 201, $body);
-
-            return $result;
-        } finally {
-            $this->idempotency->releaseLock($idempotencyKey);
-        }
+        return $this->create->execute($userId, $email, $name, $items, $idempotencyKey);
     }
 
     public function listForUser(int $userId, int $perPage = 15): LengthAwarePaginator
     {
-        return Order::query()
-            ->with('items')
-            ->where('user_id', $userId)
-            ->orderByDesc('id')
-            ->paginate($perPage);
+        return $this->query->listForUser($userId, $perPage);
     }
 
     public function listAll(int $perPage = 15): LengthAwarePaginator
     {
-        return Order::query()
-            ->with('items')
-            ->orderByDesc('id')
-            ->paginate($perPage);
+        return $this->query->listAll($perPage);
     }
 
     public function findForUser(int $orderId, int $userId): Order
     {
-        $order = Order::query()
-            ->with(['items.productSnapshot', 'payments'])
-            ->where('id', $orderId)
-            ->where('user_id', $userId)
-            ->first();
-
-        if ($order === null) {
-            throw new NotFoundHttpException('Order not found.');
-        }
-
-        return $order;
+        return $this->query->findForUser($orderId, $userId);
     }
 
     public function findAny(int $orderId): Order
     {
-        $order = Order::query()
-            ->with(['items.productSnapshot', 'payments'])
-            ->find($orderId);
-
-        if ($order === null) {
-            throw new NotFoundHttpException('Order not found.');
-        }
-
-        return $order;
+        return $this->query->findAny($orderId);
     }
 
     public function cancelForUser(int $orderId, int $userId): Order
     {
-        $wroteRelease = false;
-
-        $order = DB::transaction(function () use ($orderId, $userId, &$wroteRelease) {
-            $order = Order::query()
-                ->with(['items.productSnapshot', 'payments'])
-                ->where('id', $orderId)
-                ->where('user_id', $userId)
-                ->lockForUpdate()
-                ->first();
-
-            if ($order === null) {
-                throw new NotFoundHttpException('Order not found.');
-            }
-
-            if (in_array($order->status, ['cancelled', 'confirmed', 'shipped', 'payment_failed'], true)) {
-                throw ValidationException::withMessages([
-                    'status' => ['Order cannot be cancelled in status: '.$order->status],
-                ]);
-            }
-
-            $previousStatus = $order->status;
-            $order->status = 'cancelled';
-            $order->save();
-
-            event(new OrderCancelled(
-                $this->notificationPayload($order, ['reason' => 'user_cancelled'])
-            ));
-
-            if ($previousStatus === 'awaiting_payment') {
-                $releasePayload = [
-                    'order_id' => $order->id,
-                    'items' => $this->itemsPayload($order),
-                ];
-                if (is_string($order->saga_id) && $order->saga_id !== '') {
-                    $releasePayload['saga_id'] = $order->saga_id;
-                }
-
-                event(new StockReleaseRequested($releasePayload));
-                $wroteRelease = true;
-            }
-
-            return $order->load(['items.productSnapshot', 'payments']);
-        });
-
-        if ($wroteRelease && is_string($order->saga_id) && $order->saga_id !== '') {
-            $this->saga->put(
-                $order->saga_id,
-                'stock.release_requested',
-                SagaStepGuard::STATUS_DONE,
-                ['order_id' => $order->id]
-            );
-        }
-
-        return $order;
+        return $this->cancel->forUser($orderId, $userId);
     }
 
     public function shipForAdmin(int $orderId): Order
     {
-        return DB::transaction(function () use ($orderId) {
-            $order = Order::query()
-                ->with(['items.productSnapshot', 'payments'])
-                ->where('id', $orderId)
-                ->lockForUpdate()
-                ->first();
-
-            if ($order === null) {
-                throw new NotFoundHttpException('Order not found.');
-            }
-
-            if ($order->status !== 'confirmed') {
-                throw ValidationException::withMessages([
-                    'status' => ['Order can only be shipped from status confirmed, current: '.$order->status],
-                ]);
-            }
-
-            $order->status = 'shipped';
-            $order->save();
-
-            event(new OrderShipped($this->notificationPayload($order)));
-
-            return $order->load(['items.productSnapshot', 'payments']);
-        });
+        return $this->ship->forAdmin($orderId);
     }
 
     public function serializeOrder(Order $order): array
     {
-        $order->loadMissing(['items.productSnapshot', 'payments']);
-
-        return $order->toArray();
+        return $this->query->serialize($order);
     }
 
     /**
@@ -208,24 +69,7 @@ class OrderService
      */
     public function notificationPayload(Order $order, array $extra = []): array
     {
-        $order->loadMissing('items.productSnapshot');
-
-        $payload = [
-            'order_id' => $order->id,
-            'user_id' => $order->user_id,
-            'email' => $order->customer_email,
-            'name' => $order->customer_name,
-            'status' => $order->status,
-            'total_amount' => (string) $order->total_amount,
-            'items' => $this->notificationItems($order),
-            'occurred_at' => now()->toIso8601String(),
-        ];
-
-        if (is_string($order->saga_id) && $order->saga_id !== '') {
-            $payload['saga_id'] = $order->saga_id;
-        }
-
-        return array_merge($payload, $extra);
+        return $this->payloads->notificationPayload($order, $extra);
     }
 
     /**
@@ -233,139 +77,6 @@ class OrderService
      */
     public function itemsPayload(Order $order): array
     {
-        $order->loadMissing('items.productSnapshot');
-
-        $items = [];
-        foreach ($order->items as $item) {
-            $storeId = $item->productSnapshot?->store_id;
-            if ($storeId === null) {
-                continue;
-            }
-
-            $items[] = [
-                'product_id' => (int) $item->product_id,
-                'store_id' => (int) $storeId,
-                'quantity' => (int) $item->quantity,
-            ];
-        }
-
-        return $items;
-    }
-
-    /**
-     * @return list<array{product_id: int, name: string|null, quantity: int, unit_price: string}>
-     */
-    private function notificationItems(Order $order): array
-    {
-        $items = [];
-        foreach ($order->items as $item) {
-            $items[] = [
-                'product_id' => (int) $item->product_id,
-                'name' => $item->productSnapshot?->name,
-                'quantity' => (int) $item->quantity,
-                'unit_price' => (string) $item->unit_price,
-            ];
-        }
-
-        return $items;
-    }
-
-    /**
-     * @param  list<array{product_id: int, quantity: int}>  $items
-     */
-    private function persistOrder(int $userId, string $email, string $name, array $items): Order
-    {
-        return DB::transaction(function () use ($userId, $email, $name, $items) {
-            $lineItems = [];
-            $outboxItems = [];
-            $total = '0.00';
-
-            $productIds = array_values(array_unique(array_map(
-                static fn (array $item): int => (int) $item['product_id'],
-                $items
-            )));
-
-            $snapshots = ProductSnapshot::query()
-                ->whereIn('id', $productIds)
-                ->get()
-                ->keyBy('id');
-
-            foreach ($items as $item) {
-                $productId = (int) $item['product_id'];
-                $quantity = (int) $item['quantity'];
-
-                $snapshot = $snapshots->get($productId);
-                if ($snapshot === null) {
-                    throw ValidationException::withMessages([
-                        'items' => ["Product snapshot not found for product_id {$productId}"],
-                    ]);
-                }
-
-                $unitPrice = (string) $snapshot->price;
-                $lineTotal = $this->moneyMul($unitPrice, (string) $quantity);
-                $total = $this->moneyAdd($total, $lineTotal);
-
-                $lineItems[] = [
-                    'product_id' => $productId,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                ];
-
-                $outboxItems[] = [
-                    'product_id' => $productId,
-                    'store_id' => (int) $snapshot->store_id,
-                    'store_name' => $snapshot->store_name,
-                    'category_id' => $snapshot->category_id !== null ? (int) $snapshot->category_id : null,
-                    'category_name' => $snapshot->category_name,
-                    'category_slug' => $snapshot->category_slug,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                ];
-            }
-
-            $sagaId = (string) Str::uuid();
-
-            $order = Order::query()->create([
-                'saga_id' => $sagaId,
-                'user_id' => $userId,
-                'customer_email' => $email,
-                'customer_name' => $name,
-                'status' => 'pending',
-                'total_amount' => $total,
-            ]);
-
-            foreach ($lineItems as $line) {
-                $order->items()->create($line);
-            }
-
-            event(new OrderCreated([
-                'saga_id' => $sagaId,
-                'order_id' => $order->id,
-                'user_id' => $userId,
-                'total_amount' => (string) $order->total_amount,
-                'created_at' => $order->created_at->toIso8601String(),
-                'items' => $outboxItems,
-            ]));
-
-            return $order->load(['items.productSnapshot', 'payments']);
-        });
-    }
-
-    private function moneyMul(string $a, string $b): string
-    {
-        if (function_exists('bcmul')) {
-            return bcmul($a, $b, 2);
-        }
-
-        return number_format((float) $a * (float) $b, 2, '.', '');
-    }
-
-    private function moneyAdd(string $a, string $b): string
-    {
-        if (function_exists('bcadd')) {
-            return bcadd($a, $b, 2);
-        }
-
-        return number_format((float) $a + (float) $b, 2, '.', '');
+        return $this->payloads->itemsPayload($order);
     }
 }

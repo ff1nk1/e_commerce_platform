@@ -40,7 +40,7 @@ class SagaInsufficientStockFlowTest extends IntegrationTestCase
             'reason' => 'Not enough stock',
         ]));
 
-        $this->assertSame('cancelled', Order::query()->findOrFail($orderId)->status);
+        $this->assertSame('cancelled', Order::query()->findOrFail($orderId)->status->value);
         $this->assertSame(
             SagaStepGuard::STATUS_FAILED,
             app(SagaStepGuard::class)->get($sagaId, 'stock.reservation_failed')['status'] ?? null
@@ -63,7 +63,8 @@ class SagaInsufficientStockFlowTest extends IntegrationTestCase
                 && ($body['reason'] ?? null) === 'insufficient_stock';
         });
 
-        $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 11])
-            ->assertStatus(422);
+        $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 11], [
+            'Idempotency-Key' => 'it-scarce-pay-'.Str::uuid(),
+        ])->assertStatus(422);
     }
 }

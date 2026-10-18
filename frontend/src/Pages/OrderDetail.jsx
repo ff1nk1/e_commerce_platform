@@ -22,6 +22,7 @@ export default function OrderDetail() {
   const prevStatus = useRef(initialOrder?.status)
   const orderIdRef = useRef(initialOrder?.id)
   const pollAttempts = useRef(0)
+  const payIdempotencyKey = useRef(null)
 
   const canPay = order?.status === 'awaiting_payment'
   const canCancel = order?.status === 'pending' || order?.status === 'awaiting_payment'
@@ -39,6 +40,7 @@ export default function OrderDetail() {
     if (searchParams.get('canceled') === '1') {
       skipAutoPay.current = true
       autoPayStarted.current = false
+      payIdempotencyKey.current = null
       setMessage('Оплата отменена. Можно попробовать снова.')
       setError('')
       const next = new URLSearchParams(searchParams)
@@ -131,7 +133,14 @@ export default function OrderDetail() {
     setBusy(true)
     setError('')
     try {
-      const { data } = await orderApi.post(`/orders/${order.id}/pay`)
+      if (!payIdempotencyKey.current) {
+        payIdempotencyKey.current = crypto.randomUUID()
+      }
+      const { data } = await orderApi.post(`/orders/${order.id}/pay`, null, {
+        headers: {
+          'Idempotency-Key': payIdempotencyKey.current,
+        },
+      })
       if (data?.checkout_url) {
         window.location.href = data.checkout_url
         return

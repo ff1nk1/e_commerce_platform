@@ -2,6 +2,7 @@
 
 namespace App\Services\Stripe;
 
+use App\Contracts\PaymentGateway;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -13,7 +14,7 @@ use UnexpectedValueException;
  * Thin Stripe API client (secret-key auth). Prefer this over shipping JWT to Stripe.
  * Uses stripe/stripe-php for webhook verification when installed; falls back to HMAC.
  */
-class StripeClient
+class StripeClient implements PaymentGateway
 {
     public function createCheckoutSession(array $params): array
     {
@@ -23,6 +24,21 @@ class StripeClient
     public function retrieveCheckoutSession(string $sessionId): array
     {
         return $this->request('get', 'checkout/sessions/'.$sessionId);
+    }
+
+    public function expireCheckoutSession(string $sessionId): array
+    {
+        return $this->request('post', 'checkout/sessions/'.$sessionId.'/expire');
+    }
+
+    public function refundPaymentIntent(string $paymentIntentId, ?int $amountMinor = null): array
+    {
+        $params = ['payment_intent' => $paymentIntentId];
+        if ($amountMinor !== null) {
+            $params['amount'] = $amountMinor;
+        }
+
+        return $this->request('post', 'refunds', $params);
     }
 
     /**

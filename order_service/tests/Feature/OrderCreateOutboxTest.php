@@ -4,19 +4,17 @@ namespace Tests\Feature;
 
 use App\Models\OutboxEvent;
 use App\Models\ProductSnapshot;
-use App\Services\IdempotencyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
+use Tests\Concerns\BindsInMemoryIdempotency;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
 class OrderCreateOutboxTest extends TestCase
 {
+    use BindsInMemoryIdempotency;
     use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
-
-    /** @var array<string, array{status: int, body: array}> */
-    private array $idempotencyStore = [];
 
     protected function setUp(): void
     {
@@ -118,20 +116,36 @@ class OrderCreateOutboxTest extends TestCase
         $this->assertSame(1, OutboxEvent::query()->where('event_type', 'order.created')->count());
     }
 
-    private function bindInMemoryIdempotency(): void
+    public function test_same_idempotency_key_different_user_does_not_leak(): void
     {
-        $store = &$this->idempotencyStore;
+        ProductSnapshot::query()->create([
+            'id' => 42,
+            'name' => 'Phone',
+            'price' => '10.00',
+            'store_id' => 1,
+        ]);
 
-        $idem = Mockery::mock(IdempotencyService::class);
-        $idem->shouldReceive('get')->andReturnUsing(function (string $key) use (&$store) {
-            return $store[$key] ?? null;
-        });
-        $idem->shouldReceive('acquireLock')->andReturn(true);
-        $idem->shouldReceive('releaseLock')->andReturnNull();
-        $idem->shouldReceive('put')->andReturnUsing(function (string $key, int $status, array $body) use (&$store) {
-            $store[$key] = ['status' => $status, 'body' => $body];
-        });
+        $headers = ['Idempotency-Key' => 'shared-key'];
 
-        $this->app->instance(IdempotencyService::class, $idem);
+        $first = $this->postJson('/api/orders', [
+            'user_id' => 3,
+            'email' => 'a@example.com',
+            'name' => 'A',
+            'items' => [['product_id' => 42, 'quantity' => 1]],
+        ], $headers);
+        $first->assertCreated();
+
+        $second = $this->postJson('/api/orders', [
+            'user_id' => 9,
+            'email' => 'b@example.com',
+            'name' => 'B',
+            'items' => [['product_id' => 42, 'quantity' => 1]],
+        ], $headers);
+        $second->assertCreated();
+
+        $this->assertNotSame($first->json('id'), $second->json('id'));
+        $this->assertSame(3, $first->json('user_id'));
+        $this->assertSame(9, $second->json('user_id'));
+        $this->assertSame(2, OutboxEvent::query()->where('event_type', 'order.created')->count());
     }
 }

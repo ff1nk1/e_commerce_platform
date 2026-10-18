@@ -31,7 +31,29 @@ class StockEventsHandlerTest extends TestCase
 
     public function test_stock_reserved_moves_pending_order_to_awaiting_payment(): void
     {
+        $sagaId = (string) Str::uuid();
         $order = Order::query()->create([
+            'saga_id' => $sagaId,
+            'user_id' => 1,
+            'status' => 'pending',
+            'total_amount' => '10.00',
+        ]);
+
+        app(StockEventsHandler::class)(
+            $this->message('stock.reserved', [
+                'saga_id' => $sagaId,
+                'order_id' => $order->id,
+                'status' => 'success',
+            ])
+        );
+
+        $this->assertSame('awaiting_payment', $order->fresh()->status->value);
+    }
+
+    public function test_stock_reserved_without_saga_id_is_ignored(): void
+    {
+        $order = Order::query()->create([
+            'saga_id' => (string) Str::uuid(),
             'user_id' => 1,
             'status' => 'pending',
             'total_amount' => '10.00',
@@ -41,12 +63,34 @@ class StockEventsHandlerTest extends TestCase
             $this->message('stock.reserved', ['order_id' => $order->id, 'status' => 'success'])
         );
 
-        $this->assertSame('awaiting_payment', $order->fresh()->status);
+        $this->assertSame('pending', $order->fresh()->status->value);
+    }
+
+    public function test_stock_reserved_with_mismatched_saga_id_is_ignored(): void
+    {
+        $order = Order::query()->create([
+            'saga_id' => (string) Str::uuid(),
+            'user_id' => 1,
+            'status' => 'pending',
+            'total_amount' => '10.00',
+        ]);
+
+        app(StockEventsHandler::class)(
+            $this->message('stock.reserved', [
+                'saga_id' => (string) Str::uuid(),
+                'order_id' => $order->id,
+                'status' => 'success',
+            ])
+        );
+
+        $this->assertSame('pending', $order->fresh()->status->value);
     }
 
     public function test_reservation_failed_cancels_order_and_writes_order_cancelled(): void
     {
+        $sagaId = (string) Str::uuid();
         $order = Order::query()->create([
+            'saga_id' => $sagaId,
             'user_id' => 1,
             'customer_email' => 'stock@example.com',
             'customer_name' => 'Stock User',
@@ -56,12 +100,13 @@ class StockEventsHandlerTest extends TestCase
 
         app(StockEventsHandler::class)(
             $this->message('stock.reservation_failed', [
+                'saga_id' => $sagaId,
                 'order_id' => $order->id,
                 'reason' => 'Not enough stock',
             ])
         );
 
-        $this->assertSame('cancelled', $order->fresh()->status);
+        $this->assertSame('cancelled', $order->fresh()->status->value);
         $event = OutboxEvent::query()->where('event_type', 'order.cancelled')->first();
         $this->assertNotNull($event);
         $this->assertSame($order->id, $event->payload['order_id']);
@@ -86,13 +131,13 @@ class StockEventsHandlerTest extends TestCase
         ];
 
         app(StockEventsHandler::class)($this->message('stock.reserved', $payload));
-        $this->assertSame('awaiting_payment', $order->fresh()->status);
+        $this->assertSame('awaiting_payment', $order->fresh()->status->value);
 
         Order::query()->whereKey($order->id)->update(['status' => 'pending']);
 
         app(StockEventsHandler::class)($this->message('stock.reserved', $payload));
 
-        $this->assertSame('pending', $order->fresh()->status);
+        $this->assertSame('pending', $order->fresh()->status->value);
         $this->assertSame(
             'done',
             $this->sagaStepStore[$sagaId.':stock.reserved']['status'] ?? null
@@ -119,7 +164,7 @@ class StockEventsHandlerTest extends TestCase
             ])
         );
 
-        $this->assertSame('pending', $order->fresh()->status);
+        $this->assertSame('pending', $order->fresh()->status->value);
         $this->assertArrayNotHasKey($sagaId.':stock.reserved', $this->sagaStepStore);
     }
 

@@ -46,7 +46,7 @@ class StockEventsHandlerUnitTest extends TestCase
             'status' => 'success',
         ]));
 
-        $this->assertSame('awaiting_payment', $order->fresh()->status);
+        $this->assertSame('awaiting_payment', $order->fresh()->status->value);
         $this->assertSame(
             SagaStepGuard::STATUS_DONE,
             app(SagaStepGuard::class)->get($sagaId, 'stock.reserved')['status'] ?? null
@@ -83,7 +83,7 @@ class StockEventsHandlerUnitTest extends TestCase
             'reason' => 'Not enough stock',
         ]));
 
-        $this->assertSame('cancelled', $order->fresh()->status);
+        $this->assertSame('cancelled', $order->fresh()->status->value);
 
         $event = OutboxEvent::query()->where('event_type', 'order.cancelled')->first();
         $this->assertNotNull($event);
@@ -114,12 +114,12 @@ class StockEventsHandlerUnitTest extends TestCase
         ];
 
         app(StockEventsHandler::class)($this->message('stock.reserved', $payload));
-        $this->assertSame('awaiting_payment', $order->fresh()->status);
+        $this->assertSame('awaiting_payment', $order->fresh()->status->value);
 
         Order::query()->whereKey($order->id)->update(['status' => 'pending']);
 
         app(StockEventsHandler::class)($this->message('stock.reserved', $payload));
-        $this->assertSame('pending', $order->fresh()->status);
+        $this->assertSame('pending', $order->fresh()->status->value);
     }
 
     public function test_busy_lock_skips_handler_work(): void
@@ -142,7 +142,7 @@ class StockEventsHandlerUnitTest extends TestCase
             'status' => 'success',
         ]));
 
-        $this->assertSame('pending', $order->fresh()->status);
+        $this->assertSame('pending', $order->fresh()->status->value);
         app(SagaStepGuard::class)->release($sagaId, 'stock.reserved');
     }
 

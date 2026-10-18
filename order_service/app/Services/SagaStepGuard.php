@@ -2,21 +2,19 @@
 
 namespace App\Services;
 
+use App\Contracts\SagaStepStore;
 use Illuminate\Support\Facades\Redis;
 
-class SagaStepGuard
+class SagaStepGuard implements SagaStepStore
 {
     private const TTL_SECONDS = 86400;
 
     private const LOCK_TTL_SECONDS = 30;
 
-    public const STATUS_DONE = 'done';
+    public const STATUS_DONE = SagaStepStore::STATUS_DONE;
 
-    public const STATUS_FAILED = 'failed';
+    public const STATUS_FAILED = SagaStepStore::STATUS_FAILED;
 
-    /**
-     * @return array{status: string, result?: array<string, mixed>, at: string}|null
-     */
     public function get(string $sagaId, string $step): ?array
     {
         $raw = Redis::get($this->resultKey($sagaId, $step));
@@ -40,10 +38,6 @@ class SagaStepGuard
         return in_array($existing['status'] ?? null, [self::STATUS_DONE, self::STATUS_FAILED], true);
     }
 
-    /**
-     * Attempt to claim a saga step. Returns "skip" if already completed,
-     * "busy" if another worker holds the lock, "run" if this worker should proceed.
-     */
     public function tryBegin(string $sagaId, string $step): string
     {
         if ($this->isCompleted($sagaId, $step)) {
@@ -63,9 +57,6 @@ class SagaStepGuard
         return 'run';
     }
 
-    /**
-     * @param  array<string, mixed>|null  $result
-     */
     public function put(string $sagaId, string $step, string $status, ?array $result = null): void
     {
         $payload = [

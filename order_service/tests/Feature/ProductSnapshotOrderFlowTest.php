@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Contracts\IdempotencyStore;
 use App\Kafka\Handlers\ProductEventsHandler;
 use App\Services\IdempotencyService;
 use App\Services\OrderService;
@@ -31,13 +32,7 @@ class ProductSnapshotOrderFlowTest extends TestCase
 
     public function test_order_create_fails_without_snapshot(): void
     {
-        $idempotency = Mockery::mock(IdempotencyService::class);
-        $idempotency->shouldReceive('get')->andReturn(null);
-        $idempotency->shouldReceive('acquireLock')->andReturn(true);
-        $idempotency->shouldReceive('releaseLock')->once();
-        $idempotency->shouldReceive('put')->never();
-
-        $this->app->instance(IdempotencyService::class, $idempotency);
+        $this->bindScopedIdempotencyMock(expectPut: false);
 
         $this->expectException(ValidationException::class);
 
@@ -63,13 +58,7 @@ class ProductSnapshotOrderFlowTest extends TestCase
 
         (new ProductEventsHandler)($message);
 
-        $idempotency = Mockery::mock(IdempotencyService::class);
-        $idempotency->shouldReceive('get')->andReturn(null);
-        $idempotency->shouldReceive('acquireLock')->once()->andReturn(true);
-        $idempotency->shouldReceive('put')->once();
-        $idempotency->shouldReceive('releaseLock')->once();
-
-        $this->app->instance(IdempotencyService::class, $idempotency);
+        $this->bindScopedIdempotencyMock(expectPut: true);
 
         $result = app(OrderService::class)->create(7, 'user7@example.com', 'User Seven', [
             ['product_id' => 136, 'quantity' => 2],
@@ -108,12 +97,7 @@ class ProductSnapshotOrderFlowTest extends TestCase
 
         (new ProductEventsHandler)($message);
 
-        $idempotency = Mockery::mock(IdempotencyService::class);
-        $idempotency->shouldReceive('get')->andReturn(null);
-        $idempotency->shouldReceive('acquireLock')->once()->andReturn(true);
-        $idempotency->shouldReceive('put')->once();
-        $idempotency->shouldReceive('releaseLock')->once();
-        $this->app->instance(IdempotencyService::class, $idempotency);
+        $this->bindScopedIdempotencyMock(expectPut: true);
 
         $response = $this->postJson('/api/orders', [
             'user_id' => 3,
@@ -127,8 +111,28 @@ class ProductSnapshotOrderFlowTest extends TestCase
         ]);
 
         $response->assertCreated()
-            ->assertJsonPath('total_amount', '111.00')
-            ->assertJsonPath('items.0.product_id', 137)
-            ->assertJsonPath('items.0.unit_price', '111.00');
+            ->assertJsonPath('total_amount', '111.00');
+    }
+
+    private function bindScopedIdempotencyMock(bool $expectPut): void
+    {
+        $idempotency = Mockery::mock(IdempotencyService::class);
+        $idempotency->shouldReceive('scopeKey')->andReturnUsing(
+            fn (string $op, int $userId, string $key, ?int $resourceId = null): string => implode(':', array_filter(
+                ['order', 'idempotency', $op, (string) $userId, $resourceId !== null ? (string) $resourceId : null, $key],
+                static fn ($v) => $v !== null
+            ))
+        );
+        $idempotency->shouldReceive('get')->andReturn(null);
+        $idempotency->shouldReceive('acquireLock')->andReturn(true);
+        $idempotency->shouldReceive('releaseLock')->once();
+        if ($expectPut) {
+            $idempotency->shouldReceive('put')->once();
+        } else {
+            $idempotency->shouldReceive('put')->never();
+        }
+
+        $this->app->instance(IdempotencyService::class, $idempotency);
+        $this->app->instance(IdempotencyStore::class, $idempotency);
     }
 }

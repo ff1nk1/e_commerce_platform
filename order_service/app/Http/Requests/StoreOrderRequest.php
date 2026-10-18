@@ -8,6 +8,8 @@ use Illuminate\Validation\Validator;
 
 class StoreOrderRequest extends FormRequest
 {
+    public const IDEMPOTENCY_KEY_MAX = 128;
+
     public function authorize(): bool
     {
         return true;
@@ -22,9 +24,9 @@ class StoreOrderRequest extends FormRequest
             'user_id' => ['required', 'integer', 'min:1'],
             'email' => ['required', 'email'],
             'name' => ['required', 'string', 'max:255'],
-            'items' => ['required', 'array', 'min:1'],
+            'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.product_id' => ['required', 'integer', 'min:1'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:1000'],
         ];
     }
 
@@ -34,6 +36,15 @@ class StoreOrderRequest extends FormRequest
             $key = $this->header('Idempotency-Key');
             if (! is_string($key) || $key === '') {
                 $validator->errors()->add('Idempotency-Key', 'Idempotency-Key header is required.');
+
+                return;
+            }
+
+            if (strlen($key) > self::IDEMPOTENCY_KEY_MAX) {
+                $validator->errors()->add(
+                    'Idempotency-Key',
+                    'Idempotency-Key must be at most '.self::IDEMPOTENCY_KEY_MAX.' characters.'
+                );
             }
         });
     }

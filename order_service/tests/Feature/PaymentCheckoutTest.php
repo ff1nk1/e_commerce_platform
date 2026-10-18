@@ -4,14 +4,23 @@ namespace Tests\Feature;
 
 use App\Models\Order;
 use App\Models\ProductSnapshot;
-use App\Services\Stripe\StripeClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
+use Tests\Concerns\BindsFakePaymentGateway;
+use Tests\Concerns\BindsInMemoryIdempotency;
 use Tests\TestCase;
 
 class PaymentCheckoutTest extends TestCase
 {
+    use BindsFakePaymentGateway;
+    use BindsInMemoryIdempotency;
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->bindInMemoryIdempotency();
+    }
 
     protected function tearDown(): void
     {
@@ -23,7 +32,7 @@ class PaymentCheckoutTest extends TestCase
     {
         $order = $this->createAwaitingPaymentOrder();
 
-        $stripe = Mockery::mock(StripeClient::class);
+        $stripe = $this->mockPaymentGateway();
         $stripe->shouldReceive('createCheckoutSession')
             ->once()
             ->andReturn([
@@ -32,9 +41,10 @@ class PaymentCheckoutTest extends TestCase
                 'payment_intent' => 'pi_test_123',
                 'status' => 'open',
             ]);
-        $this->app->instance(StripeClient::class, $stripe);
 
-        $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7])
+        $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7], [
+            'Idempotency-Key' => 'pay-key-1',
+        ])
             ->assertOk()
             ->assertJson(['checkout_url' => 'https://checkout.stripe.com/c/pay/cs_test_123']);
 
@@ -44,17 +54,50 @@ class PaymentCheckoutTest extends TestCase
         ]);
     }
 
+    public function test_pay_is_idempotent_for_same_key(): void
+    {
+        $order = $this->createAwaitingPaymentOrder();
+
+        $stripe = $this->mockPaymentGateway();
+        $stripe->shouldReceive('createCheckoutSession')
+            ->once()
+            ->andReturn([
+                'id' => 'cs_test_idem',
+                'url' => 'https://checkout.stripe.com/c/pay/cs_test_idem',
+                'status' => 'open',
+            ]);
+
+        $headers = ['Idempotency-Key' => 'pay-dup-1'];
+        $first = $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7], $headers);
+        $second = $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7], $headers);
+
+        $first->assertOk();
+        $second->assertOk();
+        $this->assertSame($first->json('checkout_url'), $second->json('checkout_url'));
+        $this->assertSame($first->json('payment_id'), $second->json('payment_id'));
+        $this->assertDatabaseCount('payments', 1);
+    }
+
+    public function test_pay_requires_idempotency_key(): void
+    {
+        $order = $this->createAwaitingPaymentOrder();
+
+        $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7])
+            ->assertStatus(422);
+    }
+
     public function test_pay_rejects_pending_before_stock_reserved(): void
     {
         $order = $this->createAwaitingPaymentOrder();
         $order->status = 'pending';
         $order->save();
 
-        $stripe = Mockery::mock(StripeClient::class);
+        $stripe = $this->mockPaymentGateway();
         $stripe->shouldNotReceive('createCheckoutSession');
-        $this->app->instance(StripeClient::class, $stripe);
 
-        $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7])->assertStatus(422);
+        $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7], [
+            'Idempotency-Key' => 'pay-pending',
+        ])->assertStatus(422);
     }
 
     private function createAwaitingPaymentOrder(): Order

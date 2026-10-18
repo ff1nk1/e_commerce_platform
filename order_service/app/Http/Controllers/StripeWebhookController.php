@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Contracts\PaymentGateway;
 use App\Services\PaymentService;
-use App\Services\Stripe\StripeClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -13,7 +13,7 @@ use UnexpectedValueException;
 class StripeWebhookController extends Controller
 {
     public function __construct(
-        private StripeClient $stripe,
+        private PaymentGateway $stripe,
         private PaymentService $payments,
     ) {}
 

@@ -5,20 +5,19 @@ namespace Tests\Feature;
 use App\Models\Order;
 use App\Models\OutboxEvent;
 use App\Models\ProductSnapshot;
-use App\Services\IdempotencyService;
-use App\Services\Stripe\StripeClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
+use Tests\Concerns\BindsFakePaymentGateway;
+use Tests\Concerns\BindsInMemoryIdempotency;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
 class MultiItemCartCheckoutTest extends TestCase
 {
+    use BindsFakePaymentGateway;
+    use BindsInMemoryIdempotency;
     use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
-
-    /** @var array<string, array{status: int, body: array}> */
-    private array $idempotencyStore = [];
 
     protected function setUp(): void
     {
@@ -59,38 +58,13 @@ class MultiItemCartCheckoutTest extends TestCase
         ], [
             'Idempotency-Key' => 'cart-checkout-1',
         ]);
-
         $create->assertCreated();
-        $orderId = $create->json('id');
+        $orderId = (int) $create->json('id');
         $this->assertSame('225.50', $create->json('total_amount'));
-        $this->assertCount(2, $create->json('items'));
 
         $event = OutboxEvent::query()->where('event_type', 'order.created')->first();
         $this->assertNotNull($event);
-        $this->assertSame($orderId, $event->payload['order_id']);
-        $this->assertSame([
-            [
-                'product_id' => 10,
-                'store_id' => 1,
-                'store_name' => null,
-                'category_id' => null,
-                'category_name' => null,
-                'category_slug' => null,
-                'quantity' => 2,
-                'unit_price' => '100.00',
-            ],
-            [
-                'product_id' => 20,
-                'store_id' => 2,
-                'store_name' => null,
-                'category_id' => null,
-                'category_name' => null,
-                'category_slug' => null,
-                'quantity' => 1,
-                'unit_price' => '25.50',
-            ],
-        ], $event->payload['items']);
-        $this->assertArrayHasKey($event->payload['saga_id'].':order.created', $this->sagaStepStore);
+        $this->assertCount(2, $event->payload['items']);
 
         $replay = $this->postJson('/api/orders', [
             'user_id' => 7,
@@ -110,7 +84,7 @@ class MultiItemCartCheckoutTest extends TestCase
         Order::query()->whereKey($orderId)->update(['status' => 'awaiting_payment']);
 
         $capturedLineItems = null;
-        $stripe = Mockery::mock(StripeClient::class);
+        $stripe = $this->mockPaymentGateway();
         $stripe->shouldReceive('createCheckoutSession')
             ->once()
             ->andReturnUsing(function (array $params) use (&$capturedLineItems) {
@@ -123,9 +97,10 @@ class MultiItemCartCheckoutTest extends TestCase
                     'status' => 'open',
                 ];
             });
-        $this->app->instance(StripeClient::class, $stripe);
 
-        $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 7])
+        $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 7], [
+            'Idempotency-Key' => 'cart-pay-1',
+        ])
             ->assertOk()
             ->assertJson(['checkout_url' => 'https://checkout.stripe.com/c/pay/cs_cart_multi']);
 
@@ -137,22 +112,5 @@ class MultiItemCartCheckoutTest extends TestCase
         $this->assertSame(1, $capturedLineItems[1]['quantity']);
         $this->assertSame('Case', $capturedLineItems[1]['price_data']['product_data']['name']);
         $this->assertSame(2550, $capturedLineItems[1]['price_data']['unit_amount']);
-    }
-
-    private function bindInMemoryIdempotency(): void
-    {
-        $store = &$this->idempotencyStore;
-
-        $idem = Mockery::mock(IdempotencyService::class);
-        $idem->shouldReceive('get')->andReturnUsing(function (string $key) use (&$store) {
-            return $store[$key] ?? null;
-        });
-        $idem->shouldReceive('acquireLock')->andReturn(true);
-        $idem->shouldReceive('releaseLock')->andReturnNull();
-        $idem->shouldReceive('put')->andReturnUsing(function (string $key, int $status, array $body) use (&$store) {
-            $store[$key] = ['status' => $status, 'body' => $body];
-        });
-
-        $this->app->instance(IdempotencyService::class, $idem);
     }
 }

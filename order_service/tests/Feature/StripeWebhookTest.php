@@ -42,6 +42,9 @@ class StripeWebhookTest extends TestCase
                 'object' => [
                     'id' => 'cs_test_abc',
                     'payment_intent' => 'pi_abc',
+                    'payment_status' => 'paid',
+                    'amount_total' => 5000,
+                    'currency' => 'rub',
                     'metadata' => [
                         'order_id' => (string) $order->id,
                         'payment_id' => (string) $payment->id,

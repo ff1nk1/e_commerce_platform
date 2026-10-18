@@ -2,9 +2,10 @@
 
 namespace App\Events;
 
+use App\Contracts\Outboxable;
 use Illuminate\Foundation\Events\Dispatchable;
 
-class StockReleaseRequested
+class StockReleaseRequested implements Outboxable
 {
     use Dispatchable;
 
@@ -14,4 +15,19 @@ class StockReleaseRequested
     public function __construct(
         public readonly array $payload,
     ) {}
+
+    public function outboxTopic(): string
+    {
+        return 'order.events';
+    }
+
+    public function outboxEventType(): string
+    {
+        return 'stock.release_requested';
+    }
+
+    public function outboxPayload(): array
+    {
+        return $this->payload;
+    }
 }

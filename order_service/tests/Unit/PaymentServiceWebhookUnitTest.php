@@ -46,6 +46,9 @@ class PaymentServiceWebhookUnitTest extends TestCase
                 'object' => [
                     'id' => 'cs_test_unit_paid',
                     'payment_intent' => 'pi_unit_paid',
+                    'payment_status' => 'paid',
+                    'amount_total' => 5000,
+                    'currency' => 'rub',
                     'metadata' => [
                         'order_id' => (string) $order->id,
                         'payment_id' => (string) $payment->id,

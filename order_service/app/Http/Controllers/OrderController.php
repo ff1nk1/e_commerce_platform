@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ListOrdersRequest;
+use App\Http\Requests\PayOrderRequest;
 use App\Http\Requests\StoreOrderRequest;
 use App\Http\Requests\UserScopedOrderRequest;
 use App\Services\OrderService;
@@ -57,9 +58,13 @@ class OrderController extends Controller
         return response()->json($this->orders->serializeOrder($order));
     }
 
-    public function pay(UserScopedOrderRequest $request, int $id): JsonResponse
+    public function pay(PayOrderRequest $request, int $id): JsonResponse
     {
-        $result = $this->payments->createCheckoutForUser($id, (int) $request->validated()['user_id']);
+        $result = $this->payments->createCheckoutForUser(
+            $id,
+            (int) $request->validated()['user_id'],
+            $request->idempotencyKey()
+        );
 
         return response()->json($result);
     }

@@ -39,7 +39,7 @@ class SagaUserCancelCompensationTest extends IntegrationTestCase
             'status' => 'success',
         ]));
 
-        $this->assertSame('awaiting_payment', Order::query()->findOrFail($orderId)->status);
+        $this->assertSame('awaiting_payment', Order::query()->findOrFail($orderId)->status->value);
 
         $this->postJson('/api/orders/'.$orderId.'/cancel', ['user_id' => 8])
             ->assertOk()

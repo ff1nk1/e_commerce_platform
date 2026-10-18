@@ -2,6 +2,7 @@
 
 namespace Tests\Concerns;
 
+use App\Contracts\SagaStepStore;
 use App\Services\SagaStepGuard;
 use Mockery;
 
@@ -75,5 +76,6 @@ trait BindsInMemorySagaStepGuard
         });
 
         $this->app->instance(SagaStepGuard::class, $guard);
+        $this->app->instance(SagaStepStore::class, $guard);
     }
 }

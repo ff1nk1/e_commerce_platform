@@ -12,7 +12,8 @@ class IdempotencyRedisIntegrationTest extends IntegrationTestCase
     {
         $this->seedSnapshot();
 
-        $headers = ['Idempotency-Key' => 'it-create-'.Str::uuid()];
+        $clientKey = 'it-create-'.Str::uuid();
+        $headers = ['Idempotency-Key' => $clientKey];
         $payload = $this->orderCreatePayload();
 
         $first = $this->postJson('/api/orders', $payload, $headers);
@@ -26,26 +27,29 @@ class IdempotencyRedisIntegrationTest extends IntegrationTestCase
         $this->assertSame(1, OutboxEvent::query()->where('event_type', 'order.created')->count());
         $this->assertDatabaseCount('orders', 1);
 
-        $cached = app(IdempotencyService::class)->get($headers['Idempotency-Key']);
+        $idem = app(IdempotencyService::class);
+        $scopeKey = $idem->scopeKey('create', (int) $payload['user_id'], $clientKey);
+        $cached = $idem->get($scopeKey);
         $this->assertSame(201, $cached['status'] ?? null);
         $this->assertSame($orderId, $cached['body']['id'] ?? null);
     }
 
     public function test_lock_contention_returns_conflict_when_response_not_cached_yet(): void
     {
-        $key = 'it-lock-'.Str::uuid();
+        $clientKey = 'it-lock-'.Str::uuid();
         $idem = app(IdempotencyService::class);
+        $scopeKey = $idem->scopeKey('create', 42, $clientKey);
 
-        $this->assertTrue($idem->acquireLock($key));
+        $this->assertTrue($idem->acquireLock($scopeKey));
 
         $this->seedSnapshot();
         $response = $this->postJson('/api/orders', $this->orderCreatePayload(), [
-            'Idempotency-Key' => $key,
+            'Idempotency-Key' => $clientKey,
         ]);
 
-        // Lock held, no cached body → 409 after short wait in OrderService.
+        // Lock held, no cached body → 409 after short wait in CreateOrderService.
         $response->assertStatus(409);
 
-        $idem->releaseLock($key);
+        $idem->releaseLock($scopeKey);
     }
 }

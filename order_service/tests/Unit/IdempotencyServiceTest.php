@@ -45,4 +45,20 @@ class IdempotencyServiceTest extends TestCase
         $this->assertTrue($this->idempotency->acquireLock($key));
         $this->idempotency->releaseLock($key);
     }
+
+    public function test_scope_key_includes_user_and_operation(): void
+    {
+        $this->assertSame(
+            'order:idempotency:create:7:abc',
+            $this->idempotency->scopeKey('create', 7, 'abc')
+        );
+        $this->assertSame(
+            'order:idempotency:pay:7:42:abc',
+            $this->idempotency->scopeKey('pay', 7, 'abc', 42)
+        );
+        $this->assertNotSame(
+            $this->idempotency->scopeKey('create', 7, 'abc'),
+            $this->idempotency->scopeKey('create', 8, 'abc')
+        );
+    }
 }
