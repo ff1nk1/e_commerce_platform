@@ -70,7 +70,7 @@ class ProxyService
      * @param  array{id: int, email?: string|null, name?: string|null}|null  $injectUser
      *                                                                                    When set, merges user_id (and email/name when present) into query and JSON body.
      */
-    public function forward(Request $request, string $baseUrl, string $path, ?array $injectUser = null): Response
+    public function forward(Request $request, string $baseUrl, string $path, ?array $injectUser = null, int $timeout = 30): Response
     {
         $url = $this->buildUrl($baseUrl, $path);
         $method = strtolower($request->method());
@@ -84,7 +84,7 @@ class ProxyService
         $pending = Http::withHeaders($this->jsonForwardHeaders($request))
             ->acceptJson()
             ->asJson()
-            ->timeout(30);
+            ->timeout($timeout);
 
         $options = in_array($method, self::QUERY_ONLY_METHODS, true)
             ? ['query' => $query]

@@ -11,6 +11,7 @@ class ProductCatalog extends Model
     protected $fillable = [
         'product_id',
         'store_id',
+        'store_name',
         'name',
         'description',
         'category_id',
@@ -41,6 +42,7 @@ class ProductCatalog extends Model
         return [
             'product_id' => $this->product_id,
             'store_id' => $this->store_id,
+            'store_name' => $this->store_name,
             'name' => $this->name,
             'description' => $this->description,
             'category_id' => $this->category_id,

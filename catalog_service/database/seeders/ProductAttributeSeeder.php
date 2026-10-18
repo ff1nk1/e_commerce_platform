@@ -6,11 +6,11 @@ use App\Models\Product;
 use App\Models\ProductAttribute;
 use App\Services\ProductService;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Seeds product attributes and republishes products to Kafka for OpenSearch.
+ * Seeds product attributes and republishes products to Kafka for OpenSearch
+ * and recommendation_service (product_catalog + embeddings).
  *
  * If OpenSearch still has a non-nested `attributes` mapping (Dashboards shows "!"),
  * recreate the index first in search_service:
@@ -107,10 +107,10 @@ class ProductAttributeSeeder extends Seeder
             ProductAttribute::insert($rows);
         }
 
-        Cache::tags(['products'])->flush();
-
-        // Publish product.updated so search_service indexes nested attributes in OpenSearch.
         $service = app(ProductService::class);
+        $service->clearProductCache();
+
+        // Publish product.updated so search_service and recommendation_service reindex.
         Product::query()
             ->with(['store', 'category', 'attributes'])
             ->orderBy('id')

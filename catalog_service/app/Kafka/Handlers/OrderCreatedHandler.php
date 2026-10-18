@@ -2,12 +2,8 @@
 
 namespace App\Kafka\Handlers;
 
-use App\Events\StockChanged;
-use App\Events\StockReservationFailed;
-use App\Events\StockReserved;
-use App\Models\Stock;
 use App\Services\SagaStepGuard;
-use Illuminate\Support\Facades\DB;
+use App\Services\StockReservationService;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
@@ -15,6 +11,7 @@ class OrderCreatedHandler
 {
     public function __construct(
         private SagaStepGuard $saga,
+        private StockReservationService $reservations,
     ) {}
 
     public function __invoke(ConsumerMessage $message): void
@@ -39,7 +36,7 @@ class OrderCreatedHandler
         $items = $payload['items'] ?? [];
         $sagaId = $this->sagaIdFrom($payload);
 
-        if (! $orderId || empty($items)) {
+        if (! $orderId || ! is_array($items) || $items === []) {
             Log::warning('Получено пустое или невалидное событие order.created', ['payload' => $payload]);
 
             return;
@@ -61,74 +58,17 @@ class OrderCreatedHandler
         $stepResult = ['order_id' => $orderId, 'outcome' => 'reserved'];
 
         try {
-            DB::beginTransaction();
+            $result = $this->reservations->reserve($orderId, $items, $sagaId);
 
-            $allAvailable = true;
-            $stockChangedEvents = [];
-
-            foreach ($items as $item) {
-                $stock = Stock::where('product_id', $item['product_id'])
-                    ->where('store_id', $item['store_id'])
-                    ->lockForUpdate()
-                    ->first();
-
-                if (! $stock || $stock->quantity < $item['quantity']) {
-                    $allAvailable = false;
-                    break;
-                }
-
-                $stock->quantity -= $item['quantity'];
-                $stock->save();
-
-                $stockChangedEvents[] = [
-                    'product_id' => $stock->product_id,
-                    'store_id' => $stock->store_id,
-                    'quantity' => $stock->quantity,
-                ];
-            }
-
-            if ($allAvailable) {
-                $reservedPayload = [
-                    'order_id' => $orderId,
-                    'status' => 'success',
-                ];
-                if ($sagaId !== null) {
-                    $reservedPayload['saga_id'] = $sagaId;
-                }
-
-                event(new StockReserved($reservedPayload));
-
-                Log::info("Товар для заказа #{$orderId} зарезервирован. Событие отправлено в Outbox.");
-
-                foreach ($stockChangedEvents as $changedEvent) {
-                    event(new StockChanged($changedEvent));
-                }
-            } else {
-                DB::rollBack();
-
-                DB::beginTransaction();
-                $failedPayload = [
-                    'order_id' => $orderId,
-                    'reason' => 'Not enough stock',
-                ];
-                if ($sagaId !== null) {
-                    $failedPayload['saga_id'] = $sagaId;
-                }
-
-                event(new StockReservationFailed($failedPayload));
-                Log::warning("Недостаточно товара на складе для заказа #{$orderId}. Событие reservation_failed отправлено в Outbox.");
-
+            if ($result['outcome'] === 'reservation_failed') {
                 $stepStatus = SagaStepGuard::STATUS_FAILED;
                 $stepResult = ['order_id' => $orderId, 'outcome' => 'reservation_failed'];
             }
-
-            DB::commit();
 
             if ($sagaId !== null) {
                 $this->saga->put($sagaId, 'stock.reserve', $stepStatus, $stepResult);
             }
         } catch (\Throwable $e) {
-            DB::rollBack();
             Log::error('Фатальная ошибка внутри консьюмера order.created:', [
                 'order_id' => $orderId,
                 'message' => $e->getMessage(),

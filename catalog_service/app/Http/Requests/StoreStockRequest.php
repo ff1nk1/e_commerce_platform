@@ -3,13 +3,14 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
 class StoreStockRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return Auth::guard('gateway')->check();
     }
 
     public function rules(): array
@@ -29,7 +30,6 @@ class StoreStockRequest extends FormRequest
                 ),
             ],
             'quantity' => 'required|integer|min:0',
-            'reserved' => 'nullable|integer|min:0',
         ];
     }
 }

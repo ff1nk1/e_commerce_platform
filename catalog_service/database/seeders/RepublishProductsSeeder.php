@@ -7,8 +7,8 @@ use App\Services\ProductService;
 use Illuminate\Database\Seeder;
 
 /**
- * Публикует product.created/updated в Kafka для всех товаров,
- * чтобы order_service consumer обновил product_snapshots.
+ * Публикует product.updated в Kafka для всех товаров
+ * (order snapshots, OpenSearch, recommendation product_catalog).
  */
 class RepublishProductsSeeder extends Seeder
 {

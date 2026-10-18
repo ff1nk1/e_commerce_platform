@@ -2,10 +2,8 @@
 
 namespace App\Kafka\Handlers;
 
-use App\Events\StockChanged;
-use App\Models\Stock;
 use App\Services\SagaStepGuard;
-use Illuminate\Support\Facades\DB;
+use App\Services\StockReservationService;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
@@ -13,6 +11,7 @@ class StockReleaseHandler
 {
     public function __construct(
         private SagaStepGuard $saga,
+        private StockReservationService $reservations,
     ) {}
 
     public function __invoke(ConsumerMessage $message): void
@@ -28,7 +27,7 @@ class StockReleaseHandler
         $items = $payload['items'] ?? [];
         $sagaId = $this->sagaIdFrom($payload);
 
-        if (! $orderId || empty($items)) {
+        if (! $orderId || ! is_array($items) || $items === []) {
             Log::warning('Получено невалидное событие stock.release_requested', ['payload' => $payload]);
 
             return;
@@ -47,35 +46,9 @@ class StockReleaseHandler
         }
 
         try {
-            DB::beginTransaction();
+            $released = $this->reservations->release($orderId, $items, $sagaId);
 
-            $stockChangedEvents = [];
-
-            foreach ($items as $item) {
-                $stock = Stock::where('product_id', $item['product_id'])
-                    ->where('store_id', $item['store_id'])
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($stock) {
-                    $stock->quantity += $item['quantity'];
-                    $stock->save();
-
-                    $stockChangedEvents[] = [
-                        'product_id' => $stock->product_id,
-                        'store_id' => $stock->store_id,
-                        'quantity' => $stock->quantity,
-                    ];
-                }
-            }
-
-            foreach ($stockChangedEvents as $changedEvent) {
-                event(new StockChanged($changedEvent));
-            }
-
-            DB::commit();
-
-            if ($sagaId !== null) {
+            if ($sagaId !== null && $released) {
                 $this->saga->put(
                     $sagaId,
                     'stock.release',
@@ -83,10 +56,7 @@ class StockReleaseHandler
                     ['order_id' => $orderId]
                 );
             }
-
-            Log::info("Резерв снят: товар для заказа #{$orderId} возвращен на склад.");
         } catch (\Throwable $e) {
-            DB::rollBack();
             Log::error("Ошибка при освобождении остатка для заказа #{$orderId}:", [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),

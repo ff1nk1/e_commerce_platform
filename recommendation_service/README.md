@@ -1,58 +1,206 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Recommendation service
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel-микросервис **shopping recommendation assistant**: RAG поверх локальной копии каталога в Postgres+pgvector, оркестрация на PHP, LLM — Google Gemini. Function calling / tools у модели **нет** — поиск делает бэкенд, модель только извлекает фильтры и пишет ответ по готовым кандидатам.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Общая архитектура
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```mermaid
+flowchart LR
+  Browser["Frontend /assistant"] --> Gateway["auth_service Gateway"]
+  Gateway -->|"inject user_id, 120s"| ChatAPI["POST /api/recommendations/chat"]
+  ChatAPI --> ChatSvc["RecommendationChatService"]
+  ChatSvc --> GeminiFilters["Gemini: extract filters + embed"]
+  ChatSvc --> Search["ProductSearchService pgvector"]
+  Search --> CatalogDB["product_catalog"]
+  ChatSvc --> GeminiAnswer["Gemini: chat with candidates"]
+  CatalogDB -.->|"Kafka sync"| CatalogSvc["catalog_service"]
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Ключевые файлы:
 
-## Contributing
+- Оркестрация: [`app/Services/Chat/RecommendationChatService.php`](app/Services/Chat/RecommendationChatService.php)
+- Поиск: [`app/Services/Catalog/ProductSearchService.php`](app/Services/Catalog/ProductSearchService.php)
+- LLM: [`app/Services/Llm/Gemini/GeminiLlmClient.php`](app/Services/Llm/Gemini/GeminiLlmClient.php)
+- Карточки/path: [`app/Models/ProductCatalog.php`](app/Models/ProductCatalog.php) → `toCardArray()`
+- UI: [`../frontend/src/Pages/Assistant.jsx`](../frontend/src/Pages/Assistant.jsx)
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+---
 
-## Code of Conduct
+## 1. Цепочка HTTP-запроса (от клика до ответа)
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Frontend
 
-## Security Vulnerabilities
+1. Пользователь на `/assistant` ([`../frontend/src/App.jsx`](../frontend/src/App.jsx), auth required).
+2. [`Assistant.jsx`](../frontend/src/Pages/Assistant.jsx) шлёт:
+   - `POST /api/recommendations/chat` — `{ message, conversation_id? }`
+   - `GET /api/recommendations/conversations/{id}` — восстановление истории
+   - `DELETE /api/recommendations/conversations/{id}` — новый диалог
+3. `conversation_id` хранится в `sessionStorage` (`assistant_conversation_id`).
+4. Браузер **не** передаёт `user_id` — его подставляет gateway.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Gateway (`auth_service`)
 
-## License
+- JWT middleware → `GatewayController::recommendations`
+- Прокси на `{RECOMMENDATION_SERVICE_URL}/api/recommendations/...`
+- `ProxyService` вшивает `user_id` в body/query
+- Таймаут чата **120s** (LLM медленный)
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### Recommendation API
+
+Маршруты в [`routes/api.php`](routes/api.php) (префикс Laravel `/api`):
+
+| Метод | Путь | Контроллер |
+|-------|------|------------|
+| POST | `/recommendations/chat` | `ChatController` |
+| GET/DELETE | `/recommendations/conversations/{id}` | `ConversationController` |
+| POST | `/recommendations/reindex` | `ReindexController` (admin через gateway) |
+| GET | `/recommendations/health` | `HealthController` |
+
+`ChatController` валидирует через `ChatRequest` и вызывает `RecommendationChatService::chat()`.
+
+### Ответ клиенту
+
+```json
+{
+  "conversation_id": "uuid",
+  "answer": "текстовый ответ ассистента",
+  "extracted_filters": { "store_id": null, "store_name": null, "category_name": null, "query": "...", "attributes": [] },
+  "products": [ { "product_id": 42, "name": "...", "path": "/products/42", ... } ]
+}
+```
+
+---
+
+## 2. Пайплайн одного сообщения чата (пошагово)
+
+Внутри `RecommendationChatService::chat()`:
+
+1. **Диалог** — найти активный по `conversation_id`+`user_id`+`expires_at > now()`, иначе создать новый.
+2. **История** — последние **6** сообщений (`HISTORY_LIMIT`) для контекста LLM.
+3. **Сохранить** user message в `messages`.
+4. **Фильтры + embedding**:
+   - Если клиент передал structured-фильтры (`category_name|in_stock|price_*`) → без extract, только `embed(message)`.
+   - Иначе → `extractFilters`, затем `embed(filters.query ?: message)`. `store_id` с UI мержится, но extract не отключает.
+5. **normalize** — default `in_stock=true` (config); merge клиентских полей.
+6. **Поиск** → `SearchHit[]` (product + cosine distance; attributes — soft re-rank в PHP, не жёсткий SQL) → **RelevanceGate** (порог cosine distance, default `RECOMMENDATION_MAX_COSINE_DISTANCE=0.75`) → **ProductFreshnessChecker** (Catalog API).
+7. **Карточки** — `toCardArray()` (включая `path`).
+8. **Промпт к LLM** — история + текущий user turn с блоком кандидатов:
+
+   ```
+   {message}
+
+   Candidates:
+   1. Name | 1999 ₽ | магазин: ТЦ Галерея
+   ...
+   ```
+
+9. **Ответ** — `llm->chat(..., SYSTEM_PROMPT)`, сохранить assistant message **с `products` JSON**, `touchActivity()`.
+10. Вернуть JSON с `answer` + `products`.
+
+System prompt ассистента: краткий ответ по-русски (имя/цена/магазин), без сырых `/products/...` — карточки уже в UI.
+
+Модель **не ищет** товары сама — только рассуждает по списку, который уже нашёл PHP.
+
+---
+
+## 3. Как работает поиск (где и что ищется)
+
+### Локальный индекс `product_catalog`
+
+Не live-запрос в catalog_service. Своя таблица с денормализованными полями + `embedding vector(768)`.
+
+Фильтры в SQL ([`ProductSearchService`](app/Services/Catalog/ProductSearchService.php)):
+
+- всегда: `is_published = true`, `embedding IS NOT NULL`
+- опционально: `store_id` и/или `store_name` / `category_name` (ILIKE, case-insensitive, ё→е), `in_stock`, `price` min/max
+- attributes: **не** в SQL; после vector top-k — soft re-rank в PHP (ё→е, обрезка окончаний; размер «от N» → `>= N`)
+- сортировка: cosine distance `embedding <=> ?::vector`, затем boost по числу совпавших attributes
+
+Вектор запроса: embedding очищенного `filters.query` (после extract), либо `embed(message)` при клиентских фильтрах / fallback `"recommended products"`.
+
+### Откуда берутся товары (индексация)
+
+```mermaid
+flowchart TB
+  CatalogCRUD["catalog_service CRUD/publish"] -->|Kafka product.*| ProductHandler["ProductEventsHandler"]
+  StockChange["StockChanged outbox"] -->|catalog.events stock.changed| StockHandler["StockEventsHandler"]
+  ProductHandler --> Indexer["ProductIndexer"]
+  StockHandler -->|"setInStock, no re-embed"| Indexer
+  Indexer --> TextBuilder["ProductTextBuilder"]
+  TextBuilder --> EmbedDoc["Gemini embed RETRIEVAL_DOCUMENT"]
+  EmbedDoc --> DB["product_catalog"]
+  Reindex["POST /reindex"] -->|"только re-embed существующих строк"| Indexer
+```
+
+- Consumers: `kafka:consume:product-events`, `kafka:consume:stock-events`
+- Текст для эмбеддинга ([`ProductTextBuilder`](app/Services/Catalog/ProductTextBuilder.php)): `product_id`, `store_id`, `store`, `name`, `description`, `category`, флаги, attributes
+- Stock меняет только `in_stock` без пересчёта вектора
+- `reindex` **не тянет** каталог извне — только переэмбеддит то, что уже есть; наполнение — через Kafka / `RepublishProductsSeeder` в catalog
+- Поле `store_name` заполняется из Kafka (`store.name`); после миграции нужен republish существующих товаров
+
+---
+
+## 4. Как ИИ «даёт ссылки» и куда реально кликают
+
+Здесь два канала — важно не путать.
+
+### A. Структурированные карточки (основной UX перехода)
+
+`ProductCatalog::toCardArray()` жёстко ставит:
+
+```php
+'path' => '/products/'.$this->product_id,
+```
+
+Массив `products` уходит в JSON ответа.
+
+Фронт в [`Assistant.jsx`](../frontend/src/Pages/Assistant.jsx) рендерит кликабельные карточки:
+
+```jsx
+<Link to={`/products/${product.product_id}`}>
+```
+
+Навигация идёт по `product_id` в SPA-роут `/products/:id` → `ProductPage` грузит товар из catalog API. Поле `path` с бэка совпадает с этим маршрутом, но UI его напрямую не читает.
+
+Карточки сохраняются в `messages.products` (jsonb) вместе с ответом ассистента и возвращаются в `GET /conversations/{id}`, поэтому переживают reload и возврат со страницы товара.
+
+### B. Текст ответа без сырых path
+
+Кандидаты в промпт идут без `/products/...` (имя, цена, магазин). System prompt просит не писать path — переход по товарам только через карточки в UI.
+
+---
+
+## 5. LLM-слой (три режима Gemini)
+
+Контракт [`LlmClient`](app/Services/Llm/Contracts/LlmClient.php), биндинг в `AppServiceProvider` при `LLM_DRIVER=gemini`.
+
+| Метод | API | Назначение |
+|-------|-----|------------|
+| `embed` | `embedContent` | Векторы; `RETRIEVAL_QUERY` (чат) / `RETRIEVAL_DOCUMENT` (индекс); dim 768 |
+| `extractFilters` | `generateContent` + `responseMimeType: application/json` | Фильтры поиска |
+| `chat` | `generateContent` | Текстовый ответ ассистента |
+
+Filter system prompt извлекает: `store_id` (только если пользователь явно назвал число), `store_name`, `category_name`, `in_stock`, `price_min/max`, `query` (тип товара без цвета), `attributes[]` (русские имена: Цвет, Размер, …).
+
+Конфиг: [`config/llm.php`](config/llm.php) — `GEMINI_API_KEY`, `GEMINI_CHAT_MODEL` (default `gemini-3.8-flash`), `GEMINI_EMBEDDING_MODEL` (`gemini-embedding-001`), temperature `0.3`.
+
+---
+
+## 6. Диалоги и TTL
+
+- Таблицы: `conversations` (uuid, user_id, last_activity_at, expires_at), `messages` (role user|assistant, content, products jsonb, cascade delete)
+- Hard TTL **24h** от создания, idle **30m** от активности → `expires_at = min(hard, idle)`
+- Cleanup: `conversations:cleanup` каждую минуту (`routes/console.php`)
+- Доступ только владельцу и только к не истёкшим
+
+---
+
+## 7. Что важно понимать про систему
+
+- Это **не** поиск по полному catalog_service в runtime — только локальный снимок + семантика.
+- Без Kafka-консьюмеров ассистент «пустой»; без Gemini — падает на embed/chat.
+- Ссылки на товары — SPA-пути `/products/{id}`, не внешние URL магазинов.
+- Клиентские фильтры (`store_id` / `store_name` / `category_name` / цена / stock) отключают LLM-extract и оставляют только embed.
+- После обновления индексатора нужен restart kafka product consumer и republish, иначе `store_name` останется NULL.

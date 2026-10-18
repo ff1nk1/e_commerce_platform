@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { catalogApi } from '../api/catalogClient'
 import { recommendationApi } from '../api/recommendationClient'
 import { formatImageUrl, PLACEHOLDER_IMAGE } from '../utils/formatImageUrl'
 import '../css/assistant.css'
 
 const STORAGE_KEY = 'assistant_conversation_id'
+const STORE_STORAGE_KEY = 'assistant_store_id'
 
 function loadStoredConversationId() {
   try {
@@ -26,6 +28,26 @@ function persistConversationId(id) {
   }
 }
 
+function loadStoredStoreId() {
+  try {
+    return sessionStorage.getItem(STORE_STORAGE_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+function persistStoreId(id) {
+  try {
+    if (id) {
+      sessionStorage.setItem(STORE_STORAGE_KEY, String(id))
+    } else {
+      sessionStorage.removeItem(STORE_STORAGE_KEY)
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
 export default function Assistant() {
   const [messages, setMessages] = useState([])
   const [conversationId, setConversationId] = useState(null)
@@ -33,6 +55,8 @@ export default function Assistant() {
   const [loading, setLoading] = useState(false)
   const [restoring, setRestoring] = useState(true)
   const [error, setError] = useState('')
+  const [stores, setStores] = useState([])
+  const [storeId, setStoreId] = useState(() => loadStoredStoreId())
   const listRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -47,6 +71,25 @@ export default function Assistant() {
   useEffect(() => {
     scrollToBottom()
   }, [messages, loading, scrollToBottom])
+
+  useEffect(() => {
+    let cancelled = false
+
+    catalogApi
+      .get('catalog/stores')
+      .then((response) => {
+        if (cancelled) return
+        const list = response.data?.data || response.data || []
+        setStores(Array.isArray(list) ? list : [])
+      })
+      .catch((err) => {
+        console.error(err)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -70,7 +113,7 @@ export default function Assistant() {
             id: msg.id,
             role: msg.role,
             content: msg.content,
-            products: null,
+            products: Array.isArray(msg.products) ? msg.products : null,
           }))
         )
       } catch (err) {
@@ -94,6 +137,12 @@ export default function Assistant() {
     }
   }, [])
 
+  const onStoreChange = (event) => {
+    const next = event.target.value
+    setStoreId(next)
+    persistStoreId(next)
+  }
+
   const sendMessage = async (event) => {
     event.preventDefault()
     const text = input.trim()
@@ -113,6 +162,9 @@ export default function Assistant() {
       const payload = { message: text }
       if (conversationId) {
         payload.conversation_id = conversationId
+      }
+      if (storeId) {
+        payload.store_id = Number(storeId)
       }
 
       const { data } = await recommendationApi.post(
@@ -163,7 +215,6 @@ export default function Assistant() {
         `/recommendations/conversations/${idToDelete}`
       )
     } catch (err) {
-      // Local state already cleared; ignore expired/missing conversations
       if (err.response?.status !== 404) {
         console.error(err)
       }
@@ -179,14 +230,32 @@ export default function Assistant() {
               <h1>ИИ помощник</h1>
               <p>Спросите, что подобрать — подскажу товары из каталога</p>
             </div>
-            <button
-              type="button"
-              className="assistant-btn assistant-btn-secondary"
-              onClick={startNewDialog}
-              disabled={loading || restoring}
-            >
-              Новый диалог
-            </button>
+            <div className="assistant-header-actions">
+              <label className="assistant-store-label">
+                <span>Магазин</span>
+                <select
+                  className="assistant-store-select"
+                  value={storeId}
+                  onChange={onStoreChange}
+                  disabled={loading || restoring}
+                >
+                  <option value="">Все магазины</option>
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>
+                      {store.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="assistant-btn assistant-btn-secondary"
+                onClick={startNewDialog}
+                disabled={loading || restoring}
+              >
+                Новый диалог
+              </button>
+            </div>
           </div>
 
           {error && <div className="status-message error">{error}</div>}

@@ -5,9 +5,12 @@ namespace Tests\Feature;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\ProductCatalog;
+use App\Services\Catalog\Contracts\RelevanceGate;
 use App\Services\Llm\Contracts\LlmClient;
+use App\Services\Llm\DTOs\SearchFilters;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Tests\Fakes\FakeLlmClient;
 use Tests\TestCase;
 
@@ -62,6 +65,108 @@ class RecommendationsApiTest extends TestCase
             'conversation_id' => $conversationId,
             'role' => Message::ROLE_ASSISTANT,
         ]);
+
+        $this->assertSame(1, $this->llm->extractCalls);
+        $this->assertSame(1, $this->llm->embedCalls);
+        $this->assertSame(0, $this->llm->extractAndEmbedCalls);
+    }
+
+    public function test_chat_skips_extract_filters_when_client_filters_present(): void
+    {
+        $this->seedProduct(1, 'Blue sneakers');
+
+        $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'sneakers',
+            'price_max' => 500,
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertSame(0, $this->llm->extractAndEmbedCalls);
+        $this->assertSame(0, $this->llm->extractCalls);
+        $this->assertSame(1, $this->llm->embedCalls);
+    }
+
+    public function test_chat_keeps_products_when_extracted_attributes_do_not_match(): void
+    {
+        $this->seedProduct(1, 'Blue sneakers');
+
+        $this->llm->filters = new SearchFilters(
+            query: 'sneakers',
+            attributes: [['name' => 'Цвет', 'value' => 'красный']],
+        );
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'красные кроссовки',
+            'limit' => 5,
+        ]);
+
+        // Soft re-rank must not empty results when attributes miss.
+        $response->assertOk()
+            ->assertJsonPath('products.0.product_id', 1);
+    }
+
+    public function test_chat_logs_when_relevance_gate_drops_all_hits(): void
+    {
+        Log::spy();
+        $this->seedProduct(1, 'Blue sneakers');
+
+        $this->app->instance(RelevanceGate::class, new class implements RelevanceGate
+        {
+            public function accept(array $hits): array
+            {
+                return [];
+            }
+        });
+
+        $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'sneakers',
+            'limit' => 5,
+        ])->assertOk()
+            ->assertJsonPath('products', []);
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(function (string $message, array $context): bool {
+                return str_contains($message, 'RelevanceGate dropped all search hits')
+                    && isset($context['hits'], $context['max_cosine_distance']);
+            })
+            ->once();
+    }
+
+    public function test_chat_with_store_id_still_extracts_filters(): void
+    {
+        $this->seedProduct(1, 'Blue sneakers');
+
+        $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'blue sneakers',
+            'store_id' => 1,
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertSame(1, $this->llm->extractCalls);
+        $this->assertSame(1, $this->llm->embedCalls);
+    }
+
+    public function test_get_conversation_returns_persisted_product_cards(): void
+    {
+        $this->seedProduct(1, 'Blue sneakers');
+
+        $chat = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'Find blue sneakers',
+            'limit' => 5,
+        ])->assertOk();
+
+        $conversationId = $chat->json('conversation_id');
+
+        $this->getJson('/api/recommendations/conversations/'.$conversationId.'?user_id=42')
+            ->assertOk()
+            ->assertJsonPath('messages.1.role', 'assistant')
+            ->assertJsonPath('messages.1.products.0.product_id', 1)
+            ->assertJsonPath('messages.1.products.0.path', '/products/1');
     }
 
     public function test_chat_continues_same_conversation_context(): void
@@ -152,11 +257,21 @@ class RecommendationsApiTest extends TestCase
         $this->assertNotNull($embedding);
     }
 
+    public function test_reindex_on_empty_table_returns_zero(): void
+    {
+        $this->assertSame(0, ProductCatalog::query()->count());
+
+        $this->postJson('/api/recommendations/reindex')
+            ->assertOk()
+            ->assertJsonPath('indexed', 0);
+    }
+
     private function seedProduct(int $productId, string $name): void
     {
         $product = ProductCatalog::query()->create([
             'product_id' => $productId,
             'store_id' => 1,
+            'store_name' => 'Main Store',
             'name' => $name,
             'description' => $name,
             'category_id' => 2,

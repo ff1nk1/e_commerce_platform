@@ -18,4 +18,11 @@ interface LlmClient
     public function chat(array $messages, ?string $systemPrompt = null): string;
 
     public function extractFilters(string $userMessage): SearchFilters;
+
+    /**
+     * Run extractFilters and embed concurrently when supported.
+     *
+     * @return array{0: SearchFilters, 1: list<float>}
+     */
+    public function extractFiltersAndEmbed(string $userMessage, string $embedTaskType = 'RETRIEVAL_QUERY'): array;
 }

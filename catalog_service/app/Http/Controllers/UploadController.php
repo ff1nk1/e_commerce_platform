@@ -12,8 +12,8 @@ class UploadController extends Controller
     public function getUploadUrl(GetUploadUrlRequest $request)
     {
         $validated = $request->validated();
-
-        $extension = pathinfo($validated['filename'], PATHINFO_EXTENSION);
+        $contentType = $validated['content_type'];
+        $extension = GetUploadUrlRequest::CONTENT_TYPE_EXTENSIONS[$contentType];
         $fileName = Str::uuid().'.'.$extension;
         $path = 'uploads/'.$fileName;
 
@@ -22,7 +22,7 @@ class UploadController extends Controller
         $internalUrl = $s3Disk->temporaryUploadUrl(
             $path,
             now()->addMinutes(5),
-            ['ContentType' => $validated['content_type']]
+            ['ContentType' => $contentType]
         );
 
         if (is_array($internalUrl)) {
@@ -30,8 +30,8 @@ class UploadController extends Controller
         }
         $internalUrl = (string) $internalUrl;
 
-        $bucket = env('AWS_BUCKET', 'media');
-        $publicBase = rtrim((string) env('MEDIA_PUBLIC_BASE', '/storage'), '/');
+        $bucket = (string) config('filesystems.disks.s3.bucket', 'media');
+        $publicBase = rtrim((string) config('filesystems.media_public_base', '/storage'), '/');
 
         return response()->json([
             // Internal MinIO URL for server-side PUT (admin Docker network)

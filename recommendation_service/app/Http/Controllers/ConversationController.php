@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Message;
 use App\Services\Chat\RecommendationChatService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,14 @@ class ConversationController extends Controller
 
         $messages = $conversation->messages()
             ->orderBy('created_at')
-            ->get(['id', 'role', 'content', 'created_at']);
+            ->get(['id', 'role', 'content', 'products', 'created_at'])
+            ->map(static fn (Message $msg): array => [
+                'id' => $msg->id,
+                'role' => $msg->role,
+                'content' => $msg->content,
+                'products' => $msg->products,
+                'created_at' => $msg->created_at?->toIso8601String(),
+            ]);
 
         return response()->json([
             'conversation_id' => $conversation->id,

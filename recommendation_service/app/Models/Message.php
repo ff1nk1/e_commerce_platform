@@ -18,6 +18,11 @@ class Message extends Model
         'conversation_id',
         'role',
         'content',
+        'products',
+    ];
+
+    protected $casts = [
+        'products' => 'array',
     ];
 
     public function conversation(): BelongsTo

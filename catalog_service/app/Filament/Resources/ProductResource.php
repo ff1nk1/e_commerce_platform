@@ -207,8 +207,8 @@ class ProductResource extends Resource
             'ContentType' => $file->getMimeType() ?: 'application/octet-stream',
         ]);
 
-        $bucket = env('AWS_BUCKET', 'media');
-        $publicBase = rtrim((string) env('MEDIA_PUBLIC_BASE', '/storage'), '/');
+        $bucket = (string) config('filesystems.disks.s3.bucket', 'media');
+        $publicBase = rtrim((string) config('filesystems.media_public_base', '/storage'), '/');
 
         return "{$publicBase}/{$bucket}/{$path}";
     }

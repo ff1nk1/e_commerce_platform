@@ -32,6 +32,36 @@
   flex-wrap: wrap;
 }
 
+.assistant-header-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.assistant-store-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.assistant-store-select {
+  min-width: 180px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  color: #29323d;
+  font-size: 14px;
+}
+
+.assistant-store-select:disabled {
+  background: #f9fafb;
+  cursor: not-allowed;
+}
+
 .assistant-header h1 {
   margin: 0 0 8px;
   font-size: 24px;

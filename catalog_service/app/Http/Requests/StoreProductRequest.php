@@ -3,15 +3,13 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
 
 class StoreProductRequest extends FormRequest
 {
-    /**
-     * Авторизация: здесь можно проверить права (например, только админ может создавать товары)
-     */
     public function authorize(): bool
     {
-        return true; // Временно разрешаем всем, пока нет системы ролей
+        return Auth::guard('gateway')->check();
     }
 
     /**

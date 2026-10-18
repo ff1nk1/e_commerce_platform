@@ -8,6 +8,7 @@ use App\Models\ProductCatalog;
 use App\Services\Llm\Contracts\LlmClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Tests\Fakes\FakeConsumerMessage;
 use Tests\Fakes\FakeLlmClient;
 use Tests\TestCase;
@@ -16,10 +17,13 @@ class ProductKafkaHandlersTest extends TestCase
 {
     use RefreshDatabase;
 
+    private FakeLlmClient $llm;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->app->instance(LlmClient::class, new FakeLlmClient);
+        $this->llm = new FakeLlmClient;
+        $this->app->instance(LlmClient::class, $this->llm);
     }
 
     public function test_product_created_upserts_and_embeds(): void
@@ -30,6 +34,7 @@ class ProductKafkaHandlersTest extends TestCase
                 'data' => [
                     'id' => 55,
                     'store_id' => 3,
+                    'store' => ['id' => 3, 'name' => 'Gadget Hub'],
                     'name' => 'Phone',
                     'description' => 'Smart',
                     'price' => 199,
@@ -48,6 +53,7 @@ class ProductKafkaHandlersTest extends TestCase
         $this->assertDatabaseHas('product_catalog', [
             'product_id' => 55,
             'store_id' => 3,
+            'store_name' => 'Gadget Hub',
             'name' => 'Phone',
             'category_name' => 'Gadgets',
             'is_published' => true,
@@ -55,6 +61,129 @@ class ProductKafkaHandlersTest extends TestCase
 
         $embedding = DB::table('product_catalog')->where('product_id', 55)->value('embedding');
         $this->assertNotNull($embedding);
+        $this->assertSame(1, $this->llm->embedCalls);
+    }
+
+    public function test_product_created_unpublished_is_stored(): void
+    {
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: [
+                'event' => 'product.created',
+                'data' => [
+                    'id' => 56,
+                    'store_id' => 1,
+                    'name' => 'Draft Phone',
+                    'price' => 10,
+                    'is_published' => false,
+                ],
+            ],
+            headers: ['event-type' => 'product.created'],
+        ));
+
+        $this->assertDatabaseHas('product_catalog', [
+            'product_id' => 56,
+            'is_published' => false,
+        ]);
+        $this->assertNotNull(
+            DB::table('product_catalog')->where('product_id', 56)->value('embedding')
+        );
+    }
+
+    public function test_product_updated_changes_fields_and_reembeds(): void
+    {
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: [
+                'event' => 'product.created',
+                'data' => [
+                    'id' => 60,
+                    'store_id' => 1,
+                    'name' => 'Old Name',
+                    'price' => 10,
+                    'attributes' => [['name' => 'Color', 'value' => 'Red']],
+                    'is_published' => true,
+                ],
+            ],
+            headers: ['event-type' => 'product.created'],
+        ));
+        $this->assertSame(1, $this->llm->embedCalls);
+
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: [
+                'event' => 'product.updated',
+                'data' => [
+                    'id' => 60,
+                    'store_id' => 2,
+                    'name' => 'New Name',
+                    'price' => 99.5,
+                    'attributes' => [['name' => 'Color', 'value' => 'Blue']],
+                    'is_published' => true,
+                ],
+            ],
+            headers: ['event-type' => 'product.updated'],
+        ));
+
+        $this->assertDatabaseHas('product_catalog', [
+            'product_id' => 60,
+            'store_id' => 2,
+            'name' => 'New Name',
+            'price' => 99.50,
+        ]);
+        $row = ProductCatalog::query()->where('product_id', 60)->first();
+        $this->assertSame([['name' => 'Color', 'value' => 'Blue']], $row?->attributes);
+        $this->assertSame(2, $this->llm->embedCalls);
+    }
+
+    public function test_product_published_upserts_new_product(): void
+    {
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: [
+                'event' => 'product.published',
+                'data' => [
+                    'id' => 61,
+                    'store_id' => 1,
+                    'name' => 'Just Published',
+                    'price' => 42,
+                    'category' => ['id' => 3, 'name' => 'Books'],
+                ],
+            ],
+            headers: ['event-type' => 'product.published'],
+        ));
+
+        $this->assertDatabaseHas('product_catalog', [
+            'product_id' => 61,
+            'name' => 'Just Published',
+            'is_published' => true,
+            'category_name' => 'Books',
+        ]);
+        $this->assertSame(1, $this->llm->embedCalls);
+    }
+
+    public function test_product_published_for_existing_without_name_only_sets_flag(): void
+    {
+        ProductCatalog::query()->create([
+            'product_id' => 62,
+            'store_id' => 1,
+            'name' => 'Existing',
+            'price' => 5,
+            'is_published' => false,
+            'in_stock' => true,
+            'attributes' => [],
+        ]);
+
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: [
+                'event' => 'product.published',
+                'data' => ['id' => 62],
+            ],
+            headers: ['event-type' => 'product.published'],
+        ));
+
+        $this->assertDatabaseHas('product_catalog', [
+            'product_id' => 62,
+            'name' => 'Existing',
+            'is_published' => true,
+        ]);
+        $this->assertSame(1, $this->llm->embedCalls);
     }
 
     public function test_product_deleted_removes_row(): void
@@ -100,6 +229,43 @@ class ProductKafkaHandlersTest extends TestCase
         ]);
     }
 
+    public function test_unknown_event_type_is_ignored(): void
+    {
+        Log::spy();
+
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: ['event' => 'product.something', 'data' => ['id' => 1]],
+            headers: ['event-type' => 'product.something'],
+        ));
+
+        $this->assertSame(0, ProductCatalog::query()->count());
+        $this->assertSame(0, $this->llm->embedCalls);
+    }
+
+    public function test_missing_data_does_not_throw(): void
+    {
+        Log::spy();
+
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: ['event' => 'product.created'],
+            headers: ['event-type' => 'product.created'],
+        ));
+
+        $this->assertSame(0, ProductCatalog::query()->count());
+    }
+
+    public function test_missing_id_does_not_throw(): void
+    {
+        Log::spy();
+
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: ['event' => 'product.created', 'data' => ['name' => 'No Id']],
+            headers: ['event-type' => 'product.created'],
+        ));
+
+        $this->assertSame(0, ProductCatalog::query()->count());
+    }
+
     public function test_stock_changed_updates_in_stock(): void
     {
         ProductCatalog::query()->create([
@@ -122,5 +288,45 @@ class ProductKafkaHandlersTest extends TestCase
             'product_id' => 80,
             'in_stock' => false,
         ]);
+    }
+
+    public function test_stock_changed_for_unknown_product_is_noop(): void
+    {
+        app(StockEventsHandler::class)(new FakeConsumerMessage(
+            body: ['product_id' => 9999, 'store_id' => 1, 'quantity' => 5],
+            headers: ['event-type' => 'stock.changed'],
+            topicName: 'catalog.events',
+        ));
+
+        $this->assertSame(0, ProductCatalog::query()->count());
+    }
+
+    public function test_product_created_then_chat_returns_product(): void
+    {
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: [
+                'event' => 'product.created',
+                'data' => [
+                    'id' => 100,
+                    'store_id' => 1,
+                    'name' => 'Blue sneakers',
+                    'description' => 'Running shoes',
+                    'price' => 120,
+                    'category' => ['id' => 2, 'name' => 'Shoes'],
+                    'attributes' => [['name' => 'Color', 'value' => 'Blue']],
+                    'is_published' => true,
+                ],
+            ],
+            headers: ['event-type' => 'product.created'],
+        ));
+
+        $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'Find blue sneakers',
+            'limit' => 5,
+        ])
+            ->assertOk()
+            ->assertJsonPath('products.0.product_id', 100)
+            ->assertJsonPath('products.0.path', '/products/100');
     }
 }

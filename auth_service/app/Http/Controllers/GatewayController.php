@@ -118,7 +118,9 @@ class GatewayController extends Controller
 
     public function recommendationsHealth(Request $request): Response
     {
-        return $this->forwardService($request, 'recommendation', 'health');
+        return $this->forwardService($request, 'recommendation', 'health', '', [
+            'timeout' => 120,
+        ]);
     }
 
     public function recommendations(Request $request, string $path = ''): Response
@@ -131,19 +133,23 @@ class GatewayController extends Controller
                 'email' => $user->email,
                 'name' => $user->name,
             ],
+            'timeout' => 120,
         ]);
     }
 
     public function recommendationsReindex(Request $request): Response
     {
-        return $this->forwardService($request, 'recommendation', 'reindex');
+        return $this->forwardService($request, 'recommendation', 'reindex', '', [
+            'timeout' => 120,
+        ]);
     }
 
     /**
      * @param  array{
      *     mode?: 'json'|'html'|'raw',
      *     injectUser?: array{id: int, email?: string|null, name?: string|null},
-     *     identity?: array{id: int, role: string, name?: string, email?: string}
+     *     identity?: array{id: int, role: string, name?: string, email?: string},
+     *     timeout?: int
      * }  $options
      */
     private function forwardService(
@@ -177,6 +183,7 @@ class GatewayController extends Controller
             $baseUrl,
             $fullPath,
             $options['injectUser'] ?? null,
+            (int) ($options['timeout'] ?? 30),
         );
     }
 }

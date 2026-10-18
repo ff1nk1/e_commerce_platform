@@ -15,7 +15,7 @@ class StockService
                 'product_id' => $data['product_id'],
                 'store_id' => $data['store_id'],
                 'quantity' => (int) $data['quantity'],
-                'reserved' => (int) ($data['reserved'] ?? 0),
+                'reserved' => 0,
             ]);
 
             $this->queueStockChanged($stock);
@@ -41,7 +41,8 @@ class StockService
         event(new StockChanged([
             'product_id' => $stock->product_id,
             'store_id' => $stock->store_id,
-            'quantity' => $stock->quantity,
+            // Downstream treats this as sellable/available qty.
+            'quantity' => $stock->available,
         ]));
     }
 }

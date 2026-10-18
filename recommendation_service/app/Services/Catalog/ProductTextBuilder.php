@@ -11,6 +11,7 @@ class ProductTextBuilder
         return $this->fromParts(
             productId: (int) $product->product_id,
             storeId: (int) $product->store_id,
+            storeName: (string) ($product->store_name ?? ''),
             name: (string) ($product->name ?? ''),
             description: (string) ($product->description ?? ''),
             categoryName: (string) ($product->category_name ?? ''),
@@ -32,10 +33,12 @@ class ProductTextBuilder
         array $attributes,
         bool $isPublished,
         bool $inStock,
+        string $storeName = '',
     ): string {
         $lines = [
             "product_id: {$productId}",
             "store_id: {$storeId}",
+            'store: '.$storeName,
             'name: '.$name,
             'description: '.$description,
             'category: '.$categoryName,

@@ -8,6 +8,7 @@ use App\Models\ProductAttribute;
 use App\Models\Stock;
 use App\Models\Store;
 use App\Services\CatalogService;
+use App\Services\ProductService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -28,6 +29,10 @@ class ShopSeeder extends Seeder
         Category::truncate();
         Store::truncate();
         Schema::enableForeignKeyConstraints();
+
+        // Truncate bypasses CatalogService/ProductService — drop stale Redis tags now.
+        app(CatalogService::class)->clearCategoryCache();
+        app(ProductService::class)->clearProductCache();
 
         // 2. Создаем магазины
         $storesData = ['Главный склад', 'Магазин на Ленина', 'ТЦ Галерея', 'Точка выдачи'];
@@ -107,8 +112,8 @@ class ShopSeeder extends Seeder
         $leafCategories = Category::doesntHave('children')->get();
 
         foreach ($leafCategories as $category) {
-            // Создаем по 15 товаров для каждой конечной категории
-            for ($i = 1; $i <= 15; $i++) {
+            // Создаем по 5 товаров для каждой конечной категории
+            for ($i = 1; $i <= 5; $i++) {
                 Product::create([
                     // Привязываем к случайному магазину из созданных ранее
                     'store_id' => $stores->random()->id,
@@ -121,7 +126,8 @@ class ShopSeeder extends Seeder
             }
         }
 
-        // Truncate bypasses CatalogService, so public /catalog/categories can keep a stale empty Redis list.
+        // Drop anything warmed while this seeder wrote via Model::create.
         app(CatalogService::class)->clearCategoryCache();
+        app(ProductService::class)->clearProductCache();
     }
 }

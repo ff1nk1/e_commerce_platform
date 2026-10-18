@@ -14,6 +14,19 @@ class CatalogHttpTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * @return array<string, string>
+     */
+    private function adminHeaders(): array
+    {
+        return [
+            'X-User-Id' => '42',
+            'X-User-Role' => 'admin',
+            'X-User-Name' => 'Yan Admin',
+            'X-User-Email' => 'yan@example.com',
+        ];
+    }
+
     public function test_list_stores(): void
     {
         Store::factory()->create(['name' => 'Alpha Shop']);
@@ -66,6 +79,27 @@ class CatalogHttpTest extends TestCase
             ->assertJsonMissing(['name' => 'Out of stock item']);
     }
 
+    public function test_admin_products_rejects_without_gateway_headers(): void
+    {
+        $this->getJson('/api/admin/products')->assertForbidden();
+    }
+
+    public function test_admin_products_rejects_non_admin_role(): void
+    {
+        $this->withHeaders([
+            'X-User-Id' => '1',
+            'X-User-Role' => 'customer',
+        ])->getJson('/api/admin/products')->assertForbidden();
+    }
+
+    public function test_get_upload_url_rejects_without_gateway_headers(): void
+    {
+        $this->postJson('/api/get-upload-url', [
+            'filename' => 'photo.jpg',
+            'content_type' => 'image/jpeg',
+        ])->assertForbidden();
+    }
+
     public function test_admin_products_can_filter_by_store_id(): void
     {
         $storeA = Store::factory()->create();
@@ -73,7 +107,8 @@ class CatalogHttpTest extends TestCase
         Product::factory()->create(['store_id' => $storeA->id, 'name' => 'A only']);
         Product::factory()->create(['store_id' => $storeB->id, 'name' => 'B only']);
 
-        $response = $this->getJson('/api/admin/products?store_id='.$storeA->id);
+        $response = $this->withHeaders($this->adminHeaders())
+            ->getJson('/api/admin/products?store_id='.$storeA->id);
 
         $response->assertOk()
             ->assertJsonPath('total', 1)
@@ -86,7 +121,7 @@ class CatalogHttpTest extends TestCase
         $store = Store::factory()->create();
         $product = Product::factory()->create(['store_id' => $store->id]);
 
-        $create = $this->postJson('/api/admin/stocks', [
+        $create = $this->withHeaders($this->adminHeaders())->postJson('/api/admin/stocks', [
             'product_id' => $product->id,
             'store_id' => $store->id,
             'quantity' => 12,
@@ -94,6 +129,7 @@ class CatalogHttpTest extends TestCase
 
         $create->assertCreated()
             ->assertJsonPath('stock.quantity', 12)
+            ->assertJsonPath('stock.reserved', 0)
             ->assertJsonPath('stock.available', 12);
 
         $stockId = $create->json('stock.id');
@@ -101,10 +137,11 @@ class CatalogHttpTest extends TestCase
             'event_type' => 'stock.changed',
         ]);
 
-        $list = $this->getJson('/api/admin/stocks?store_id='.$store->id);
+        $list = $this->withHeaders($this->adminHeaders())
+            ->getJson('/api/admin/stocks?store_id='.$store->id);
         $list->assertOk()->assertJsonPath('total', 1);
 
-        $update = $this->patchJson('/api/admin/stocks/'.$stockId, [
+        $update = $this->withHeaders($this->adminHeaders())->patchJson('/api/admin/stocks/'.$stockId, [
             'quantity' => 20,
         ]);
 

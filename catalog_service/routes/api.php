@@ -6,12 +6,10 @@ use App\Http\Controllers\CatalogController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\StoreController;
 use App\Http\Controllers\UploadController;
+use App\Http\Middleware\AuthenticateFromGatewayHeaders;
 use Illuminate\Support\Facades\Route;
 
-// Open API — no auth middleware (admin frontend / storefront)
-
-Route::post('/get-upload-url', [UploadController::class, 'getUploadUrl']);
-
+// Storefront — public at service level (gateway still requires JWT for clients)
 Route::prefix('catalog')->group(function () {
     Route::get('/categories', [CatalogController::class, 'show_categories']);
     Route::get('/categories/{cat_slug}/products', [CatalogController::class, 'show_products_by_cat_id']);
@@ -21,12 +19,17 @@ Route::prefix('catalog')->group(function () {
     Route::get('/products/{id}', [ProductController::class, 'show']);
 });
 
-Route::prefix('admin')->group(function () {
-    Route::get('/stores', [StoreController::class, 'index']);
-    Route::apiResource('products', ProductController::class);
-    Route::apiResource('categories', AdminCatalogController::class);
-    Route::get('/stocks', [AdminStockController::class, 'index']);
-    Route::post('/stocks', [AdminStockController::class, 'store']);
-    Route::get('/stocks/{stock}', [AdminStockController::class, 'show']);
-    Route::patch('/stocks/{stock}', [AdminStockController::class, 'update']);
+// Admin + upload — require gateway admin headers (defense in depth)
+Route::middleware([AuthenticateFromGatewayHeaders::class])->group(function () {
+    Route::post('/get-upload-url', [UploadController::class, 'getUploadUrl']);
+
+    Route::prefix('admin')->group(function () {
+        Route::get('/stores', [StoreController::class, 'index']);
+        Route::apiResource('products', ProductController::class);
+        Route::apiResource('categories', AdminCatalogController::class);
+        Route::get('/stocks', [AdminStockController::class, 'index']);
+        Route::post('/stocks', [AdminStockController::class, 'store']);
+        Route::get('/stocks/{stock}', [AdminStockController::class, 'show']);
+        Route::patch('/stocks/{stock}', [AdminStockController::class, 'update']);
+    });
 });

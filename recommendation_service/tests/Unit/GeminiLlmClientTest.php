@@ -101,14 +101,15 @@ class GeminiLlmClientTest extends TestCase
                         'content' => [
                             'parts' => [
                                 ['text' => json_encode([
-                                    'store_id' => 3,
-                                    'category_id' => 10,
+                                    'store_id' => null,
+                                    'store_name' => 'ТЦ Галерея',
+                                    'category_name' => 'Джинсы',
                                     'in_stock' => true,
                                     'price_min' => 100,
                                     'price_max' => 500,
-                                    'query' => 'blue sneakers',
+                                    'query' => 'джинсы',
                                     'attributes' => [
-                                        ['name' => 'Color', 'value' => 'Blue'],
+                                        ['name' => 'Цвет', 'value' => 'чёрный'],
                                     ],
                                 ], JSON_THROW_ON_ERROR)],
                             ],
@@ -118,15 +119,16 @@ class GeminiLlmClientTest extends TestCase
             ]),
         ]);
 
-        $filters = $this->client()->extractFilters('blue sneakers in store 3 under 500');
+        $filters = $this->client()->extractFilters('черные джинсы в ТЦ Галерея до 500');
 
-        $this->assertSame(3, $filters->storeId);
-        $this->assertSame(10, $filters->categoryId);
+        $this->assertNull($filters->storeId);
+        $this->assertSame('ТЦ Галерея', $filters->storeName);
+        $this->assertSame('Джинсы', $filters->categoryName);
         $this->assertTrue($filters->inStock);
         $this->assertSame(100.0, $filters->priceMin);
         $this->assertSame(500.0, $filters->priceMax);
-        $this->assertSame('blue sneakers', $filters->query);
-        $this->assertSame([['name' => 'Color', 'value' => 'Blue']], $filters->attributes);
+        $this->assertSame('джинсы', $filters->query);
+        $this->assertSame([['name' => 'Цвет', 'value' => 'чёрный']], $filters->attributes);
 
         Http::assertSent(function ($request) {
             $body = $request->data();
@@ -162,5 +164,40 @@ class GeminiLlmClientTest extends TestCase
         $this->expectExceptionMessage('GEMINI_API_KEY is not configured');
 
         $client->embed('x');
+    }
+
+    public function test_extract_filters_and_embed_uses_http_pool(): void
+    {
+        $values = array_fill(0, 768, 0.2);
+
+        Http::fake([
+            '*/models/gemini-3.8-flash:generateContent' => Http::response([
+                'candidates' => [
+                    [
+                        'content' => [
+                            'parts' => [
+                                ['text' => json_encode([
+                                    'store_name' => 'Main',
+                                    'query' => 'blue shoes',
+                                    'attributes' => [],
+                                ], JSON_THROW_ON_ERROR)],
+                            ],
+                        ],
+                    ],
+                ],
+            ]),
+            '*/models/text-embedding-004:embedContent' => Http::response([
+                'embedding' => ['values' => $values],
+            ]),
+        ]);
+
+        [$filters, $embedding] = $this->client()->extractFiltersAndEmbed('blue shoes');
+
+        $this->assertSame('Main', $filters->storeName);
+        $this->assertSame('blue shoes', $filters->query);
+        $this->assertCount(768, $embedding);
+        $this->assertSame(0.2, $embedding[0]);
+
+        Http::assertSentCount(2);
     }
 }

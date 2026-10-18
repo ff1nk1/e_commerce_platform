@@ -9,6 +9,7 @@
 #   docker compose up -d
 #
 # Order matters: search indices before catalog seed (Kafka republish),
+# recommendation schema + product consumer before catalog seed (AI index),
 # catalog before order seed (ProductSnapshotSeeder reads catalog DB).
 #
 # Analytic ClickHouse migrations run automatically when analytic_api /
@@ -31,6 +32,10 @@ NC='\033[0m'
 
 FAILED=0
 declare -a RESULTS=()
+
+# Gemini embed of ~45 seeded products can take several minutes.
+RECO_INDEX_TIMEOUT_SEC="${RECO_INDEX_TIMEOUT_SEC:-600}"
+RECO_INDEX_POLL_SEC="${RECO_INDEX_POLL_SEC:-5}"
 
 log() { printf '%b\n' "$*"; }
 
@@ -83,6 +88,86 @@ run_step() {
   fi
 }
 
+catalog_product_count() {
+  "${COMPOSE[@]}" exec -T catalog_app php -r '
+require "vendor/autoload.php";
+$app = require "bootstrap/app.php";
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+echo (int) App\Models\Product::query()->count();
+'
+}
+
+recommendation_indexed_count() {
+  "${COMPOSE[@]}" exec -T recommendation_app php -r '
+$url = "http://127.0.0.1:8007/api/recommendations/health";
+$raw = @file_get_contents($url);
+if ($raw === false) {
+    fwrite(STDERR, "health unreachable\n");
+    exit(1);
+}
+$json = json_decode($raw, true);
+if (!is_array($json)) {
+    fwrite(STDERR, "invalid health json\n");
+    exit(1);
+}
+echo (int) ($json["indexed_products"] ?? 0);
+'
+}
+
+wait_for_recommendation_index() {
+  local label="recommendation-index-wait"
+  local expected indexed
+  local start end elapsed
+  local deadline
+
+  log ""
+  log "${BOLD}═══ [${label}] wait for product_catalog embeddings ═══${NC}"
+  start=$(date +%s)
+
+  if ! expected="$(catalog_product_count 2>/dev/null)"; then
+    log "${RED}FAIL${NC} [${label}] cannot read catalog product count"
+    RESULTS+=("FAIL ${label}")
+    FAILED=1
+    return 1
+  fi
+  expected="$(echo "$expected" | tr -d '[:space:]')"
+  if [[ -z "$expected" || "$expected" -lt 1 ]]; then
+    log "${YELLOW}WARN${NC} [${label}] catalog has 0 products — skip wait"
+    RESULTS+=("PASS ${label} (nothing to index)")
+    return 0
+  fi
+
+  log "Expecting indexed_products >= ${expected} (timeout ${RECO_INDEX_TIMEOUT_SEC}s)"
+  deadline=$((start + RECO_INDEX_TIMEOUT_SEC))
+
+  while true; do
+    if indexed="$(recommendation_indexed_count 2>/dev/null)"; then
+      indexed="$(echo "$indexed" | tr -d '[:space:]')"
+      log "  indexed_products=${indexed}/${expected}"
+      if [[ -n "$indexed" && "$indexed" -ge "$expected" ]]; then
+        end=$(date +%s)
+        elapsed=$((end - start))
+        log "${GREEN}PASS${NC} [${label}] (${elapsed}s)"
+        RESULTS+=("PASS ${label}")
+        return 0
+      fi
+    else
+      log "  health not ready yet..."
+    fi
+
+    if [[ $(date +%s) -ge $deadline ]]; then
+      end=$(date +%s)
+      elapsed=$((end - start))
+      log "${RED}FAIL${NC} [${label}] timeout after ${elapsed}s (indexed=${indexed:-?}/${expected})"
+      log "  Check GEMINI_API_KEY in recommendation .env and logs of recommendation_kafka_product_consumer."
+      RESULTS+=("FAIL ${label}")
+      FAILED=1
+      return 1
+    fi
+    sleep "$RECO_INDEX_POLL_SEC"
+  done
+}
+
 FILTER=("$@")
 
 VALID=(auth notification search catalog order recommendation)
@@ -116,7 +201,8 @@ if should_run search; then
 fi
 if should_run catalog; then
   add_need catalog_app kafka catalog_kafka_order_consumer catalog_kafka_outbox_worker \
-    search_kafka_product_consumer search_kafka_category_consumer search_kafka_stock_consumer
+    search_kafka_product_consumer search_kafka_category_consumer search_kafka_stock_consumer \
+    recommendation_app recommendation_db recommendation_kafka_product_consumer
 fi
 if should_run order; then
   add_need order_app catalog_db kafka \
@@ -124,7 +210,11 @@ if should_run order; then
     catalog_kafka_order_consumer catalog_kafka_outbox_worker
 fi
 if should_run recommendation; then
-  add_need recommendation_app recommendation_db
+  add_need recommendation_app recommendation_db recommendation_kafka_product_consumer
+  # recommendation-only path republishes from catalog via Kafka
+  if ! should_run catalog; then
+    add_need catalog_app kafka
+  fi
 fi
 
 declare -A SEEN=()
@@ -161,16 +251,43 @@ if should_run notification; then
   run_step notification notification_app php artisan migrate --seed --force
 fi
 if should_run search; then
-  run_step search search_app php artisan opensearch:setup
+  # Wipe stale docs from prior seeds (truncate does not emit product.deleted).
+  run_step search search_app php artisan opensearch:setup --recreate --force
 fi
+
+# Recommendation schema must exist before catalog Kafka republish is consumed.
+if should_run catalog || should_run recommendation; then
+  run_step recommendation-migrate recommendation_app php artisan migrate --force
+fi
+
+# Drop stale embeddings so wait_for_recommendation_index cannot PASS on old rows.
+if should_run catalog || should_run recommendation; then
+  run_step recommendation-clear-index recommendation_app php -r '
+require "vendor/autoload.php";
+$app = require "bootstrap/app.php";
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+Illuminate\Support\Facades\DB::table("product_catalog")->truncate();
+echo "product_catalog truncated\n";
+'
+fi
+
 if should_run catalog; then
   run_step catalog catalog_app php artisan migrate --seed --force
+  if [[ $FAILED -eq 0 ]]; then
+    wait_for_recommendation_index
+  fi
 fi
+
 if should_run order; then
   run_step order order_app php artisan migrate --seed --force
 fi
-if should_run recommendation; then
-  run_step recommendation recommendation_app php artisan migrate --force
+
+# recommendation-only: catalog already seeded — republish so AI index fills via Kafka.
+if should_run recommendation && ! should_run catalog; then
+  run_step recommendation-republish catalog_app php artisan db:seed --class=Database\\Seeders\\RepublishProductsSeeder --force
+  if [[ $FAILED -eq 0 ]]; then
+    wait_for_recommendation_index
+  fi
 fi
 
 TOTAL_END=$(date +%s)
@@ -188,6 +305,7 @@ done
 
 log ""
 log "${YELLOW}Note:${NC} analytic ClickHouse schema migrates on analytic_api / analytic_consumers startup."
+log "${YELLOW}Note:${NC} recommendation product_catalog is filled via Kafka after catalog seed (needs GEMINI_API_KEY)."
 
 if [[ $FAILED -ne 0 ]]; then
   log ""

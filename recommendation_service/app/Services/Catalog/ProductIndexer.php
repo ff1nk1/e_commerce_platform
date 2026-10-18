@@ -25,6 +25,8 @@ class ProductIndexer
         }
 
         $storeId = (int) ($data['store_id'] ?? data_get($data, 'store.id') ?? 0);
+        $storeName = data_get($data, 'store.name')
+            ?? ($data['store_name'] ?? null);
         $categoryId = $data['category_id'] ?? data_get($data, 'category.id');
         $categoryName = data_get($data, 'category.name')
             ?? ($data['category_name'] ?? null);
@@ -59,6 +61,7 @@ class ProductIndexer
             ['product_id' => $productId],
             [
                 'store_id' => $storeId,
+                'store_name' => $storeName !== null ? (string) $storeName : null,
                 'name' => (string) ($data['name'] ?? ''),
                 'description' => isset($data['description']) ? (string) $data['description'] : null,
                 'category_id' => $categoryId !== null ? (int) $categoryId : null,
