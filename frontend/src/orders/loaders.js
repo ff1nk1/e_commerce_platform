@@ -1,6 +1,6 @@
 import { redirect } from 'react-router-dom'
 import { requireAuth } from '../auth/requireAuth'
-import { orderApi } from '../api/orderClient'
+import { getOrder } from '../api/orders'
 
 export async function ordersLoader() {
   await requireAuth()
@@ -10,7 +10,7 @@ export async function ordersLoader() {
 export async function orderDetailLoader({ params }) {
   await requireAuth()
   try {
-    const { data } = await orderApi.get(`/orders/${params.id}`)
+    const { data } = await getOrder(params.id)
     return { order: data }
   } catch {
     throw redirect('/orders')

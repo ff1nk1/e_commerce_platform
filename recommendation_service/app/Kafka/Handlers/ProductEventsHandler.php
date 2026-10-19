@@ -30,27 +30,46 @@ class ProductEventsHandler
         }
 
         $eventType = $headers['event-type'] ?? ($body['event'] ?? null);
-        if (! in_array($eventType, self::ALLOWED_TYPES, true)) {
-            Log::debug("Recommendation: ignore product event {$eventType}");
+        if (! is_string($eventType) || ! in_array($eventType, self::ALLOWED_TYPES, true)) {
+            Log::debug('Recommendation: ignore product event', [
+                'event' => is_string($eventType) ? $eventType : get_debug_type($eventType),
+            ]);
 
             return;
         }
 
         $data = $body['data'] ?? null;
         if (! is_array($data)) {
-            Log::warning('Recommendation: product event without data', ['body' => $body]);
+            Log::warning('Recommendation: product event without data', [
+                'event' => $eventType,
+                'body_keys' => array_keys($body),
+            ]);
 
             return;
         }
 
         $id = $data['id'] ?? $data['product_id'] ?? null;
-        if ($id === null) {
-            Log::warning('Recommendation: product event without id', ['data' => $data]);
+        if ($id === null || ! is_numeric($id) || (int) $id <= 0) {
+            Log::warning('Recommendation: product event without valid id', [
+                'event' => $eventType,
+                'data_keys' => array_keys($data),
+            ]);
 
             return;
         }
 
         $productId = (int) $id;
+
+        if (in_array($eventType, ['product.created', 'product.updated'], true)
+            && ! $this->hasUpsertPayload($data)) {
+            Log::warning('Recommendation: product upsert missing required fields', [
+                'event' => $eventType,
+                'product_id' => $productId,
+                'data_keys' => array_keys($data),
+            ]);
+
+            return;
+        }
 
         match ($eventType) {
             'product.deleted' => $this->indexer->remove($productId),
@@ -68,12 +87,30 @@ class ProductEventsHandler
     /**
      * @param  array<string, mixed>  $data
      */
+    private function hasUpsertPayload(array $data): bool
+    {
+        $name = $data['name'] ?? null;
+
+        return is_string($name) && trim($name) !== '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
     private function handlePublished(array $data, int $productId): void
     {
         $data['is_published'] = true;
         $existing = ProductCatalog::query()->where('product_id', $productId)->exists();
         if ($existing && ($data['name'] ?? null) === null) {
             $this->indexer->setPublished($productId, true);
+
+            return;
+        }
+
+        if (! $this->hasUpsertPayload($data) && ! $existing) {
+            Log::warning('Recommendation: product.published for unknown product without name', [
+                'product_id' => $productId,
+            ]);
 
             return;
         }

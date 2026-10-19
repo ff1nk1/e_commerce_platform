@@ -20,7 +20,7 @@ interface LlmClient
     public function extractFilters(string $userMessage): SearchFilters;
 
     /**
-     * Run extractFilters and embed concurrently when supported.
+     * Extract filters then embed the cleaned query (or raw message when query is null).
      *
      * @return array{0: SearchFilters, 1: list<float>}
      */

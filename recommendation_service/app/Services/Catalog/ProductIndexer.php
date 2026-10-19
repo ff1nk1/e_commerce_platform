@@ -52,9 +52,9 @@ class ProductIndexer
             ? (bool) $data['is_published']
             : true;
 
-        $inStock = array_key_exists('in_stock', $data)
-            ? (bool) $data['in_stock']
-            : (array_key_exists('quantity', $data) ? ((int) $data['quantity']) > 0 : true);
+        // Stock lives in stock.changed events. Preserve existing in_stock on product
+        // upserts unless the payload explicitly carries stock fields (avoids OOS race).
+        $inStock = $this->resolveInStock($productId, $data);
 
         /** @var ProductCatalog $product */
         $product = ProductCatalog::query()->updateOrCreate(
@@ -134,6 +134,27 @@ class ProductIndexer
             'UPDATE product_catalog SET embedding = ?::vector, updated_at = ? WHERE id = ?',
             [$literal, now(), $product->id]
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function resolveInStock(int $productId, array $data): bool
+    {
+        if (array_key_exists('in_stock', $data)) {
+            return (bool) $data['in_stock'];
+        }
+
+        if (array_key_exists('quantity', $data)) {
+            return ((int) $data['quantity']) > 0;
+        }
+
+        $existing = ProductCatalog::query()->where('product_id', $productId)->value('in_stock');
+        if ($existing !== null) {
+            return (bool) $existing;
+        }
+
+        return true;
     }
 
     /**

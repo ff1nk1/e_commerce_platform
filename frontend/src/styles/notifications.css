@@ -1,0 +1,355 @@
+/* Панель фильтров */
+.filter-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding: 18px;
+    background: var(--color-bg-filter);
+    border: 1px solid var(--color-border-filter);
+    border-radius: 12px;
+}
+
+.filter-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.filter-select {
+    height: 42px;
+    min-width: 160px;
+}
+
+.search-input {
+    flex: 1;
+    min-width: 200px;
+    height: 42px;
+    padding: 0 14px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 10px;
+    outline: none;
+    background: var(--color-bg-muted);
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.search-input::placeholder {
+    color: var(--color-text-subtle);
+}
+
+.search-input:focus {
+    background: var(--color-bg-surface);
+    border-color: var(--color-text-muted);
+    box-shadow: 0 0 0 3px rgba(101, 120, 135, 0.12);
+}
+
+/* Поля ввода дат */
+.date-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.date-label {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    font-weight: 500;
+}
+
+.date-input {
+    width: auto;
+    min-width: 140px;
+    cursor: pointer;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* Кнопки */
+.btn {
+    height: 42px;
+    padding: 0 18px;
+    border: none;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-primary {
+    background: var(--color-btn-admin);
+    color: var(--color-text-inverse);
+}
+
+.btn-primary:hover {
+    background: var(--color-btn-admin-hover);
+}
+
+.btn-secondary {
+    background: var(--color-bg-active);
+    color: var(--color-btn-primary-hover);
+}
+
+.btn-secondary:hover {
+    background: var(--color-border-strong);
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Область таблицы */
+.table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--color-border-filter);
+    border-radius: 12px;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 14px;
+}
+
+.admin-table th {
+    padding: 14px 18px;
+    background: var(--color-bg-filter);
+    color: var(--color-text-muted);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    border-bottom: 1px solid var(--color-border-filter);
+}
+
+.admin-table td {
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--color-border-muted);
+    color: var(--color-text);
+}
+
+.admin-table tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.admin-table tbody tr:hover {
+    background-color: var(--color-bg-filter);
+}
+
+.admin-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.id-cell {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+/* Стилизация выпадающих списков */
+.role-select {
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 10px;
+    background-color: var(--color-bg-muted);
+    color: var(--color-text);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.role-select:focus {
+    border-color: var(--color-text-muted);
+    background-color: var(--color-bg-surface);
+}
+
+/* Бейджи статусов */
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.status-sent {
+    background-color: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.status-pending {
+    background-color: var(--color-bg-surface)8e6;
+    color: var(--color-warning);
+}
+
+.status-failed {
+    background-color: var(--color-danger-bg);
+    color: var(--color-danger-solid);
+}
+
+/* Состояния загрузки и пустой таблицы */
+.table-empty, .table-loading {
+    padding: 40px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 14px;
+}
+/* Стилизация ссылки с ID внутри ячейки */
+.id-cell a {
+    color: var(--color-btn-admin);
+    font-weight: 600;
+    text-decoration: underline;
+    transition: color 0.2s ease;
+}
+
+/* Ховер-эффект при наведении */
+.id-cell a:hover {
+    color: var(--color-text);
+}
+/* Пагинация */
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-border-muted);
+}
+
+.pagination-info {
+    color: var(--color-text-muted);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.pagination-controls {
+    display: flex;
+    gap: 8px;
+}
+/* Кнопки и шапка */
+.header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Основной контейнер данных */
+.detail-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.detail-row {
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.detail-row.payload-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Статусы */
+.status-badge {
+    font-weight: 600;
+}
+
+.status-badge.status-sent {
+    color: var(--color-success);
+}
+
+.status-badge.status-failed {
+    color: var(--color-danger-solid);
+}
+
+.status-badge.status-pending {
+    color: var(--color-warning);
+}
+
+.dlq-status {
+    font-weight: 500;
+}
+
+/* Блок ошибки */
+.error-box {
+    background-color: var(--color-danger-bg);
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--color-danger-bg);
+}
+
+.error-title {
+    color: var(--color-danger-solid);
+}
+
+.error-text {
+    margin: 4px 0 0 0;
+    color: var(--color-danger);
+    font-size: 13px;
+}
+
+/* Блок кода Payload */
+.payload-pre {
+    background-color: var(--color-bg-filter);
+    padding: 14px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    overflow-x: auto;
+    font-size: 13px;
+    margin-top: 6px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* Баннеры статуса выполнения отклика */
+.alert-banner {
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.alert-banner.alert-success {
+    background-color: var(--color-success-bg);
+    color: var(--color-success);
+    border: 1px solid var(--color-success-border);
+}
+
+.alert-banner.alert-error {
+    background-color: var(--color-danger-bg);
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger-border);
+}
+
+.alert-banner.alert-pending {
+    background-color: var(--color-bg-surface)beb;
+    color: var(--color-warning);
+    border: 1px solid var(--color-warning-bg);
+}

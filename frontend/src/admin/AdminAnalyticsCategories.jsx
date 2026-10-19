@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLoaderData, useSearchParams } from 'react-router-dom'
-import { analyticApi } from '../api/apiClient'
+import { getCategoriesAnalytics } from '../api/analytics'
 import AnalyticsDateFilter from './AnalyticsDateFilter'
 import { defaultAnalyticsRange } from './analyticsDates'
 import AnalyticsBarChart from './charts/AnalyticsBarChart'
@@ -50,7 +50,7 @@ export default function AdminAnalyticsCategories() {
       if (nextFrom) params.from = nextFrom
       if (nextTo) params.to = nextTo
       if (nextCategoryId) params.category_id = nextCategoryId
-      const response = await analyticApi.get('/analytics/orders/categories', { params })
+      const response = await getCategoriesAnalytics(params)
       setData(response.data)
       const next = {}
       if (nextFrom) next.from = nextFrom

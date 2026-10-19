@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLoaderData, useSearchParams } from 'react-router-dom'
-import { analyticApi } from '../api/apiClient'
+import { getOrdersAnalytics } from '../api/analytics'
 import AnalyticsDateFilter from './AnalyticsDateFilter'
 import { defaultAnalyticsRange } from './analyticsDates'
 import AnalyticsBarChart from './charts/AnalyticsBarChart'
@@ -34,7 +34,7 @@ export default function AdminAnalyticsOrders() {
       const params = {}
       if (nextFrom) params.from = nextFrom
       if (nextTo) params.to = nextTo
-      const response = await analyticApi.get('/analytics/orders', { params })
+      const response = await getOrdersAnalytics(params)
       setData(response.data)
       const next = {}
       if (nextFrom) next.from = nextFrom

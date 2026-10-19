@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLoaderData, useSearchParams } from 'react-router-dom'
-import { analyticApi } from '../api/apiClient'
+import { getSearchAnalytics } from '../api/analytics'
 import AnalyticsDateFilter from './AnalyticsDateFilter'
 import { defaultAnalyticsRange } from './analyticsDates'
 import AnalyticsBarChart from './charts/AnalyticsBarChart'
@@ -65,7 +65,7 @@ export default function AdminAnalyticsSearch() {
       const params = { limit: 20 }
       if (nextFrom) params.from = nextFrom
       if (nextTo) params.to = nextTo
-      const response = await analyticApi.get('/analytics/search', { params })
+      const response = await getSearchAnalytics(params)
       setData(response.data)
       const next = {}
       if (nextFrom) next.from = nextFrom

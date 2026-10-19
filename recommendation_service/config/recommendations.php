@@ -31,4 +31,15 @@ return [
         'timeout' => (int) env('RECOMMENDATION_CATALOG_TIMEOUT', 5),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Optional internal token (defense-in-depth)
+    |--------------------------------------------------------------------------
+    |
+    | When set, EnsureInternalToken requires matching X-Internal-Token header.
+    | Leave empty when the service is only reachable via auth_service gateway.
+    |
+    */
+    'internal_token' => (string) env('RECOMMENDATION_INTERNAL_TOKEN', ''),
+
 ];

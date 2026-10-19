@@ -36,6 +36,41 @@ class RecommendationsApiTest extends TestCase
             ->assertJsonPath('pgvector', true);
     }
 
+    public function test_internal_token_rejects_when_configured(): void
+    {
+        config(['recommendations.internal_token' => 'secret-token']);
+
+        $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'hello',
+        ])->assertUnauthorized();
+
+        $this->withHeader('X-Internal-Token', 'secret-token')
+            ->postJson('/api/recommendations/chat', [
+                'user_id' => '42',
+                'message' => 'hello',
+                'limit' => 1,
+            ])->assertOk();
+    }
+
+    public function test_x_user_id_header_overrides_body_user_id(): void
+    {
+        $this->seedProduct(1, 'Blue sneakers');
+
+        $response = $this->withHeader('X-User-Id', 'header-user')
+            ->postJson('/api/recommendations/chat', [
+                'user_id' => 'body-user',
+                'message' => 'sneakers',
+                'limit' => 1,
+            ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('conversations', [
+            'id' => $response->json('conversation_id'),
+            'user_id' => 'header-user',
+        ]);
+    }
+
     public function test_chat_creates_conversation_and_returns_products(): void
     {
         $this->seedProduct(1, 'Blue sneakers');
@@ -71,20 +106,64 @@ class RecommendationsApiTest extends TestCase
         $this->assertSame(0, $this->llm->extractAndEmbedCalls);
     }
 
-    public function test_chat_skips_extract_filters_when_client_filters_present(): void
+    public function test_chat_still_extracts_when_client_filters_present(): void
     {
         $this->seedProduct(1, 'Blue sneakers');
 
-        $this->postJson('/api/recommendations/chat', [
+        $this->llm->filters = new SearchFilters(
+            query: 'sneakers',
+            attributes: [['name' => 'Цвет', 'value' => 'синий']],
+            priceMax: 999,
+        );
+
+        $response = $this->postJson('/api/recommendations/chat', [
             'user_id' => '42',
-            'message' => 'sneakers',
+            'message' => 'синие sneakers',
             'price_max' => 500,
             'limit' => 5,
         ])->assertOk();
 
         $this->assertSame(0, $this->llm->extractAndEmbedCalls);
-        $this->assertSame(0, $this->llm->extractCalls);
+        $this->assertSame(1, $this->llm->extractCalls);
         $this->assertSame(1, $this->llm->embedCalls);
+        // Client price_max wins over extracted.
+        $this->assertEquals(500, $response->json('extracted_filters.price_max'));
+        // Soft color stays in attributes; size would move to required_attributes.
+        $this->assertSame([['name' => 'Цвет', 'value' => 'синий']], $response->json('extracted_filters.attributes'));
+        $this->assertSame([], $response->json('extracted_filters.required_attributes'));
+    }
+
+    public function test_chat_marks_size_and_exclusive_color_as_required(): void
+    {
+        $this->seedProduct(1, 'Blue jeans 28', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+            ['name' => 'Размер', 'value' => '28'],
+        ]);
+        $this->seedProduct(2, 'Blue jeans 32', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+            ['name' => 'Размер', 'value' => '32'],
+        ]);
+
+        $this->llm->filters = new SearchFilters(
+            query: 'джинсы',
+            attributes: [
+                ['name' => 'Цвет', 'value' => 'синий'],
+                ['name' => 'Размер', 'value' => '28'],
+            ],
+        );
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'ищу синие джинсы исключительно 28 размера',
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertSame([], $response->json('extracted_filters.attributes'));
+        $this->assertSame([
+            ['name' => 'Цвет', 'value' => 'синий'],
+            ['name' => 'Размер', 'value' => '28'],
+        ], $response->json('extracted_filters.required_attributes'));
+        $this->assertSame([1], collect($response->json('products'))->pluck('product_id')->all());
     }
 
     public function test_chat_keeps_products_when_extracted_attributes_do_not_match(): void
@@ -266,7 +345,10 @@ class RecommendationsApiTest extends TestCase
             ->assertJsonPath('indexed', 0);
     }
 
-    private function seedProduct(int $productId, string $name): void
+    /**
+     * @param  list<array{name: string, value: string}>|null  $attributes
+     */
+    private function seedProduct(int $productId, string $name, ?array $attributes = null): void
     {
         $product = ProductCatalog::query()->create([
             'product_id' => $productId,
@@ -278,7 +360,7 @@ class RecommendationsApiTest extends TestCase
             'category_name' => 'Shoes',
             'image_url' => '/img/'.$productId.'.jpg',
             'price' => 100,
-            'attributes' => [['name' => 'Color', 'value' => 'Blue']],
+            'attributes' => $attributes ?? [['name' => 'Color', 'value' => 'Blue']],
             'is_published' => true,
             'in_stock' => true,
         ]);

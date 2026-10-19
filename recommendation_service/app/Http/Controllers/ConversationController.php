@@ -50,7 +50,7 @@ class ConversationController extends Controller
     private function requireUserId(Request $request): string
     {
         $userId = $request->input('user_id') ?? $request->query('user_id');
-        if ($userId === null || $userId === '') {
+        if ($userId === null || $userId === '' || is_array($userId) || is_object($userId)) {
             abort(422, 'user_id is required');
         }
 

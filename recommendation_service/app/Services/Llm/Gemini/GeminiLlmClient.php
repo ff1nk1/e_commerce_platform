@@ -6,7 +6,6 @@ use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\DTOs\SearchFilters;
 use App\Services\Llm\Exceptions\LlmException;
-use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -14,7 +13,9 @@ use Illuminate\Support\Facades\Http;
 class GeminiLlmClient implements LlmClient
 {
     private const FILTER_SYSTEM_PROMPT = <<<'PROMPT'
-You extract e-commerce search filters from a user message.
+You extract e-commerce search filters from a user message (and optional prior conversation turns).
+When prior turns are provided, carry forward sticky filters (product type, store, budget, attributes)
+unless the current message clearly replaces or clears them (e.g. a new product type).
 Return ONLY a JSON object with these keys (use null when unknown):
 - store_id: integer store id ONLY if the user explicitly gave a numeric store id; otherwise null (do not invent)
 - store_name: store name string as mentioned by the user (e.g. "ТЦ Галерея"), or null
@@ -26,9 +27,13 @@ Return ONLY a JSON object with these keys (use null when unknown):
 - attributes: array of {"name": string, "value": string} using Russian catalog names when possible
   (Цвет, Размер, Материал, Бренд, …), or []
 Put color/size/material/brand into attributes, not into query.
+For exact size requests use numeric value only (e.g. "28", not "28 размер").
+Words like только/исключительно/именно do not change the JSON shape — still put constraints into attributes.
 Example: "найди черные джинсы" → query="джинсы", attributes=[{"name":"Цвет","value":"чёрный"}]
+Example: "синие джинсы исключительно 28 размера" → query="джинсы", attributes=[{"name":"Цвет","value":"синий"},{"name":"Размер","value":"28"}]
 Example: "товары из ТЦ Галерея" → store_name="ТЦ Галерея", query=null
-Only extract values clearly implied by the user.
+Example follow-up after jeans: "а синие?" → query="джинсы", attributes=[{"name":"Цвет","value":"синий"}]
+Only extract values clearly implied by the user or prior turns.
 PROMPT;
 
     public function __construct(
@@ -120,7 +125,7 @@ PROMPT;
                 ],
             ],
             'generationConfig' => [
-                'temperature' => $this->temperature,
+                'temperature' => 0,
                 'responseMimeType' => 'application/json',
             ],
         ];
@@ -132,70 +137,11 @@ PROMPT;
 
     public function extractFiltersAndEmbed(string $userMessage, string $embedTaskType = 'RETRIEVAL_QUERY'): array
     {
-        $this->ensureApiKey();
+        // Embed after extract so the vector uses cleaned query text, not the raw utterance.
+        $filters = $this->extractFilters($userMessage);
+        $embedText = $filters->query ?: $userMessage;
 
-        $embedPayload = [
-            'model' => 'models/'.$this->embeddingModel,
-            'content' => [
-                'parts' => [
-                    ['text' => $userMessage],
-                ],
-            ],
-            'taskType' => $embedTaskType,
-        ];
-        if ($this->embeddingDimensions > 0) {
-            $embedPayload['outputDimensionality'] = $this->embeddingDimensions;
-        }
-
-        $extractPayload = [
-            'contents' => [
-                [
-                    'role' => 'user',
-                    'parts' => [
-                        ['text' => $userMessage],
-                    ],
-                ],
-            ],
-            'systemInstruction' => [
-                'parts' => [
-                    ['text' => self::FILTER_SYSTEM_PROMPT],
-                ],
-            ],
-            'generationConfig' => [
-                'temperature' => $this->temperature,
-                'responseMimeType' => 'application/json',
-            ],
-        ];
-
-        $base = rtrim($this->baseUrl, '/');
-        $headers = [
-            'Accept' => 'application/json',
-            'Content-Type' => 'application/json',
-            'x-goog-api-key' => $this->apiKey,
-        ];
-
-        $responses = Http::pool(fn (Pool $pool) => [
-            $pool->as('extract')
-                ->withHeaders($headers)
-                ->timeout(60)
-                ->post($base.$this->endpoint($this->chatModel, 'generateContent'), $extractPayload),
-            $pool->as('embed')
-                ->withHeaders($headers)
-                ->timeout(60)
-                ->post($base.$this->endpoint($this->embeddingModel, 'embedContent'), $embedPayload),
-        ]);
-
-        $extractResponse = $responses['extract'] ?? null;
-        $embedResponse = $responses['embed'] ?? null;
-
-        if (! $extractResponse instanceof Response || ! $embedResponse instanceof Response) {
-            throw new LlmException('Gemini parallel extract/embed pool failed');
-        }
-
-        return [
-            $this->parseExtractFiltersResponse($extractResponse),
-            $this->parseEmbedResponse($embedResponse),
-        ];
+        return [$filters, $this->embed($embedText, $embedTaskType)];
     }
 
     private function http(): PendingRequest

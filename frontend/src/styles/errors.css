@@ -1,0 +1,83 @@
+/* ==========================================================================
+   Стили для Страниц Ошибок (Усиленное свечение)
+   ========================================================================== */
+
+/* Контейнер ошибки с ярким красным свечением по центру */
+.error-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background-color: var(--color-bg-page);
+    /* Усиленный радиальный градиент с более высокой насыщенностью */
+    background-image: radial-gradient(
+        circle at 50% 50%,
+        rgba(239, 68, 68, 0.32) 0%,
+        rgba(220, 38, 38, 0.16) 35%,
+        rgba(244, 246, 248, 0) 70%
+    );
+}
+
+/* Карточка ошибки */
+.error-card {
+    width: 100%;
+    max-width: 460px;
+    padding: 40px 32px;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-danger-bg); /* Мягкая красная рамка */
+    border-radius: 16px;
+    /* Двойная тень: стандартная тень карточки + объемное красное свечение назад */
+    box-shadow: 
+        0 20px 45px rgba(220, 38, 38, 0.18),
+        0 8px 24px rgba(40, 52, 65, 0.06);
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+/* Крупный номер ошибки */
+.error-badge {
+    display: inline-block;
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    color: var(--color-danger-solid);
+    background: var(--color-danger-bg);
+    padding: 4px 20px;
+    border-radius: 12px;
+    border: 1px solid var(--color-danger-bg);
+    margin-bottom: 20px;
+}
+
+.error-badge-neutral {
+    color: var(--color-text-muted);
+    background: var(--color-bg-hover);
+    border-color: var(--color-border);
+}
+
+/* Заголовок и описание */
+.error-title {
+    margin: 0 0 10px 0;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--color-text);
+    letter-spacing: -0.3px;
+}
+
+.error-description {
+    margin: 0 0 28px 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+}
+
+/* Блок кнопок */
+.error-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.error-actions .btn {
+    min-width: 160px;
+}

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useLoaderData } from 'react-router-dom'
-import { api } from '../api/apiClient'
+import { getAdminUsers, updateUserRole } from '../api/admin'
 
 export default function AdminUsers() {
   const initial = useLoaderData()
@@ -25,8 +25,9 @@ export default function AdminUsers() {
     setIsLoading(true)
     setStatus(null)
     try {
-      const response = await api.get('/admin/users', {
-        params: { page: targetPage, per_page: 15 },
+      const response = await getAdminUsers({
+        page: targetPage,
+        per_page: 15,
       })
       const data = response.data
       setUsers(data.data || [])
@@ -56,7 +57,7 @@ export default function AdminUsers() {
     setUpdatingId(userId)
     setStatus(null)
     try {
-      await api.patch(`/admin/users/${userId}/role`, { role_id: Number(roleId) })
+      await updateUserRole(userId, roleId)
       setUsers((prev) =>
         prev.map((u) => {
           if (u.id !== userId) return u

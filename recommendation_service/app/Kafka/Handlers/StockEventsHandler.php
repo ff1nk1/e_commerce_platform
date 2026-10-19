@@ -22,15 +22,20 @@ class StockEventsHandler
 
         $eventType = $headers['event-type'] ?? ($body['event'] ?? null);
         if ($eventType !== 'stock.changed') {
-            Log::debug("Recommendation: ignore catalog.events {$eventType}");
+            Log::debug('Recommendation: ignore catalog.events', [
+                'event' => is_string($eventType) ? $eventType : get_debug_type($eventType),
+            ]);
 
             return;
         }
 
         $productId = $body['product_id'] ?? null;
         $quantity = $body['quantity'] ?? null;
-        if ($productId === null || $quantity === null) {
-            Log::warning('Recommendation: stock.changed incomplete', ['body' => $body]);
+        if ($productId === null || ! is_numeric($productId) || (int) $productId <= 0
+            || $quantity === null || ! is_numeric($quantity)) {
+            Log::warning('Recommendation: stock.changed incomplete', [
+                'body_keys' => array_keys($body),
+            ]);
 
             return;
         }

@@ -25,6 +25,7 @@ class SearchFiltersNormalizer
             priceMax: $filters->priceMax,
             query: $query !== '' ? $query : null,
             attributes: $filters->attributes,
+            requiredAttributes: $filters->requiredAttributes,
         );
     }
 }

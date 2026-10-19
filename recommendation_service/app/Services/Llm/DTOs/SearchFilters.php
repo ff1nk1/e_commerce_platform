@@ -5,7 +5,8 @@ namespace App\Services\Llm\DTOs;
 readonly class SearchFilters
 {
     /**
-     * @param  list<array{name: string, value: string}>  $attributes
+     * @param  list<array{name: string, value: string}>  $attributes  Soft preferences (re-rank)
+     * @param  list<array{name: string, value: string}>  $requiredAttributes  Hard constraints (must match)
      */
     public function __construct(
         public ?int $storeId = null,
@@ -16,6 +17,7 @@ readonly class SearchFilters
         public ?float $priceMax = null,
         public ?string $query = null,
         public array $attributes = [],
+        public array $requiredAttributes = [],
     ) {}
 
     /**
@@ -23,25 +25,6 @@ readonly class SearchFilters
      */
     public static function fromArray(array $data): self
     {
-        $attributes = [];
-        $rawAttributes = $data['attributes'] ?? [];
-        if (is_array($rawAttributes)) {
-            foreach ($rawAttributes as $row) {
-                if (! is_array($row)) {
-                    continue;
-                }
-                $name = trim((string) ($row['name'] ?? ''));
-                $value = trim((string) ($row['value'] ?? ''));
-                if ($name === '' || $value === '') {
-                    continue;
-                }
-                $attributes[] = ['name' => $name, 'value' => $value];
-            }
-        }
-
-        $query = $data['query'] ?? null;
-        $query = is_string($query) && trim($query) !== '' ? trim($query) : null;
-
         return new self(
             storeId: self::nullableInt($data['store_id'] ?? null),
             storeName: self::nullableString($data['store_name'] ?? null),
@@ -49,8 +32,9 @@ readonly class SearchFilters
             inStock: self::nullableBool($data['in_stock'] ?? null),
             priceMin: self::nullableFloat($data['price_min'] ?? null),
             priceMax: self::nullableFloat($data['price_max'] ?? null),
-            query: $query,
-            attributes: $attributes,
+            query: self::nullableString($data['query'] ?? null),
+            attributes: self::parseAttributes($data['attributes'] ?? []),
+            requiredAttributes: self::parseAttributes($data['required_attributes'] ?? []),
         );
     }
 
@@ -68,7 +52,33 @@ readonly class SearchFilters
             'price_max' => $this->priceMax,
             'query' => $this->query,
             'attributes' => $this->attributes,
+            'required_attributes' => $this->requiredAttributes,
         ];
+    }
+
+    /**
+     * @return list<array{name: string, value: string}>
+     */
+    private static function parseAttributes(mixed $rawAttributes): array
+    {
+        $attributes = [];
+        if (! is_array($rawAttributes)) {
+            return $attributes;
+        }
+
+        foreach ($rawAttributes as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $name = trim((string) ($row['name'] ?? ''));
+            $value = trim((string) ($row['value'] ?? ''));
+            if ($name === '' || $value === '') {
+                continue;
+            }
+            $attributes[] = ['name' => $name, 'value' => $value];
+        }
+
+        return $attributes;
     }
 
     private static function nullableInt(mixed $value): ?int

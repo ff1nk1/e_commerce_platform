@@ -2,14 +2,15 @@
 
 namespace App\Services\Catalog\Contracts;
 
+use App\Services\Catalog\DTOs\CatalogFetchResult;
+
 interface CatalogProductClient
 {
     /**
      * Fetch product payloads keyed by catalog product id.
-     * Missing/failed ids are omitted from the result.
+     * Distinguishes explicit 404s from transport/server failures.
      *
      * @param  list<int>  $productIds
-     * @return array<int, array<string, mixed>>
      */
-    public function fetchByIds(array $productIds): array;
+    public function fetchByIds(array $productIds): CatalogFetchResult;
 }

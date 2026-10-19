@@ -3,6 +3,7 @@
 namespace App\Services\Catalog;
 
 use App\Services\Catalog\Contracts\CatalogProductClient;
+use App\Services\Catalog\DTOs\CatalogFetchResult;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -15,7 +16,7 @@ class HttpCatalogProductClient implements CatalogProductClient
         private readonly int $timeout = 5,
     ) {}
 
-    public function fetchByIds(array $productIds): array
+    public function fetchByIds(array $productIds): CatalogFetchResult
     {
         $ids = array_values(array_unique(array_filter(
             $productIds,
@@ -24,7 +25,7 @@ class HttpCatalogProductClient implements CatalogProductClient
         $ids = array_map(static fn (mixed $id): int => (int) $id, $ids);
 
         if ($ids === []) {
-            return [];
+            return new CatalogFetchResult;
         }
 
         $base = rtrim($this->baseUrl, '/');
@@ -33,29 +34,32 @@ class HttpCatalogProductClient implements CatalogProductClient
         $responses = Http::pool(fn (Pool $pool) => array_map(
             static fn (int $id) => $pool->as((string) $id)
                 ->acceptJson()
+                ->withOptions(['allow_redirects' => false])
                 ->timeout($timeout)
                 ->get($base.'/api/catalog/products/'.$id),
             $ids
         ));
 
-        $connectionFailures = 0;
+        $products = [];
+        $notFound = [];
+        $failed = [];
 
-        $result = [];
         foreach ($ids as $id) {
             $response = $responses[(string) $id] ?? null;
             if (! $response instanceof Response) {
-                $connectionFailures++;
+                $failed[] = $id;
 
                 continue;
             }
+
             if ($response->status() === 404) {
+                $notFound[] = $id;
+
                 continue;
             }
+
             if (! $response->successful()) {
-                // Treat 5xx / connection-like failures as transport issues for fail-open.
-                if ($response->serverError() || $response->status() === 0) {
-                    $connectionFailures++;
-                }
+                $failed[] = $id;
                 Log::debug('CatalogProductClient non-success', [
                     'product_id' => $id,
                     'status' => $response->status(),
@@ -66,16 +70,22 @@ class HttpCatalogProductClient implements CatalogProductClient
 
             $product = $response->json('product');
             if (! is_array($product)) {
+                $failed[] = $id;
+
                 continue;
             }
 
-            $result[$id] = $product;
+            $products[$id] = $product;
         }
 
-        if ($result === [] && $connectionFailures === count($ids)) {
+        if ($products === [] && $notFound === [] && $failed !== [] && count($failed) === count($ids)) {
             throw new \RuntimeException('Catalog service unreachable for all product freshness checks');
         }
 
-        return $result;
+        return new CatalogFetchResult(
+            products: $products,
+            notFound: $notFound,
+            failed: $failed,
+        );
     }
 }

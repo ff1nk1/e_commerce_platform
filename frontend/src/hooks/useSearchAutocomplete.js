@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { catalogApi } from '../api/catalogClient'
+import { searchAutocomplete } from '../api/catalog'
 
 /**
  * Debounced OpenSearch autocomplete for product name suggestions.
@@ -35,10 +35,7 @@ export default function useSearchAutocomplete(query, options = {}) {
 
         const timer = setTimeout(() => {
             const requestId = ++requestIdRef.current
-            catalogApi
-                .get('search/autocomplete', {
-                    params: { q, limit, fuzziness },
-                })
+            searchAutocomplete({ q, limit, fuzziness })
                 .then((response) => {
                     if (requestId !== requestIdRef.current) return
                     const items = response.data?.suggestions || []

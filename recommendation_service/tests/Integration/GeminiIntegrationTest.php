@@ -121,13 +121,14 @@ class GeminiIntegrationTest extends TestCase
             'quantity' => 3,
         ], reembed: true);
 
-        // Pass price_max so extract is skipped and the full message is embedded
-        // (still real Gemini embed + chat). Avoid extract inventing filters that
-        // exclude the only fixture product.
+        // Client structured filters win over extract (extract still runs for attributes).
+        // Pin category/budget so an invented LLM filter cannot exclude the fixture.
         $response = $this->postJson('/api/recommendations/chat', [
             'user_id' => 'gemini-integration',
             'message' => 'Подбери алый бархатный диван OrionX для гостиной',
+            'category_name' => 'Мебель',
             'price_max' => 999999,
+            'in_stock' => true,
             'limit' => 5,
         ]);
 

@@ -1,6 +1,7 @@
 import { NavLink, Link } from 'react-router-dom'
 import CartNavLink from '../cart/CartNavLink'
-import '../css/header.css'
+import ThemeToggle from '../theme/ThemeToggle'
+import '../styles/header.css'
 
 function navClassName({ isActive }) {
   return isActive ? 'app-header-link active' : 'app-header-link'
@@ -46,6 +47,7 @@ export default function AppHeader({ user }) {
         </nav>
 
         <div className="app-header-actions">
+          <ThemeToggle />
           {user ? (
             <NavLink
               to="/profile"

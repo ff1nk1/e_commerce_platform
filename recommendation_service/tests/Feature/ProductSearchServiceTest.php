@@ -103,12 +103,12 @@ class ProductSearchServiceTest extends TestCase
             ['name' => 'Размер', 'value' => '32'],
         ]);
 
+        // Soft color only — size not required, so both remain; black ranks first.
         $results = $this->search->search(
             new SearchFilters(
                 query: 'джинсы',
                 attributes: [
                     ['name' => 'Цвет', 'value' => 'чёрный'],
-                    ['name' => 'Размер', 'value' => 'от 27'],
                 ],
             ),
             limit: 5,
@@ -118,6 +118,103 @@ class ProductSearchServiceTest extends TestCase
         $ids = array_map(static fn (SearchHit $h): int => $h->product->product_id, $results);
         $this->assertSame(30, $ids[0] ?? null);
         $this->assertContains(31, $ids);
+    }
+
+    public function test_hard_size_drops_mismatches_and_keeps_exact_size(): void
+    {
+        $this->insertProduct(40, 'Blue28', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+            ['name' => 'Размер', 'value' => '28'],
+        ]);
+        $this->insertProduct(41, 'Blue32', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+            ['name' => 'Размер', 'value' => '32'],
+        ]);
+        $this->insertProduct(42, 'Black28', attributes: [
+            ['name' => 'Цвет', 'value' => 'Чёрный'],
+            ['name' => 'Размер', 'value' => '28'],
+        ]);
+
+        $results = $this->search->search(
+            new SearchFilters(
+                query: 'джинсы',
+                attributes: [['name' => 'Цвет', 'value' => 'синий']],
+                requiredAttributes: [['name' => 'Размер', 'value' => '28']],
+            ),
+            limit: 5,
+            precomputedVector: $this->queryVector,
+        );
+
+        $ids = array_map(static fn (SearchHit $h): int => $h->product->product_id, $results);
+        $this->assertSame([40, 42], $ids);
+        $this->assertSame(40, $ids[0] ?? null);
+    }
+
+    public function test_hard_attributes_use_fallback_when_missing_from_vector_pool(): void
+    {
+        // Near vector for distractors, far vector for the only size-28 product.
+        $near = array_fill(0, 768, 0.0);
+        $near[0] = 1.0;
+        $far = array_fill(0, 768, 0.0);
+        $far[1] = 1.0;
+        $query = array_fill(0, 768, 0.0);
+        $query[0] = 1.0;
+
+        for ($i = 1; $i <= 5; $i++) {
+            $this->insertProduct(
+                50 + $i,
+                "Distractor{$i}",
+                attributes: [
+                    ['name' => 'Цвет', 'value' => 'Синий'],
+                    ['name' => 'Размер', 'value' => '32'],
+                ],
+                embeddingVector: $near,
+            );
+        }
+
+        $this->insertProduct(
+            99,
+            'RareSize28',
+            attributes: [
+                ['name' => 'Цвет', 'value' => 'Синий'],
+                ['name' => 'Размер', 'value' => '28'],
+            ],
+            embeddingVector: $far,
+        );
+
+        $results = $this->search->search(
+            new SearchFilters(
+                query: 'джинсы',
+                requiredAttributes: [
+                    ['name' => 'Цвет', 'value' => 'синий'],
+                    ['name' => 'Размер', 'value' => '28'],
+                ],
+            ),
+            limit: 5,
+            precomputedVector: $query,
+        );
+
+        $ids = array_map(static fn (SearchHit $h): int => $h->product->product_id, $results);
+        $this->assertSame([99], $ids);
+    }
+
+    public function test_hard_attributes_return_empty_when_no_match_exists(): void
+    {
+        $this->insertProduct(60, 'Blue32', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+            ['name' => 'Размер', 'value' => '32'],
+        ]);
+
+        $results = $this->search->search(
+            new SearchFilters(
+                query: 'джинсы',
+                requiredAttributes: [['name' => 'Размер', 'value' => '28']],
+            ),
+            limit: 5,
+            precomputedVector: $this->queryVector,
+        );
+
+        $this->assertSame([], $results);
     }
 
     public function test_filters_by_store_id(): void

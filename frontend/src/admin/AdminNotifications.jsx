@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { notificationApi } from '../api/notificationClient'
+import { getNotifications, resendNotification } from '../api/notifications'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Все статусы' },
@@ -81,7 +81,7 @@ export default function AdminNotifications() {
         ...(currentFilters.date_to && { date_to: currentFilters.date_to }),
       }
 
-      const response = await notificationApi.get('/notifications', { params })
+      const response = await getNotifications(params)
       const data = response.data
 
       setLogs(data.data || [])
@@ -139,7 +139,7 @@ export default function AdminNotifications() {
       message: 'Отправка с ретраями… это может занять несколько секунд',
     })
     try {
-      const response = await notificationApi.post(`/notifications/${id}/resend`)
+      const response = await resendNotification(id)
       const data = response.data?.data
       const retries = data?.retries ?? '—'
       setStatusMessage({

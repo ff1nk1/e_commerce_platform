@@ -1,11 +1,11 @@
 import { useLoaderData, Outlet } from 'react-router-dom'
 import AppHeader from '../components/AppHeader'
-import { api } from '../api/apiClient'
+import { getUser } from '../api/auth'
 
 /** Soft-load current user for the header; do not redirect on 401. */
 export async function appLayoutLoader() {
   try {
-    const { data } = await api.get('/user')
+    const { data } = await getUser()
     return data
   } catch {
     return null

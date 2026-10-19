@@ -1,0 +1,155 @@
+.orders-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  background-color: var(--color-bg-page);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.orders-container {
+  width: 100%;
+  max-width: 720px;
+}
+
+.orders-card {
+  background: var(--color-bg-surface);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.orders-header {
+  margin-bottom: 20px;
+}
+
+.orders-header h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.orders-header p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.orders-nav {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.orders-nav a {
+  color: var(--color-accent);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.orders-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.order-item {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.order-item a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.order-item-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.order-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-bg-hover);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.order-status.pending { background: var(--color-warning-bg); }
+.order-status.cancelled { background: var(--color-danger-bg); }
+.order-status.paid { background: var(--color-success-bg); }
+
+.order-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.order-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.order-btn-primary {
+  background: var(--color-text);
+  color: var(--color-text-inverse);
+}
+
+.order-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.order-btn-danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.order-btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.order-qty-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.order-qty-row input {
+  width: 80px;
+  padding: 8px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+}
+
+.orders-empty {
+  color: var(--color-text-muted);
+  padding: 24px 0;
+}
+
+.status-message {
+  padding: 12px;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+.status-message.error {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.status-message.success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}

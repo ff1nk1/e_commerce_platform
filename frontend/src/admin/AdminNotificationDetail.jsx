@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLoaderData } from 'react-router-dom'
-import { notificationApi } from '../api/notificationClient'
+import { getNotification, resendNotification } from '../api/notifications'
 
 export default function AdminNotificationDetail() {
   const initial = useLoaderData()
@@ -20,7 +20,7 @@ export default function AdminNotificationDetail() {
     })
 
     try {
-      const response = await notificationApi.post(`/notifications/${notificationId}/resend`)
+      const response = await resendNotification(notificationId)
       const data = response.data?.data
       if (data) setNotification(data)
       const retries = data?.retries ?? '—'
@@ -37,7 +37,7 @@ export default function AdminNotificationDetail() {
         message: error.response?.data?.message || 'Не удалось отправить повторно.',
       })
       try {
-        const refreshed = await notificationApi.get(`/notifications/${notificationId}`)
+        const refreshed = await getNotification(notificationId)
         setNotification(refreshed.data?.data || refreshed.data)
       } catch {
         // keep current snapshot

@@ -290,6 +290,53 @@ class ProductKafkaHandlersTest extends TestCase
         ]);
     }
 
+    public function test_product_updated_preserves_in_stock_when_stock_fields_absent(): void
+    {
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: [
+                'event' => 'product.created',
+                'data' => [
+                    'id' => 81,
+                    'store_id' => 1,
+                    'name' => 'Shoes',
+                    'price' => 50,
+                    'is_published' => true,
+                ],
+            ],
+            headers: ['event-type' => 'product.created'],
+        ));
+
+        app(StockEventsHandler::class)(new FakeConsumerMessage(
+            body: ['product_id' => 81, 'store_id' => 1, 'quantity' => 0],
+            headers: ['event-type' => 'stock.changed'],
+        ));
+
+        $this->assertDatabaseHas('product_catalog', [
+            'product_id' => 81,
+            'in_stock' => false,
+        ]);
+
+        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+            body: [
+                'event' => 'product.updated',
+                'data' => [
+                    'id' => 81,
+                    'store_id' => 1,
+                    'name' => 'Shoes v2',
+                    'price' => 55,
+                    'is_published' => true,
+                ],
+            ],
+            headers: ['event-type' => 'product.updated'],
+        ));
+
+        $this->assertDatabaseHas('product_catalog', [
+            'product_id' => 81,
+            'name' => 'Shoes v2',
+            'in_stock' => false,
+        ]);
+    }
+
     public function test_stock_changed_for_unknown_product_is_noop(): void
     {
         app(StockEventsHandler::class)(new FakeConsumerMessage(

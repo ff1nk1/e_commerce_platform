@@ -4,6 +4,7 @@ namespace App\Services\Chat;
 
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Services\Catalog\AttributeConstraintDetector;
 use App\Services\Catalog\Contracts\ProductFreshnessChecker;
 use App\Services\Catalog\Contracts\RelevanceGate;
 use App\Services\Catalog\DTOs\SearchHit;
@@ -14,6 +15,7 @@ use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\DTOs\SearchFilters;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class RecommendationChatService
@@ -34,6 +36,7 @@ PROMPT;
         private readonly SearchFiltersNormalizer $filtersNormalizer,
         private readonly RelevanceGate $relevanceGate,
         private readonly ProductFreshnessChecker $freshnessChecker,
+        private readonly AttributeConstraintDetector $attributeConstraints,
     ) {}
 
     /**
@@ -72,13 +75,7 @@ PROMPT;
             ->reverse()
             ->values();
 
-        Message::query()->create([
-            'conversation_id' => $conversation->id,
-            'role' => Message::ROLE_USER,
-            'content' => $messageText,
-        ]);
-
-        [$extracted, $queryVector] = $this->resolveFiltersAndVector($messageText, $input);
+        [$extracted, $queryVector] = $this->resolveFiltersAndVector($messageText, $input, $history);
         $merged = $this->mergeFilters($extracted, $input);
         $filters = $this->filtersNormalizer->normalize($merged);
         $limit = max(1, min((int) ($input['limit'] ?? 5), 20));
@@ -108,14 +105,22 @@ PROMPT;
 
         $answer = $this->llm->chat($chatMessages, self::SYSTEM_PROMPT);
 
-        Message::query()->create([
-            'conversation_id' => $conversation->id,
-            'role' => Message::ROLE_ASSISTANT,
-            'content' => $answer,
-            'products' => $productCards,
-        ]);
+        DB::transaction(function () use ($conversation, $messageText, $answer, $productCards): void {
+            Message::query()->create([
+                'conversation_id' => $conversation->id,
+                'role' => Message::ROLE_USER,
+                'content' => $messageText,
+            ]);
 
-        $conversation->touchActivity();
+            Message::query()->create([
+                'conversation_id' => $conversation->id,
+                'role' => Message::ROLE_ASSISTANT,
+                'content' => $answer,
+                'products' => $productCards,
+            ]);
+
+            $conversation->touchActivity();
+        });
 
         return [
             'conversation_id' => (string) $conversation->id,
@@ -137,46 +142,37 @@ PROMPT;
 
     /**
      * @param  array<string, mixed>  $input
+     * @param  \Illuminate\Support\Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
      * @return array{0: SearchFilters, 1: list<float>}
      */
-    private function resolveFiltersAndVector(string $messageText, array $input): array
+    private function resolveFiltersAndVector(string $messageText, array $input, $history): array
     {
-        if ($this->hasClientFilters($input)) {
-            $filters = new SearchFilters(
-                storeId: isset($input['store_id']) ? (int) $input['store_id'] : null,
-                storeName: isset($input['store_name']) ? trim((string) $input['store_name']) ?: null : null,
-                categoryName: isset($input['category_name']) ? trim((string) $input['category_name']) ?: null : null,
-                inStock: array_key_exists('in_stock', $input) && $input['in_stock'] !== null
-                    ? (bool) $input['in_stock']
-                    : null,
-                priceMin: isset($input['price_min']) ? (float) $input['price_min'] : null,
-                priceMax: isset($input['price_max']) ? (float) $input['price_max'] : null,
-                query: $messageText,
-            );
-
-            return [$filters, $this->llm->embed($messageText, 'RETRIEVAL_QUERY')];
-        }
-
-        $extracted = $this->llm->extractFilters($messageText);
+        // Always extract so attributes (color/size/…) are available even when the
+        // client sends structured filters; client fields win in mergeFilters().
+        $extracted = $this->llm->extractFilters(
+            $this->buildExtractInput($messageText, $history)
+        );
         $embedText = $extracted->query ?: $messageText;
 
         return [$extracted, $this->llm->embed($embedText, 'RETRIEVAL_QUERY')];
     }
 
     /**
-     * @param  array<string, mixed>  $input
+     * @param  \Illuminate\Support\Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
      */
-    private function hasClientFilters(array $input): bool
+    private function buildExtractInput(string $messageText, $history): string
     {
-        // Store scope from UI still allows LLM extract; skip extract only for
-        // explicit structured filters that replace natural-language parsing.
-        foreach (['category_name', 'in_stock', 'price_min', 'price_max'] as $key) {
-            if (array_key_exists($key, $input) && $input[$key] !== null && $input[$key] !== '') {
-                return true;
-            }
+        if ($history->isEmpty()) {
+            return $messageText;
         }
 
-        return false;
+        $lines = [];
+        foreach ($history as $row) {
+            $role = $row->role === Message::ROLE_ASSISTANT ? 'assistant' : 'user';
+            $lines[] = $role.': '.(string) $row->content;
+        }
+
+        return "Conversation so far:\n".implode("\n", $lines)."\n\nCurrent user message:\n".$messageText;
     }
 
     private function resolveConversation(string $userId, ?string $conversationId): Conversation
@@ -214,6 +210,9 @@ PROMPT;
      */
     private function mergeFilters(SearchFilters $extracted, array $input): SearchFilters
     {
+        $messageText = trim((string) ($input['message'] ?? ''));
+        $split = $this->attributeConstraints->split($messageText, $extracted->attributes);
+
         return new SearchFilters(
             storeId: isset($input['store_id']) ? (int) $input['store_id'] : $extracted->storeId,
             storeName: isset($input['store_name']) && trim((string) $input['store_name']) !== ''
@@ -227,8 +226,10 @@ PROMPT;
                 : $extracted->inStock,
             priceMin: isset($input['price_min']) ? (float) $input['price_min'] : $extracted->priceMin,
             priceMax: isset($input['price_max']) ? (float) $input['price_max'] : $extracted->priceMax,
-            query: $extracted->query ?: (string) ($input['message'] ?? ''),
-            attributes: $extracted->attributes,
+            query: $extracted->query ?: $messageText,
+            // Soft re-rank uses non-required attrs; size / exclusive go to requiredAttributes.
+            attributes: $split['soft'],
+            requiredAttributes: $split['required'],
         );
     }
 
@@ -269,15 +270,44 @@ PROMPT;
             if ($store === '') {
                 $store = isset($product['store_id']) ? 'id '.$product['store_id'] : 'не указан';
             }
-            $lines[] = sprintf(
-                '%d. %s | %s | магазин: %s',
+            $attrs = $this->formatCandidateAttributes(
+                is_array($product['attributes'] ?? null) ? $product['attributes'] : []
+            );
+            $line = sprintf(
+                '%d. id:%s | %s | %s | магазин: %s',
                 $n,
+                (string) ($product['product_id'] ?? ''),
                 $product['name'] ?? '',
                 $priceLabel,
                 $store,
             );
+            if ($attrs !== '') {
+                $line .= ' | '.$attrs;
+            }
+            $lines[] = $line;
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * @param  list<array{name?: string, value?: string}|mixed>  $attributes
+     */
+    private function formatCandidateAttributes(array $attributes): string
+    {
+        $parts = [];
+        foreach ($attributes as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $name = trim((string) ($row['name'] ?? ''));
+            $value = trim((string) ($row['value'] ?? ''));
+            if ($name === '' || $value === '') {
+                continue;
+            }
+            $parts[] = $name.': '.$value;
+        }
+
+        return $parts === [] ? '' : implode('; ', $parts);
     }
 }

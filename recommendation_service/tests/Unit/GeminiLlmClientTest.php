@@ -166,7 +166,7 @@ class GeminiLlmClientTest extends TestCase
         $client->embed('x');
     }
 
-    public function test_extract_filters_and_embed_uses_http_pool(): void
+    public function test_extract_filters_and_embed_embeds_cleaned_query(): void
     {
         $values = array_fill(0, 768, 0.2);
 
@@ -178,8 +178,10 @@ class GeminiLlmClientTest extends TestCase
                             'parts' => [
                                 ['text' => json_encode([
                                     'store_name' => 'Main',
-                                    'query' => 'blue shoes',
-                                    'attributes' => [],
+                                    'query' => 'shoes',
+                                    'attributes' => [
+                                        ['name' => 'Цвет', 'value' => 'синий'],
+                                    ],
                                 ], JSON_THROW_ON_ERROR)],
                             ],
                         ],
@@ -194,10 +196,43 @@ class GeminiLlmClientTest extends TestCase
         [$filters, $embedding] = $this->client()->extractFiltersAndEmbed('blue shoes');
 
         $this->assertSame('Main', $filters->storeName);
-        $this->assertSame('blue shoes', $filters->query);
+        $this->assertSame('shoes', $filters->query);
         $this->assertCount(768, $embedding);
         $this->assertSame(0.2, $embedding[0]);
 
         Http::assertSentCount(2);
+        Http::assertSent(function ($request) {
+            if (! str_contains($request->url(), 'embedContent')) {
+                return false;
+            }
+
+            return ($request['content']['parts'][0]['text'] ?? null) === 'shoes';
+        });
+    }
+
+    public function test_extract_filters_uses_zero_temperature(): void
+    {
+        Http::fake([
+            '*/models/gemini-3.8-flash:generateContent' => Http::response([
+                'candidates' => [
+                    [
+                        'content' => [
+                            'parts' => [
+                                ['text' => json_encode(['query' => 'jeans'], JSON_THROW_ON_ERROR)],
+                            ],
+                        ],
+                    ],
+                ],
+            ]),
+        ]);
+
+        $this->client()->extractFilters('jeans');
+
+        Http::assertSent(function ($request) {
+            $body = $request->data();
+
+            return ($body['generationConfig']['temperature'] ?? null) === 0
+                && ($body['generationConfig']['responseMimeType'] ?? null) === 'application/json';
+        });
     }
 }

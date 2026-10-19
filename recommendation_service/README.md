@@ -135,7 +135,7 @@ flowchart TB
 ```
 
 - Consumers: `kafka:consume:product-events`, `kafka:consume:stock-events`
-- Текст для эмбеддинга ([`ProductTextBuilder`](app/Services/Catalog/ProductTextBuilder.php)): `product_id`, `store_id`, `store`, `name`, `description`, `category`, флаги, attributes
+- Текст для эмбеддинга ([`ProductTextBuilder`](app/Services/Catalog/ProductTextBuilder.php)): `store`, `name`, `description`, `category`, attributes (без ID и флагов stock/publish)
 - Stock меняет только `in_stock` без пересчёта вектора
 - `reindex` **не тянет** каталог извне — только переэмбеддит то, что уже есть; наполнение — через Kafka / `RepublishProductsSeeder` в catalog
 - Поле `store_name` заполняется из Kafka (`store.name`); после миграции нужен republish существующих товаров

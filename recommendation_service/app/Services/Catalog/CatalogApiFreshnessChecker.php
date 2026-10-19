@@ -27,7 +27,7 @@ class CatalogApiFreshnessChecker implements ProductFreshnessChecker
         try {
             $remote = $this->catalog->fetchByIds($ids);
         } catch (\Throwable $e) {
-            // Transport failure — keep local read-model hits (fail-open).
+            // Full transport failure — keep local read-model hits (fail-open).
             Log::warning('ProductFreshnessChecker: catalog unavailable, keeping local hits', [
                 'error' => $e->getMessage(),
             ]);
@@ -35,15 +35,32 @@ class CatalogApiFreshnessChecker implements ProductFreshnessChecker
             return $hits;
         }
 
+        $failedSet = array_fill_keys($remote->failed, true);
+        $notFoundSet = array_fill_keys($remote->notFound, true);
+
         $kept = [];
         foreach ($hits as $hit) {
             $productId = (int) $hit->product->product_id;
-            if (! array_key_exists($productId, $remote)) {
-                // Explicit miss (404) — drop.
+
+            if (isset($notFoundSet[$productId])) {
                 continue;
             }
 
-            $payload = $remote[$productId];
+            if (isset($failedSet[$productId])) {
+                // Per-id transport/5xx/auth — keep local hit (do not treat as delete).
+                $kept[] = $hit;
+
+                continue;
+            }
+
+            if (! array_key_exists($productId, $remote->products)) {
+                // Unexpected omission — treat as uncertain, keep local.
+                $kept[] = $hit;
+
+                continue;
+            }
+
+            $payload = $remote->products[$productId];
             if ($this->isUnavailable($payload)) {
                 continue;
             }
@@ -55,22 +72,13 @@ class CatalogApiFreshnessChecker implements ProductFreshnessChecker
     }
 
     /**
+     * Catalog product show returns is_published but not stock.
+     * Stock correctness comes from the Kafka read-model (in_stock), not this API.
+     *
      * @param  array<string, mixed>  $payload
      */
     private function isUnavailable(array $payload): bool
     {
-        if (array_key_exists('is_published', $payload) && ! (bool) $payload['is_published']) {
-            return true;
-        }
-
-        if (array_key_exists('in_stock', $payload) && ! (bool) $payload['in_stock']) {
-            return true;
-        }
-
-        if (array_key_exists('quantity', $payload) && is_numeric($payload['quantity'])) {
-            return ((int) $payload['quantity']) <= 0;
-        }
-
-        return false;
+        return array_key_exists('is_published', $payload) && ! (bool) $payload['is_published'];
     }
 }

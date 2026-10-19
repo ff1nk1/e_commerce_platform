@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useLoaderData } from 'react-router-dom'
-import '../css/admin.css'
-import '../css/notifications.css'
+import '../styles/admin.css'
+import '../styles/notifications.css'
 
 export default function AdminLayout() {
   const user = useLoaderData()

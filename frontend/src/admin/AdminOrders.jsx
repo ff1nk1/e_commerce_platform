@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useLoaderData } from 'react-router-dom'
-import { api } from '../api/apiClient'
+import { getAdminOrders, shipOrder } from '../api/admin'
 
 function formatDate(dateString) {
   if (!dateString) return '—'
@@ -31,8 +31,9 @@ export default function AdminOrders() {
   const fetchOrders = useCallback(async (targetPage = 1) => {
     setIsLoading(true)
     try {
-      const response = await api.get('/admin/orders', {
-        params: { page: targetPage, per_page: 15 },
+      const response = await getAdminOrders({
+        page: targetPage,
+        per_page: 15,
       })
       const data = response.data
       setOrders(data.data || [])
@@ -61,7 +62,7 @@ export default function AdminOrders() {
     setActionError('')
     setShippingId(orderId)
     try {
-      await api.post(`/admin/orders/${orderId}/ship`)
+      await shipOrder(orderId)
       await fetchOrders(page)
     } catch (error) {
       console.error('Ship order error:', error)
