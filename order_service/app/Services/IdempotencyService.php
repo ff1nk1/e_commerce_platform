@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Contracts\IdempotencyStore;
-use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Cache;
 
 class IdempotencyService implements IdempotencyStore
 {
@@ -13,43 +13,35 @@ class IdempotencyService implements IdempotencyStore
 
     public function get(string $scopeKey): ?array
     {
-        $raw = Redis::get($this->responseKey($scopeKey));
-
-        if ($raw === null) {
-            return null;
-        }
-
-        $decoded = json_decode($raw, true);
+        $decoded = Cache::get($this->responseKey($scopeKey));
 
         return is_array($decoded) ? $decoded : null;
     }
 
     public function put(string $scopeKey, int $status, array $body): void
     {
-        Redis::setex(
+        Cache::put(
             $this->responseKey($scopeKey),
-            self::TTL_SECONDS,
-            json_encode([
+            [
                 'status' => $status,
                 'body' => $body,
-            ], JSON_THROW_ON_ERROR)
+            ],
+            self::TTL_SECONDS
         );
     }
 
     public function acquireLock(string $scopeKey): bool
     {
-        return (bool) Redis::set(
+        return Cache::add(
             $this->lockKey($scopeKey),
             '1',
-            'EX',
-            self::LOCK_TTL_SECONDS,
-            'NX'
+            self::LOCK_TTL_SECONDS
         );
     }
 
     public function releaseLock(string $scopeKey): void
     {
-        Redis::del($this->lockKey($scopeKey));
+        Cache::forget($this->lockKey($scopeKey));
     }
 
     public function scopeKey(string $operation, int $userId, string $clientKey, ?int $resourceId = null): string

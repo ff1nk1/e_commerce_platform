@@ -8,6 +8,7 @@ use App\Services\Auth\AuthService;
 use App\Services\Auth\JwtService;
 use App\Services\Auth\TokenBlacklistService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Validation\ValidationException;
@@ -173,9 +174,9 @@ class AuthServiceTest extends TestCase
 
         $hash = hash('sha256', 'no-ttl-token');
 
-        Redis::shouldReceive('setex')
+        Cache::shouldReceive('put')
             ->once()
-            ->with("refresh_token:blacklist:{$hash}", 120, '1');
+            ->with("refresh_token:blacklist:{$hash}", '1', 120);
 
         app(TokenBlacklistService::class)->blacklistRefreshToken($hash, -1);
     }

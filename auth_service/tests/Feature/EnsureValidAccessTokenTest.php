@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\Auth\AuthService;
 use Firebase\JWT\JWT;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Tests\TestCase;
@@ -21,6 +22,7 @@ class EnsureValidAccessTokenTest extends TestCase
 
         Redis::connection()->select((int) config('database.redis.default.database', 15));
         Redis::flushdb();
+        Cache::flush();
 
         Role::factory()->create([
             'name' => 'Customer',

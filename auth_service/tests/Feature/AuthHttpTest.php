@@ -8,6 +8,7 @@ use App\Services\Auth\AuthService;
 use App\Services\Auth\JwtService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Junges\Kafka\Facades\Kafka;
@@ -23,6 +24,7 @@ class AuthHttpTest extends TestCase
 
         Redis::connection()->select((int) config('database.redis.default.database', 15));
         Redis::flushdb();
+        Cache::flush();
 
         Role::factory()->create([
             'name' => 'Customer',
@@ -139,7 +141,7 @@ class AuthHttpTest extends TestCase
         $jwt = app(JwtService::class);
         $decoded = $jwt->decode($tokens['access_token']);
         $this->assertTrue(
-            Redis::exists("jwt:blacklist:{$decoded->jti}") > 0,
+            Cache::has("jwt:blacklist:{$decoded->jti}"),
             'Access token JTI must be blacklisted after logout'
         );
 
@@ -208,11 +210,11 @@ class AuthHttpTest extends TestCase
 
         $jwt = app(JwtService::class);
         $decoded = $jwt->decode($tokens['access_token']);
-        $this->assertTrue(Redis::exists("jwt:blacklist:{$decoded->jti}") > 0);
+        $this->assertTrue(Cache::has("jwt:blacklist:{$decoded->jti}"));
 
         $refreshHash = hash('sha256', $tokens['refresh_token']);
         $this->assertFalse(Redis::exists("refresh_token:{$refreshHash}") > 0);
-        $this->assertTrue(Redis::exists("refresh_token:blacklist:{$refreshHash}") > 0);
+        $this->assertTrue(Cache::has("refresh_token:blacklist:{$refreshHash}"));
 
         $request = Request::create('/api/user', 'GET');
         $request->headers->set('Authorization', 'Bearer '.$tokens['access_token']);

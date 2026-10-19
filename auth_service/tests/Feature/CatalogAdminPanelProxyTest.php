@@ -8,6 +8,7 @@ use App\Services\Auth\AuthService;
 use App\Services\Auth\JwtService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Redis;
@@ -23,6 +24,7 @@ class CatalogAdminPanelProxyTest extends TestCase
 
         Redis::connection()->select((int) config('database.redis.default.database', 15));
         Redis::flushdb();
+        Cache::flush();
 
         Role::factory()->create(['name' => 'Admin', 'slug' => 'admin']);
         Role::factory()->create(['name' => 'Customer', 'slug' => 'customer']);
@@ -118,7 +120,7 @@ class CatalogAdminPanelProxyTest extends TestCase
         $jwt = app(JwtService::class);
         $decoded = $jwt->decode($tokens['access_token']);
         $this->assertTrue(
-            Redis::exists("jwt:blacklist:{$decoded->jti}") > 0,
+            Cache::has("jwt:blacklist:{$decoded->jti}"),
             'Access token JTI must be blacklisted after admin-catalog logout'
         );
 

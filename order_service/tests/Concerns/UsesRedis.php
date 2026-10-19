@@ -2,6 +2,7 @@
 
 namespace Tests\Concerns;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
 use Throwable;
 
@@ -26,11 +27,14 @@ trait UsesRedis
         ]);
 
         Redis::purge();
+        Cache::forgetDriver('redis');
+        Cache::forgetDriver('array');
 
         try {
             Redis::connection()->ping();
             Redis::connection()->select($db);
             Redis::flushdb();
+            Cache::flush();
         } catch (Throwable $e) {
             $this->markTestSkipped('Redis unavailable: '.$e->getMessage());
         }

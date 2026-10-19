@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Contracts\SagaStepStore;
-use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Cache;
 
 class SagaStepGuard implements SagaStepStore
 {
@@ -17,13 +17,7 @@ class SagaStepGuard implements SagaStepStore
 
     public function get(string $sagaId, string $step): ?array
     {
-        $raw = Redis::get($this->resultKey($sagaId, $step));
-
-        if ($raw === null) {
-            return null;
-        }
-
-        $decoded = json_decode($raw, true);
+        $decoded = Cache::get($this->resultKey($sagaId, $step));
 
         return is_array($decoded) ? $decoded : null;
     }
@@ -57,6 +51,9 @@ class SagaStepGuard implements SagaStepStore
         return 'run';
     }
 
+    /**
+     * @param  array<string, mixed>|null  $result
+     */
     public function put(string $sagaId, string $step, string $status, ?array $result = null): void
     {
         $payload = [
@@ -68,27 +65,25 @@ class SagaStepGuard implements SagaStepStore
             $payload['result'] = $result;
         }
 
-        Redis::setex(
+        Cache::put(
             $this->resultKey($sagaId, $step),
-            self::TTL_SECONDS,
-            json_encode($payload, JSON_THROW_ON_ERROR)
+            $payload,
+            self::TTL_SECONDS
         );
     }
 
     public function acquire(string $sagaId, string $step): bool
     {
-        return (bool) Redis::set(
+        return Cache::add(
             $this->lockKey($sagaId, $step),
             '1',
-            'EX',
-            self::LOCK_TTL_SECONDS,
-            'NX'
+            self::LOCK_TTL_SECONDS
         );
     }
 
     public function release(string $sagaId, string $step): void
     {
-        Redis::del($this->lockKey($sagaId, $step));
+        Cache::forget($this->lockKey($sagaId, $step));
     }
 
     private function resultKey(string $sagaId, string $step): string

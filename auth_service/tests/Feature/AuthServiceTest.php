@@ -9,6 +9,7 @@ use App\Services\Auth\JwtService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Tests\TestCase;
@@ -35,6 +36,7 @@ class AuthServiceTest extends TestCase
 
         Redis::connection()->select((int) config('database.redis.default.database', 15));
         Redis::flushdb();
+        Cache::flush();
     }
 
     public function test_login_stores_refresh_token_hash_in_redis(): void
@@ -76,7 +78,7 @@ class AuthServiceTest extends TestCase
 
         $this->assertNotNull($newTokens);
         $this->assertSame(0, (int) Redis::exists("refresh_token:{$oldHash}"));
-        $this->assertGreaterThan(0, (int) Redis::exists("refresh_token:blacklist:{$oldHash}"));
+        $this->assertTrue(Cache::has("refresh_token:blacklist:{$oldHash}"));
 
         $newHash = hash('sha256', $newTokens['refresh_token']);
         $this->assertTrue(Redis::exists("refresh_token:{$newHash}") > 0);
@@ -125,8 +127,8 @@ class AuthServiceTest extends TestCase
         $this->assertNull($this->jwtService->userFromRequest($request));
 
         $decoded = $this->jwtService->decode($accessToken);
-        $this->assertTrue(Redis::exists("jwt:blacklist:{$decoded->jti}") > 0);
+        $this->assertTrue(Cache::has("jwt:blacklist:{$decoded->jti}"));
         $this->assertFalse(Redis::exists("refresh_token:{$refreshHash}") > 0);
-        $this->assertTrue(Redis::exists("refresh_token:blacklist:{$refreshHash}") > 0);
+        $this->assertTrue(Cache::has("refresh_token:blacklist:{$refreshHash}"));
     }
 }
