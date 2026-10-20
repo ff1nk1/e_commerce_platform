@@ -10,16 +10,16 @@ trait UsesRedis
 {
     protected function enableRedis(): void
     {
-        $host = env('REDIS_HOST', 'order_service_redis');
-        $port = (int) env('REDIS_PORT', 6379);
-        $db = (int) env('REDIS_DB', 15);
+        $host = $this->envString('REDIS_HOST', 'order_service_redis');
+        $port = (int) $this->envString('REDIS_PORT', '6379');
+        $db = (int) $this->envString('REDIS_DB', '15');
 
         config([
-            'database.redis.client' => env('REDIS_CLIENT', 'predis'),
+            'database.redis.client' => $this->envString('REDIS_CLIENT', 'predis'),
             'database.redis.default.host' => $host,
             'database.redis.default.port' => $port,
             'database.redis.default.database' => $db,
-            'database.redis.default.password' => env('REDIS_PASSWORD'),
+            'database.redis.default.password' => $this->envNullable('REDIS_PASSWORD'),
             'cache.default' => 'redis',
             'database.redis.cache.host' => $host,
             'database.redis.cache.port' => $port,
@@ -38,5 +38,21 @@ trait UsesRedis
         } catch (Throwable $e) {
             $this->markTestSkipped('Redis unavailable: '.$e->getMessage());
         }
+    }
+
+    private function envString(string $key, string $default = ''): string
+    {
+        return $this->envNullable($key, $default) ?? $default;
+    }
+
+    private function envNullable(string $key, ?string $default = null): ?string
+    {
+        $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
+
+        if ($value === false || $value === '') {
+            return $default;
+        }
+
+        return (string) $value;
     }
 }

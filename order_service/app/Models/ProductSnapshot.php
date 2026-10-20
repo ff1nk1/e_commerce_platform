@@ -5,6 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property int $id
+ * @property string $name
+ * @property string $price
+ * @property int|null $store_id
+ * @property string|null $store_name
+ * @property int|null $category_id
+ * @property string|null $category_name
+ * @property string|null $category_slug
+ */
 class ProductSnapshot extends Model
 {
     public $incrementing = false;
@@ -26,6 +36,7 @@ class ProductSnapshot extends Model
         'price' => 'decimal:2',
     ];
 
+    /** @return HasMany<OrderItem, $this> */
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class, 'product_id');

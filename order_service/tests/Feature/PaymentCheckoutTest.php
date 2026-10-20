@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\OrderStatus;
 use App\Models\Order;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -89,7 +90,7 @@ class PaymentCheckoutTest extends TestCase
     public function test_pay_rejects_pending_before_stock_reserved(): void
     {
         $order = $this->createAwaitingPaymentOrder();
-        $order->status = 'pending';
+        $order->status = OrderStatus::Pending;
         $order->save();
 
         $stripe = $this->mockPaymentGateway();
@@ -111,7 +112,7 @@ class PaymentCheckoutTest extends TestCase
 
         $order = Order::query()->create([
             'user_id' => 7,
-            'status' => 'awaiting_payment',
+            'status' => OrderStatus::AwaitingPayment,
             'total_amount' => '199.99',
         ]);
 

@@ -9,7 +9,12 @@ trait UsesKafka
 {
     protected function kafkaBrokers(): string
     {
-        return (string) env('KAFKA_BROKERS', config('kafka.brokers', 'kafka:29092'));
+        $fromEnv = $_ENV['KAFKA_BROKERS'] ?? $_SERVER['KAFKA_BROKERS'] ?? getenv('KAFKA_BROKERS');
+        if (is_string($fromEnv) && $fromEnv !== '') {
+            return $fromEnv;
+        }
+
+        return (string) config('kafka.brokers', 'kafka:29092');
     }
 
     /**
@@ -65,12 +70,12 @@ trait UsesKafka
                 return $this->body;
             }
 
-            public function getKey(): ?string
+            public function getKey(): string
             {
                 return (string) ($this->body['order_id'] ?? $this->body['saga_id'] ?? '0');
             }
 
-            public function getOffset(): ?int
+            public function getOffset(): int
             {
                 return 0;
             }

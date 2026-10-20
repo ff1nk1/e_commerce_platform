@@ -68,11 +68,19 @@ ensure_app_key() {
   fi
 }
 
+# True if vendor/autoload.php is visible inside the app container (bind-mount).
+# Prefer this over a host-path check: with `act` without --bind, Docker mounts
+# the host tree while the job sees a copy without gitignored vendor/.
+vendor_visible_in_container() {
+  local app="$1"
+  "${COMPOSE[@]}" run --rm --no-deps "$app" test -f vendor/autoload.php
+}
+
 ensure_vendor() {
   local dir="$1"
   local app="$2"
 
-  if [[ -f "$ROOT/$dir/vendor/autoload.php" ]]; then
+  if vendor_visible_in_container "$app"; then
     log "OK ${dir}/vendor already present"
     return 0
   fi
@@ -81,11 +89,12 @@ ensure_vendor() {
   log "${BOLD}═══ composer install → ${dir} (via ${app}) ═══${NC}"
   if "${COMPOSE[@]}" run --rm --no-deps "$app" \
     composer install --no-interaction --prefer-dist; then
-    if [[ -f "$ROOT/$dir/vendor/autoload.php" ]]; then
+    if vendor_visible_in_container "$app"; then
       log "${GREEN}PASS${NC} ${dir}/vendor"
       return 0
     fi
-    log "${RED}FAIL${NC} ${dir}: composer finished but vendor/autoload.php missing"
+    log "${RED}FAIL${NC} ${dir}: composer finished but vendor/autoload.php missing in container"
+    log "  Hint: if using act, re-run with ${BOLD}--bind${NC} so Docker mounts match the job workspace."
     FAILED=1
     return 1
   fi

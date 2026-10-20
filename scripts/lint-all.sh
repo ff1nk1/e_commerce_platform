@@ -134,7 +134,11 @@ ensure_service_vendor() {
   fi
 
   log "${YELLOW}Missing${NC} ${dir}/vendor — running composer install..."
-  if ! (cd "$ROOT/$dir" && composer install --no-interaction --prefer-dist); then
+  # Host/CI PHP often lacks rdkafka/mongodb (they live in php-base Docker).
+  # Pint/PHPStan only need the packages on disk, not the native extensions.
+  if ! (cd "$ROOT/$dir" && composer install --no-interaction --prefer-dist \
+    --ignore-platform-req=ext-rdkafka \
+    --ignore-platform-req=ext-mongodb); then
     log "${RED}ERROR:${NC} composer install failed for ${dir}"
     return 1
   fi

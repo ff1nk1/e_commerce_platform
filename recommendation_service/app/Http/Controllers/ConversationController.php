@@ -33,8 +33,8 @@ class ConversationController extends Controller
         return response()->json([
             'conversation_id' => $conversation->id,
             'user_id' => $conversation->user_id,
-            'last_activity_at' => $conversation->last_activity_at?->toIso8601String(),
-            'expires_at' => $conversation->expires_at?->toIso8601String(),
+            'last_activity_at' => $conversation->last_activity_at->toIso8601String(),
+            'expires_at' => $conversation->expires_at->toIso8601String(),
             'messages' => $messages,
         ]);
     }

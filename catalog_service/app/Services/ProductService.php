@@ -7,15 +7,17 @@ use App\Events\ProductDeleted;
 use App\Events\ProductPublishStateChanged;
 use App\Events\ProductUpdated;
 use App\Models\Product;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class ProductService
 {
+    /**
+     * @param  array<string, mixed>  $data
+     */
     public function createProduct(array $data): Product
     {
-        $attributes = $this->extractAttributes($data);
+        [$attributes, $data] = $this->extractAttributes($data);
 
         $product = DB::transaction(function () use ($data, $attributes): Product {
             $product = Product::create($data);
@@ -30,9 +32,12 @@ class ProductService
         return $product;
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
     public function updateProduct(Product $product, array $data): Product
     {
-        $attributes = $this->extractAttributes($data);
+        [$attributes, $data] = $this->extractAttributes($data);
 
         $product = DB::transaction(function () use ($product, $data, $attributes): Product {
             $product->update($data);
@@ -84,17 +89,19 @@ class ProductService
 
     /**
      * @param  array<string, mixed>  $data
-     * @return list<array{name: string, value: string}>|null null = attributes key absent (do not sync)
+     * @return array{0: list<array{name: string, value: string}>|null, 1: array<string, mixed>}
+     *                                                                                          null attributes = key absent (do not sync)
      */
-    protected function extractAttributes(array &$data): ?array
+    protected function extractAttributes(array $data): array
     {
         if (! array_key_exists('attributes', $data)) {
-            return null;
+            return [null, $data];
         }
 
-        $raw = Arr::pull($data, 'attributes');
+        $raw = $data['attributes'];
+        unset($data['attributes']);
         if (! is_array($raw)) {
-            return [];
+            return [[], $data];
         }
 
         $normalized = [];
@@ -115,7 +122,7 @@ class ProductService
             ];
         }
 
-        return $normalized;
+        return [$normalized, $data];
     }
 
     /**

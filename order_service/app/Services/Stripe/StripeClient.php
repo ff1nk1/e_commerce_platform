@@ -89,7 +89,7 @@ class StripeClient implements PaymentGateway
 
             $response->throw();
         } catch (RequestException $e) {
-            $body = $e->response?->json();
+            $body = $e->response->json();
             $message = $body['error']['message'] ?? $e->getMessage();
 
             throw new RuntimeException('Stripe API error: '.$message, previous: $e);

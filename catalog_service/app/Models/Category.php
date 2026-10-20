@@ -15,7 +15,7 @@ class Category extends Model
     /**
      * Атрибуты, доступные для массового заполнения.
      *
-     * @var array
+     * @var list<string>
      */
     protected $fillable = [
         'parent_id',
@@ -25,6 +25,8 @@ class Category extends Model
 
     /**
      * Получить родительскую категорию.
+     *
+     * @return BelongsTo<Category, $this>
      */
     public function parent(): BelongsTo
     {
@@ -33,6 +35,8 @@ class Category extends Model
 
     /**
      * Получить дочерние категории (только первый уровень).
+     *
+     * @return HasMany<Category, $this>
      */
     public function children(): HasMany
     {
@@ -41,13 +45,16 @@ class Category extends Model
 
     /**
      * Получить все дочерние категории рекурсивно (всё дерево вниз).
+     *
+     * @return HasMany<Category, $this>
      */
     public function allChildren(): HasMany
     {
         return $this->children()->with('allChildren');
     }
 
-    public function products()
+    /** @return HasMany<Product, $this> */
+    public function products(): HasMany
     {
         // У одной категории может быть много товаров
         return $this->hasMany(Product::class);

@@ -5,7 +5,6 @@ namespace App\Services\Payment;
 use App\Contracts\IdempotencyStore;
 use App\Contracts\PaymentGateway;
 use App\Domain\Money;
-use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Order\OrderQueryService;
 use Illuminate\Validation\ValidationException;
@@ -109,7 +108,8 @@ class CreateCheckoutService
 
         $lineItems = [];
         foreach ($order->items as $item) {
-            $name = $item->productSnapshot?->name ?? ('Product #'.$item->product_id);
+            $name = ($item->productSnapshot !== null ? $item->productSnapshot->name : null)
+                ?? ('Product #'.$item->product_id);
             $unitAmount = Money::of((string) $item->unit_price)->toMinorUnits();
 
             $lineItems[] = [

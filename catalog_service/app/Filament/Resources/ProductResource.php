@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\ProductResource\Pages\ManageProducts;
 use App\Models\Product;
+use App\Models\ProductAttribute;
 use App\Models\Store;
 use App\Services\ProductService;
 use BackedEnum;
@@ -70,8 +71,8 @@ class ProductResource extends Resource
                     ->columns(2)
                     ->default([])
                     ->collapsible()
-                    ->itemLabel(fn (array $state): ?string => ($state['name'] ?? null)
-                        ? (($state['name'] ?? '').': '.($state['value'] ?? ''))
+                    ->itemLabel(fn (array $state): ?string => isset($state['name']) && $state['name'] !== ''
+                        ? ($state['name'].': '.($state['value'] ?? ''))
                         : null),
             ]);
     }
@@ -123,7 +124,7 @@ class ProductResource extends Resource
                     ->mutateRecordDataUsing(function (array $data, Product $record): array {
                         $data['attributes'] = $record->attributes()
                             ->get(['name', 'value'])
-                            ->map(fn ($attr): array => [
+                            ->map(fn (ProductAttribute $attr): array => [
                                 'name' => (string) $attr->name,
                                 'value' => (string) $attr->value,
                             ])
@@ -172,7 +173,7 @@ class ProductResource extends Resource
         return $data;
     }
 
-    private static function resolveUploadedFile(mixed $image): ?TemporaryUploadedFile
+    protected static function resolveUploadedFile(mixed $image): ?TemporaryUploadedFile
     {
         if ($image instanceof TemporaryUploadedFile) {
             return $image;
@@ -198,7 +199,7 @@ class ProductResource extends Resource
         return null;
     }
 
-    private static function uploadImage(TemporaryUploadedFile $file): string
+    protected static function uploadImage(TemporaryUploadedFile $file): string
     {
         $extension = $file->getClientOriginalExtension() ?: 'jpg';
         $path = 'uploads/'.Str::uuid().'.'.$extension;

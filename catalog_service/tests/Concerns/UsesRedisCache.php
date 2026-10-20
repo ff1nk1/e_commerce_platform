@@ -9,19 +9,34 @@ trait UsesRedisCache
 {
     protected function enableRedisCache(): void
     {
+        $host = $this->envString('REDIS_HOST', '127.0.0.1');
+        $port = $this->envString('REDIS_PORT', '6381');
+        $db = $this->envString('REDIS_DB', '15');
+
         config([
             'cache.default' => 'redis',
-            'database.redis.default.host' => env('REDIS_HOST', '127.0.0.1'),
-            'database.redis.default.port' => env('REDIS_PORT', 6381),
-            'database.redis.default.database' => env('REDIS_DB', 15),
-            'database.redis.cache.host' => env('REDIS_HOST', '127.0.0.1'),
-            'database.redis.cache.port' => env('REDIS_PORT', 6381),
-            'database.redis.cache.database' => env('REDIS_DB', 15),
+            'database.redis.default.host' => $host,
+            'database.redis.default.port' => $port,
+            'database.redis.default.database' => $db,
+            'database.redis.cache.host' => $host,
+            'database.redis.cache.port' => $port,
+            'database.redis.cache.database' => $db,
         ]);
 
         Cache::forgetDriver('redis');
-        Redis::connection()->select((int) env('REDIS_DB', 15));
+        Redis::connection()->select((int) $db);
         Redis::flushdb();
         Cache::flush();
+    }
+
+    private function envString(string $key, string $default = ''): string
+    {
+        $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
+
+        if ($value === false || $value === '') {
+            return $default;
+        }
+
+        return (string) $value;
     }
 }

@@ -10,6 +10,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Junges\Kafka\Contracts\ConsumerMessage;
 use Mockery;
+use Mockery\MockInterface;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
@@ -43,6 +44,7 @@ class ProductSnapshotOrderFlowTest extends TestCase
 
     public function test_handler_snapshot_allows_order_create(): void
     {
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn(['event-type' => 'product.created']);
         $message->shouldReceive('getBody')->andReturn([
@@ -83,6 +85,7 @@ class ProductSnapshotOrderFlowTest extends TestCase
 
     public function test_http_order_create_uses_snapshot_price(): void
     {
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn(['event-type' => 'product.updated']);
         $message->shouldReceive('getBody')->andReturn([

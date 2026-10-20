@@ -107,16 +107,16 @@ class ProductSearchService
     }
 
     /**
-     * @param  Collection<int, object{id: mixed, distance?: mixed}>  $rows
+     * @param  Collection<int, object{id: int|string, distance?: float|string|null}>|\Illuminate\Database\Eloquent\Collection<int, ProductCatalog>  $rows
      * @return list<SearchHit>
      */
-    private function hydrateHits(Collection $rows): array
+    private function hydrateHits(Collection|\Illuminate\Database\Eloquent\Collection $rows): array
     {
         if ($rows->isEmpty()) {
             return [];
         }
 
-        $ids = $rows->pluck('id')->all();
+        $ids = array_values($rows->pluck('id')->all());
         $distanceById = [];
         foreach ($rows as $row) {
             $distanceById[(int) $row->id] = (float) ($row->distance ?? INF);
@@ -178,7 +178,7 @@ class ProductSearchService
     private function applyAttributeSqlPrefilter(Builder $builder, array $attributes): void
     {
         foreach ($attributes as $attr) {
-            $value = trim((string) ($attr['value'] ?? ''));
+            $value = trim($attr['value']);
             if ($value === '') {
                 continue;
             }
@@ -229,7 +229,7 @@ class ProductSearchService
             return $a->distance <=> $b->distance;
         });
 
-        return array_values($hits);
+        return $hits;
     }
 
     /**
@@ -255,7 +255,7 @@ class ProductSearchService
             return false;
         }
 
-        $rows = is_array($product->attributes) ? $product->attributes : [];
+        $rows = $product->attributes ?? [];
         foreach ($rows as $row) {
             if (! is_array($row)) {
                 continue;

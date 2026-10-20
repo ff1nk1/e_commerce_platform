@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsureInternalToken;
+use App\Http\Middleware\ResolveGatewayUserId;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,8 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->api(prepend: [
-            \App\Http\Middleware\EnsureInternalToken::class,
-            \App\Http\Middleware\ResolveGatewayUserId::class,
+            EnsureInternalToken::class,
+            ResolveGatewayUserId::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

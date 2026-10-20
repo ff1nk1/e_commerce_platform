@@ -152,10 +152,7 @@ class ProductSearchQueryBuilder
     {
         $priceFilters = [];
         foreach (self::PRICE_RANGES as $range) {
-            $rangeBody = [];
-            if ($range['from'] !== null) {
-                $rangeBody['gte'] = $range['from'];
-            }
+            $rangeBody = ['gte' => $range['from']];
             if ($range['to'] !== null) {
                 $rangeBody['lt'] = $range['to'];
             }

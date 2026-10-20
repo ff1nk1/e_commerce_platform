@@ -13,7 +13,7 @@ class Store extends Model
     /**
      * Поля, доступные для массового заполнения (Mass Assignment).
      *
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'name',

@@ -25,10 +25,7 @@ class UploadController extends Controller
             ['ContentType' => $contentType]
         );
 
-        if (is_array($internalUrl)) {
-            $internalUrl = $internalUrl['url'] ?? $internalUrl[0] ?? (string) json_encode($internalUrl);
-        }
-        $internalUrl = (string) $internalUrl;
+        $internalUrl = (string) ($internalUrl['url'] ?? $internalUrl[0] ?? json_encode($internalUrl));
 
         $bucket = (string) config('filesystems.disks.s3.bucket', 'media');
         $publicBase = rtrim((string) config('filesystems.media_public_base', '/storage'), '/');

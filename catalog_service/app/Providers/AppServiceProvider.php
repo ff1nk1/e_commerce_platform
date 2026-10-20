@@ -8,6 +8,7 @@ use App\Models\User;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse as LogoutResponseContract;
 use Illuminate\Auth\RequestGuard;
 use Illuminate\Http\Request;
+use Illuminate\Routing\RouteCollection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
@@ -51,7 +52,7 @@ class AppServiceProvider extends ServiceProvider
         // Mixed Content / unreachable host. Keep Livewire temps on local disk; permanent
         // product images still go to S3 in ProductResource::uploadImage().
         config([
-            'livewire.temporary_file_upload.disk' => env('LIVEWIRE_TEMPORARY_FILE_UPLOAD_DISK', 'local'),
+            'livewire.temporary_file_upload.disk' => config('filesystems.livewire_temporary_disk', 'local'),
         ]);
 
         // Livewire signed upload URLs are built during proxied requests. Without forcing
@@ -92,12 +93,17 @@ class AppServiceProvider extends ServiceProvider
 
             $this->app->booted(function () {
                 $routes = Route::getRoutes();
+                if (! $routes instanceof RouteCollection) {
+                    return;
+                }
+
                 $upload = collect($routes->getRoutes())
                     ->first(fn ($route) => $route->uri() === 'admin-catalog/livewire/upload-file');
                 $preview = collect($routes->getRoutes())
                     ->first(fn ($route) => $route->uri() === 'admin-catalog/livewire/preview-file/{filename}');
 
                 (function () use ($upload, $preview) {
+                    /** @var RouteCollection $this */
                     if ($upload) {
                         $this->nameList['livewire.upload-file'] = $upload;
                     }

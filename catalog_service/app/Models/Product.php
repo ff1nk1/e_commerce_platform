@@ -7,6 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property int $id
+ * @property string|null $name
+ * @property string|null $image_url
+ * @property bool $is_published
+ * @property-read Category|null $category
+ */
 class Product extends Model
 {
     use HasFactory;
@@ -14,7 +21,7 @@ class Product extends Model
     /**
      * Поля, доступные для массового заполнения (Mass Assignment).
      *
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'store_id',
@@ -38,6 +45,8 @@ class Product extends Model
 
     /**
      * Магазин, которому принадлежит товар.
+     *
+     * @return BelongsTo<Store, $this>
      */
     public function store(): BelongsTo
     {
@@ -46,12 +55,15 @@ class Product extends Model
 
     /**
      * Категория, к которой относится товар.
+     *
+     * @return BelongsTo<Category, $this>
      */
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
     }
 
+    /** @return HasMany<ProductAttribute, $this> */
     public function attributes(): HasMany
     {
         return $this->hasMany(ProductAttribute::class);

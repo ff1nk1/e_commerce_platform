@@ -5,4 +5,4 @@ includes:
 
 parameters:
     level: 5
-    tmpDir: .phpstan.cache
+    tmpDir: .phpstan.cache.local

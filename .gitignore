@@ -24,3 +24,4 @@ Thumbs.db
 # PHPUnit / misc local caches
 .phpunit.result.cache
 .phpunit.cache/
+.phpstan.cache.local/

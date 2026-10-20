@@ -5,6 +5,7 @@ namespace Tests\Concerns;
 use App\Contracts\SagaStepStore;
 use App\Services\SagaStepGuard;
 use Mockery;
+use Mockery\MockInterface;
 
 trait BindsInMemorySagaStepGuard
 {
@@ -19,6 +20,7 @@ trait BindsInMemorySagaStepGuard
         $store = &$this->sagaStepStore;
         $locks = &$this->sagaStepLocks;
 
+        /** @var MockInterface&SagaStepGuard $guard */
         $guard = Mockery::mock(SagaStepGuard::class);
 
         $guard->shouldReceive('get')->andReturnUsing(function (string $sagaId, string $step) use (&$store) {
@@ -31,7 +33,7 @@ trait BindsInMemorySagaStepGuard
                 return false;
             }
 
-            return in_array($existing['status'] ?? null, [SagaStepGuard::STATUS_DONE, SagaStepGuard::STATUS_FAILED], true);
+            return in_array($existing['status'], [SagaStepGuard::STATUS_DONE, SagaStepGuard::STATUS_FAILED], true);
         });
 
         $guard->shouldReceive('acquire')->andReturnUsing(function (string $sagaId, string $step) use (&$locks) {

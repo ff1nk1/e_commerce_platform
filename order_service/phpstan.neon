@@ -3,7 +3,7 @@ includes:
 
 parameters:
     level: 5
-    tmpDir: ../.phpstan.cache/order_service
+    tmpDir: ../.phpstan.cache.local/order_service
 
     paths:
         - app

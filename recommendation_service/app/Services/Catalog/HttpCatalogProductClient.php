@@ -19,10 +19,9 @@ class HttpCatalogProductClient implements CatalogProductClient
     public function fetchByIds(array $productIds): CatalogFetchResult
     {
         $ids = array_values(array_unique(array_filter(
-            $productIds,
-            static fn (mixed $id): bool => is_int($id) ? $id > 0 : (is_numeric($id) && (int) $id > 0)
+            array_map(static fn (mixed $id): int => (int) $id, $productIds),
+            static fn (int $id): bool => $id > 0,
         )));
-        $ids = array_map(static fn (mixed $id): int => (int) $id, $ids);
 
         if ($ids === []) {
             return new CatalogFetchResult;

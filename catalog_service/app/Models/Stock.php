@@ -13,7 +13,7 @@ class Stock extends Model
     /**
      * Атрибуты, доступные для массового заполнения.
      *
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'product_id',

@@ -28,7 +28,7 @@ class AdminCatalogLogoutTest extends TestCase
 
         // RequestGuard has no logout() by default — macro must make this a no-throw.
         $guard->logout();
-        $this->assertTrue(true);
+        $this->assertNull($guard->user());
     }
 
     public function test_filament_logout_redirects_to_login_and_clears_jwt_cookies(): void

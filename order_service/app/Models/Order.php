@@ -3,10 +3,15 @@
 namespace App\Models;
 
 use App\Domain\OrderStatus;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * @property OrderStatus $status
+ * @property-read Collection<int, OrderItem> $items
+ */
 class Order extends Model
 {
     protected $fillable = [
@@ -23,11 +28,13 @@ class Order extends Model
         'status' => OrderStatus::class,
     ];
 
+    /** @return HasMany<OrderItem, $this> */
     public function items(): HasMany
     {
         return $this->hasMany(OrderItem::class);
     }
 
+    /** @return HasMany<Payment, $this> */
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
@@ -35,9 +42,7 @@ class Order extends Model
 
     public function statusEnum(): OrderStatus
     {
-        return $this->status instanceof OrderStatus
-            ? $this->status
-            : OrderStatus::from((string) $this->status);
+        return $this->status;
     }
 
     public function transitionTo(OrderStatus $next): void

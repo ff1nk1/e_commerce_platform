@@ -130,10 +130,6 @@ class StockReservationService
         $normalized = [];
 
         foreach ($items as $item) {
-            if (! is_array($item)) {
-                return null;
-            }
-
             $productId = filter_var($item['product_id'] ?? null, FILTER_VALIDATE_INT);
             $storeId = filter_var($item['store_id'] ?? null, FILTER_VALIDATE_INT);
             $quantity = filter_var($item['quantity'] ?? null, FILTER_VALIDATE_INT);

@@ -42,4 +42,3 @@ return [
     /** When true, honor X-Skip-Analytics on search requests (loadtests only). */
     'allow_skip_analytics' => filter_var(env('ALLOW_SKIP_ANALYTICS', false), FILTER_VALIDATE_BOOLEAN),
 ];
-

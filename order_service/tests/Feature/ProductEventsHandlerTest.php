@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Junges\Kafka\Contracts\ConsumerMessage;
 use Mockery;
+use Mockery\MockInterface;
 use Tests\TestCase;
 
 class ProductEventsHandlerTest extends TestCase
@@ -247,10 +248,11 @@ class ProductEventsHandlerTest extends TestCase
         $this->assertSame(0, ProductSnapshot::query()->count());
     }
 
-    private function consumerMessage(?string $eventType, array $body): ConsumerMessage
+    private function consumerMessage(?string $eventType, array $body): ConsumerMessage&MockInterface
     {
         $headers = $eventType === null ? [] : ['event-type' => $eventType];
 
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn($headers);
         $message->shouldReceive('getBody')->andReturn($body);

@@ -18,7 +18,7 @@ class KafkaOutboxWorker extends Command
     {
         $this->info('Запуск Outbox Worker (order-service)...');
 
-        while (true) {
+        while ($this->shouldKeepRunning()) {
             $processed = $this->processBatch();
 
             if ($processed === 0) {
@@ -27,6 +27,12 @@ class KafkaOutboxWorker extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /** @phpstan-impure */
+    private function shouldKeepRunning(): bool
+    {
+        return true;
     }
 
     public function processBatch(): int
@@ -49,7 +55,7 @@ class KafkaOutboxWorker extends Command
                     'event-type' => $event->event_type,
                     'source' => 'order-service',
                 ];
-                $payload = is_array($event->payload) ? $event->payload : [];
+                $payload = $event->payload;
                 if (is_string($payload['saga_id'] ?? null) && $payload['saga_id'] !== '') {
                     $headers['saga-id'] = $payload['saga_id'];
                 }

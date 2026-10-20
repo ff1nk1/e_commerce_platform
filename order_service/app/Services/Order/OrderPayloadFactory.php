@@ -64,9 +64,7 @@ class OrderPayloadFactory
         $order->loadMissing(['items.productSnapshot', 'payments']);
 
         $data = $order->toArray();
-        if (isset($data['status']) && ! is_string($data['status'])) {
-            $data['status'] = $order->statusEnum()->value;
-        }
+        $data['status'] = $order->statusEnum()->value;
 
         return $data;
     }

@@ -20,14 +20,14 @@ class ProductSnapshotSeeder extends Seeder
                 ->orderBy('id')
                 ->get();
         } catch (\Throwable $e) {
-            $this->command?->error('Не удалось прочитать catalog DB: '.$e->getMessage());
-            $this->command?->warn('Проверьте CATALOG_DB_* и что catalog_service_db доступен из order_app.');
+            $this->command->error('Не удалось прочитать catalog DB: '.$e->getMessage());
+            $this->command->warn('Проверьте CATALOG_DB_* и что catalog_service_db доступен из order_app.');
 
             return;
         }
 
         if ($products->isEmpty()) {
-            $this->command?->warn('В catalog нет товаров — сначала: docker exec catalog_service_app php artisan db:seed --force');
+            $this->command->warn('В catalog нет товаров — сначала: docker exec catalog_service_app php artisan db:seed --force');
 
             return;
         }
@@ -45,6 +45,6 @@ class ProductSnapshotSeeder extends Seeder
             $count++;
         }
 
-        $this->command?->info("Synced {$count} product snapshots from catalog.");
+        $this->command->info("Synced {$count} product snapshots from catalog.");
     }
 }

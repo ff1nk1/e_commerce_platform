@@ -100,11 +100,12 @@ class SearchIndexServiceTest extends TestCase
 
     public function test_delete_product_swallows_missing_404(): void
     {
+        $this->expectNotToPerformAssertions();
+
         $client = $this->mockOpenSearchClient();
         $client->shouldReceive('delete')->once()->andThrow(new Missing404Exception('not found'));
 
         app(SearchIndexService::class)->deleteProduct(99);
-        $this->assertTrue(true);
     }
 
     public function test_index_category_document_shape(): void
@@ -131,11 +132,12 @@ class SearchIndexServiceTest extends TestCase
 
     public function test_delete_category_swallows_not_found_message(): void
     {
+        $this->expectNotToPerformAssertions();
+
         $client = $this->mockOpenSearchClient();
         $client->shouldReceive('delete')->once()->andThrow(new \RuntimeException('index_not_found_exception 404'));
 
         app(SearchIndexService::class)->deleteCategory(5);
-        $this->assertTrue(true);
     }
 
     public function test_sync_category_name_on_products_builds_update_by_query(): void

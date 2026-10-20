@@ -15,6 +15,7 @@ use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\DTOs\SearchFilters;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -68,6 +69,7 @@ PROMPT;
             isset($input['conversation_id']) ? (string) $input['conversation_id'] : null,
         );
 
+        /** @var \Illuminate\Database\Eloquent\Collection<int, Message> $history */
         $history = $conversation->messages()
             ->orderByDesc('created_at')
             ->limit(self::HISTORY_LIMIT)
@@ -142,7 +144,7 @@ PROMPT;
 
     /**
      * @param  array<string, mixed>  $input
-     * @param  \Illuminate\Support\Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
+     * @param  Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
      * @return array{0: SearchFilters, 1: list<float>}
      */
     private function resolveFiltersAndVector(string $messageText, array $input, $history): array
@@ -158,7 +160,7 @@ PROMPT;
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
+     * @param  Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
      */
     private function buildExtractInput(string $messageText, $history): string
     {

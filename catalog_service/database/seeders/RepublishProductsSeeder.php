@@ -17,7 +17,7 @@ class RepublishProductsSeeder extends Seeder
         $products = Product::query()->with(['store', 'category'])->orderBy('id')->get();
 
         if ($products->isEmpty()) {
-            $this->command?->warn('Нет товаров — сначала ShopSeeder.');
+            $this->command->warn('Нет товаров — сначала ShopSeeder.');
 
             return;
         }
@@ -32,7 +32,7 @@ class RepublishProductsSeeder extends Seeder
             ]);
         }
 
-        $this->command?->info(sprintf(
+        $this->command->info(sprintf(
             'Republished %d products to Kafka (product.updated).',
             $products->count()
         ));

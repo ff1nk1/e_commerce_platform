@@ -44,7 +44,7 @@ class ProductSearchServiceTest extends TestCase
         $ids = array_map(static fn (SearchHit $h): int => $h->product->product_id, $results);
         $this->assertSame([1], $ids);
         $this->assertInstanceOf(SearchHit::class, $results[0]);
-        $this->assertIsFloat($results[0]->distance);
+        $this->assertGreaterThanOrEqual(0.0, $results[0]->distance);
     }
 
     public function test_filters_by_store_category_stock_price_and_soft_attributes(): void
@@ -84,7 +84,7 @@ class ProductSearchServiceTest extends TestCase
 
         $ids = array_map(static fn (SearchHit $h): int => $h->product->product_id, $results);
         // Soft attribute re-rank: black jeans (10) before blue (15); hard filters still exclude others.
-        $this->assertSame(10, $ids[0] ?? null);
+        $this->assertSame(10, $ids[0]);
         $this->assertContains(15, $ids);
         $this->assertNotContains(11, $ids);
         $this->assertNotContains(12, $ids);
@@ -116,7 +116,7 @@ class ProductSearchServiceTest extends TestCase
         );
 
         $ids = array_map(static fn (SearchHit $h): int => $h->product->product_id, $results);
-        $this->assertSame(30, $ids[0] ?? null);
+        $this->assertSame(30, $ids[0]);
         $this->assertContains(31, $ids);
     }
 
@@ -147,7 +147,7 @@ class ProductSearchServiceTest extends TestCase
 
         $ids = array_map(static fn (SearchHit $h): int => $h->product->product_id, $results);
         $this->assertSame([40, 42], $ids);
-        $this->assertSame(40, $ids[0] ?? null);
+        $this->assertSame(40, $ids[0]);
     }
 
     public function test_hard_attributes_use_fallback_when_missing_from_vector_pool(): void

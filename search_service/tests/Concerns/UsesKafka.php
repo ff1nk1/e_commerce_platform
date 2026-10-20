@@ -57,14 +57,14 @@ trait UsesKafka
                 return $this->body;
             }
 
-            public function getKey(): ?string
+            public function getKey(): string
             {
                 $data = $this->body['data'] ?? $this->body;
 
                 return (string) ($data['id'] ?? $data['product_id'] ?? '0');
             }
 
-            public function getOffset(): ?int
+            public function getOffset(): int
             {
                 return 0;
             }

@@ -17,9 +17,8 @@ trait CapturesOpenSearchRequests
 
     /**
      * @param  array<string, mixed>|null  $searchResponse
-     * @return Client&MockInterface
      */
-    protected function mockOpenSearchClient(?array $searchResponse = null, bool $indicesExist = true): Client
+    protected function mockOpenSearchClient(?array $searchResponse = null, bool $indicesExist = true): Client&MockInterface
     {
         $this->capturedSearchRequests = [];
         $this->capturedIndexRequests = [];
@@ -30,6 +29,7 @@ trait CapturesOpenSearchRequests
         $indices->shouldReceive('delete')->andReturn(['acknowledged' => true]);
         $indices->shouldReceive('getAlias')->andThrow(new \RuntimeException('not an alias'));
 
+        /** @var Client&MockInterface $client */
         $client = Mockery::mock(Client::class);
         $client->shouldReceive('indices')->andReturn($indices);
 

@@ -7,6 +7,7 @@ use App\Kafka\Handlers\StockReleaseHandler;
 use App\Kafka\MainHandlers\OrderEventsHandler;
 use Junges\Kafka\Contracts\ConsumerMessage;
 use Mockery;
+use Mockery\MockInterface;
 use Tests\TestCase;
 
 class OrderEventsHandlerRoutingTest extends TestCase
@@ -19,6 +20,7 @@ class OrderEventsHandlerRoutingTest extends TestCase
 
     public function test_routes_order_created_to_order_created_handler(): void
     {
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn(['event-type' => 'order.created']);
 
@@ -33,6 +35,7 @@ class OrderEventsHandlerRoutingTest extends TestCase
 
     public function test_routes_stock_release_to_stock_release_handler(): void
     {
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn(['event-type' => 'stock.release_requested']);
 
@@ -47,6 +50,7 @@ class OrderEventsHandlerRoutingTest extends TestCase
 
     public function test_ignores_unknown_event_type(): void
     {
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn(['event-type' => 'something.else']);
 
@@ -65,6 +69,7 @@ class OrderEventsHandlerRoutingTest extends TestCase
 
     public function test_ignores_missing_event_type_header(): void
     {
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn([]);
 

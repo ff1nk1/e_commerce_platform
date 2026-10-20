@@ -198,16 +198,18 @@ class ProductEventsHandlerTest extends TestCase
         $indices = Mockery::mock(IndicesNamespace::class);
         $indices->shouldReceive('exists')->andReturn(true);
 
+        /** @var Client&MockInterface $client */
         $client = Mockery::mock(Client::class);
         $client->shouldReceive('indices')->andReturn($indices);
 
         return $client;
     }
 
-    private function consumerMessage(?string $eventType, array $body): ConsumerMessage
+    private function consumerMessage(?string $eventType, array $body): ConsumerMessage&MockInterface
     {
         $headers = $eventType === null ? [] : ['event-type' => $eventType];
 
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn($headers);
         $message->shouldReceive('getBody')->andReturn($body);

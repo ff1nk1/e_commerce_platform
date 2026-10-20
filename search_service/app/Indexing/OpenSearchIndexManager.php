@@ -87,7 +87,7 @@ class OpenSearchIndexManager
 
         try {
             $aliasInfo = $this->client->indices()->getAlias(['name' => $name]);
-            if (is_array($aliasInfo) && $aliasInfo !== []) {
+            if ($aliasInfo !== []) {
                 foreach (array_keys($aliasInfo) as $concreteIndex) {
                     $this->client->indices()->delete(['index' => (string) $concreteIndex]);
                 }

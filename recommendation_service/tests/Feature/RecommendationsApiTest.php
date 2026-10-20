@@ -188,7 +188,7 @@ class RecommendationsApiTest extends TestCase
 
     public function test_chat_logs_when_relevance_gate_drops_all_hits(): void
     {
-        Log::spy();
+        $log = Log::spy();
         $this->seedProduct(1, 'Blue sneakers');
 
         $this->app->instance(RelevanceGate::class, new class implements RelevanceGate
@@ -206,7 +206,7 @@ class RecommendationsApiTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('products', []);
 
-        Log::shouldHaveReceived('info')
+        $log->shouldHaveReceived('info')
             ->withArgs(function (string $message, array $context): bool {
                 return str_contains($message, 'RelevanceGate dropped all search hits')
                     && isset($context['hits'], $context['max_cosine_distance']);

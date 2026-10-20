@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Junges\Kafka\Contracts\ConsumerMessage;
 use Mockery;
+use Mockery\MockInterface;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
@@ -168,8 +169,9 @@ class StockEventsHandlerTest extends TestCase
         $this->assertArrayNotHasKey($sagaId.':stock.reserved', $this->sagaStepStore);
     }
 
-    private function message(string $eventType, array $body): ConsumerMessage
+    private function message(string $eventType, array $body): ConsumerMessage&MockInterface
     {
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn(['event-type' => $eventType]);
         $message->shouldReceive('getBody')->andReturn($body);

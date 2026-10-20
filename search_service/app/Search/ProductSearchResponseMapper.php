@@ -67,7 +67,7 @@ class ProductSearchResponseMapper
         foreach ($root['availability']['buckets'] ?? [] as $bucket) {
             $key = $bucket['key'];
             $availability[] = [
-                'value' => is_bool($key) ? $key : ((int) $key === 1 || $key === 'true' || $key === true),
+                'value' => is_bool($key) ? $key : ((int) $key === 1 || $key === 'true'),
                 'count' => (int) ($bucket['doc_count'] ?? 0),
             ];
         }

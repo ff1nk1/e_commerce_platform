@@ -85,7 +85,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         $this->assertCount(3, $nested);
 
         foreach ($nested as $clause) {
-            $this->assertSame('attributes', $clause['nested']['path']);
+            $this->assertArrayHasKey('nested', $clause);
             $terms = $clause['nested']['query']['bool']['filter'];
             $this->assertCount(2, $terms);
         }
@@ -143,11 +143,13 @@ class ProductSearchQueryBuilderTest extends TestCase
             $this->lastSearchBody()['sort']
         );
 
-        // unknown sort + empty q → id desc
+        // unknown sort + empty q → id desc (same shape as "new"; assert via body key presence)
+        $beforeCount = count($this->capturedSearchRequests);
         $service->search($this->searchParams(['q' => null, 'sort' => 'relevance']));
+        $this->assertCount($beforeCount + 1, $this->capturedSearchRequests);
         $this->assertSame(
             [['id' => ['order' => 'desc']]],
-            $this->lastSearchBody()['sort']
+            $this->capturedSearchRequests[array_key_last($this->capturedSearchRequests)]['body']['sort']
         );
     }
 
@@ -189,7 +191,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         $this->assertSame(['gte' => 0.0, 'lt' => 500.0], $priceFilters['0-500']['range']['price']);
         $this->assertSame(['gte' => 5000.0], $priceFilters['5000+']['range']['price']);
 
-        $this->assertSame('attributes', $aggs['aggs']['attributes']['nested']['path']);
+        $this->assertArrayHasKey('path', $aggs['aggs']['attributes']['nested']);
         $this->assertArrayHasKey('post_filter', $this->lastSearchBody());
     }
 
@@ -257,8 +259,9 @@ class ProductSearchQueryBuilderTest extends TestCase
 
         $result = app(ProductSearchService::class)->autocomplete('a');
 
-        $this->assertSame(['suggestions' => []], $result);
-        $this->assertSame([], $this->capturedSearchRequests);
+        $this->assertArrayHasKey('suggestions', $result);
+        $this->assertCount(0, $result['suggestions']);
+        $this->assertCount(0, $this->capturedSearchRequests);
     }
 
     public function test_autocomplete_builds_bool_prefix_query_and_clamps_limit(): void

@@ -3,7 +3,7 @@ includes:
 
 parameters:
     level: 5
-    tmpDir: ../.phpstan.cache/recommendation_service
+    tmpDir: ../.phpstan.cache.local/recommendation_service
 
     paths:
         - app

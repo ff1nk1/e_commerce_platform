@@ -30,8 +30,8 @@ class IdempotencyServiceTest extends TestCase
         $this->idempotency->put($key, 201, $body);
 
         $cached = $this->idempotency->get($key);
-        $this->assertSame(201, $cached['status'] ?? null);
-        $this->assertSame($body, $cached['body'] ?? null);
+        $this->assertSame(201, $cached['status']);
+        $this->assertSame($body, $cached['body']);
     }
 
     public function test_acquire_lock_is_exclusive(): void

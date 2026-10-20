@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Junges\Kafka\Contracts\ConsumerMessage;
 use Mockery;
+use Mockery\MockInterface;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
@@ -404,8 +405,9 @@ class OrderStockHandlersTest extends TestCase
         $this->assertSame('done', $this->sagaStepStore[$sagaId.':stock.release']['status'] ?? null);
     }
 
-    private function consumerMessage(string $eventType, array $body): ConsumerMessage
+    private function consumerMessage(string $eventType, array $body): ConsumerMessage&MockInterface
     {
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn(['event-type' => $eventType]);
         $message->shouldReceive('getBody')->andReturn($body);

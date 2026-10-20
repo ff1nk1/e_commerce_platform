@@ -21,8 +21,8 @@ class AttributeConstraintDetector
         $soft = [];
 
         foreach ($attributes as $attr) {
-            $name = trim((string) ($attr['name'] ?? ''));
-            $value = trim((string) ($attr['value'] ?? ''));
+            $name = trim($attr['name']);
+            $value = trim($attr['value']);
             if ($name === '' || $value === '') {
                 continue;
             }

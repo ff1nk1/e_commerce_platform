@@ -13,7 +13,7 @@ class ProductTextBuilder
             name: (string) ($product->name ?? ''),
             description: (string) ($product->description ?? ''),
             categoryName: (string) ($product->category_name ?? ''),
-            attributes: is_array($product->attributes) ? $product->attributes : [],
+            attributes: $product->attributes ?? [],
         );
     }
 

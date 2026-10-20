@@ -1,12 +1,95 @@
 name: Deploy Project to Local VM
-
+#act push \
+#  --bind \
+#  --container-architecture linux/amd64 \
+#  --secret-file ~/local-deploy-lab/.secrets \
+#  --container-options "--net=host"
 on:
   push:
     branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    name: Lint (Pint + PHPStan)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          coverage: none
+          tools: composer:v2
+
+      - name: Install root lint tooling
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Run lint-all
+        run: ./scripts/lint-all.sh --no-fix
+
+  test:
+    name: Tests (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      STRIPE_SECRET: ${{ secrets.STRIPE_SECRET }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          docker system prune -af
+
+      - name: Bootstrap (.env + vendor via Docker)
+        run: ./scripts/bootstrap.sh
+
+      - name: Inject Stripe secrets for order integration
+        run: |
+          if [[ -z "${STRIPE_SECRET}" || -z "${STRIPE_WEBHOOK_SECRET}" ]]; then
+            echo "::error::Set repository secrets STRIPE_SECRET and STRIPE_WEBHOOK_SECRET (Stripe test mode)."
+            exit 1
+          fi
+          sed -i "s|^STRIPE_SECRET=.*|STRIPE_SECRET=${STRIPE_SECRET}|" order_service/.env
+          sed -i "s|^STRIPE_WEBHOOK_SECRET=.*|STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}|" order_service/.env
+
+      - name: Start services required by test-all
+        run: |
+          docker compose up -d \
+            auth_app auth_redis \
+            catalog_app catalog_redis \
+            notification_app notification_mongodb notification_mailhog \
+            order_app order_db order_redis \
+            search_app search_opensearch \
+            analytic_clickhouse kafka \
+            recommendation_app recommendation_db
+
+      - name: Wait for containers
+        run: sleep 20
+
+      - name: Run test-all
+        run: ./scripts/test-all.sh
+
+      - name: Dump compose status on failure
+        if: failure()
+        run: docker compose ps -a
+
   deploy:
+    name: Deploy to VM
+    needs: [lint, test]
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

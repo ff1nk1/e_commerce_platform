@@ -15,6 +15,11 @@ class SagaStepGuard implements SagaStepStore
 
     public const STATUS_FAILED = SagaStepStore::STATUS_FAILED;
 
+    /**
+     * @return array{status: string, result?: array<string, mixed>, at: string}|null
+     *
+     * @phpstan-impure
+     */
     public function get(string $sagaId, string $step): ?array
     {
         $decoded = Cache::get($this->resultKey($sagaId, $step));
@@ -22,6 +27,7 @@ class SagaStepGuard implements SagaStepStore
         return is_array($decoded) ? $decoded : null;
     }
 
+    /** @phpstan-impure */
     public function isCompleted(string $sagaId, string $step): bool
     {
         $existing = $this->get($sagaId, $step);
@@ -29,7 +35,7 @@ class SagaStepGuard implements SagaStepStore
             return false;
         }
 
-        return in_array($existing['status'] ?? null, [self::STATUS_DONE, self::STATUS_FAILED], true);
+        return in_array($existing['status'], [self::STATUS_DONE, self::STATUS_FAILED], true);
     }
 
     public function tryBegin(string $sagaId, string $step): string
@@ -72,6 +78,7 @@ class SagaStepGuard implements SagaStepStore
         );
     }
 
+    /** @phpstan-impure */
     public function acquire(string $sagaId, string $step): bool
     {
         return Cache::add(

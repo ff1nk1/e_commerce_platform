@@ -178,12 +178,12 @@ class StockEventsHandlerUnitTest extends TestCase
                 return $this->body;
             }
 
-            public function getKey(): ?string
+            public function getKey(): string
             {
                 return (string) ($this->body['order_id'] ?? null);
             }
 
-            public function getOffset(): ?int
+            public function getOffset(): int
             {
                 return 0;
             }

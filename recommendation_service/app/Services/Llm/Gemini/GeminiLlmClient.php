@@ -223,10 +223,6 @@ PROMPT;
         $systemBits = [];
 
         foreach ($messages as $message) {
-            if (! $message instanceof ChatMessage) {
-                throw new LlmException('chat() expects a list of ChatMessage');
-            }
-
             if ($message->role === ChatMessage::ROLE_SYSTEM) {
                 $systemBits[] = $message->content;
 

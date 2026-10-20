@@ -2,11 +2,21 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
+/**
+ * @property string $id
+ * @property string $user_id
+ * @property Carbon|null $created_at
+ * @property Carbon $last_activity_at
+ * @property Carbon $expires_at
+ * @property-read Collection<int, Message> $messages
+ */
 class Conversation extends Model
 {
     use HasUuids;
@@ -26,22 +36,23 @@ class Conversation extends Model
         'expires_at' => 'datetime',
     ];
 
+    /** @return HasMany<Message, $this> */
     public function messages(): HasMany
     {
         return $this->hasMany(Message::class);
     }
 
-    public static function computeExpiresAt(Carbon $createdAt, Carbon $lastActivityAt): Carbon
+    public static function computeExpiresAt(CarbonInterface $createdAt, CarbonInterface $lastActivityAt): Carbon
     {
-        $hardCap = $createdAt->copy()->addHours(self::HARD_TTL_HOURS);
-        $idleCap = $lastActivityAt->copy()->addMinutes(self::IDLE_TTL_MINUTES);
+        $hardCap = (new Carbon($createdAt))->addHours(self::HARD_TTL_HOURS);
+        $idleCap = (new Carbon($lastActivityAt))->addMinutes(self::IDLE_TTL_MINUTES);
 
         return $hardCap->lt($idleCap) ? $hardCap : $idleCap;
     }
 
-    public function touchActivity(?Carbon $at = null): void
+    public function touchActivity(?CarbonInterface $at = null): void
     {
-        $at ??= now();
+        $at = new Carbon($at ?? now());
         $this->last_activity_at = $at;
         $this->expires_at = self::computeExpiresAt($this->created_at ?? $at, $at);
         $this->save();

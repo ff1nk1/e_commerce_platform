@@ -9,6 +9,7 @@ use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Junges\Kafka\Contracts\ConsumerMessage;
 use Mockery;
+use Mockery\MockInterface;
 use Tests\Concerns\BindsFakePaymentGateway;
 use Tests\Concerns\BindsInMemoryIdempotency;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
@@ -141,8 +142,9 @@ class InsufficientStockSagaTest extends TestCase
         ])->assertOk()->assertJsonPath('checkout_url', 'https://checkout.stripe.com/c/pay/cs_ok');
     }
 
-    private function stockMessage(string $eventType, array $body): ConsumerMessage
+    private function stockMessage(string $eventType, array $body): ConsumerMessage&MockInterface
     {
+        /** @var ConsumerMessage&MockInterface $message */
         $message = Mockery::mock(ConsumerMessage::class);
         $message->shouldReceive('getHeaders')->andReturn(['event-type' => $eventType]);
         $message->shouldReceive('getBody')->andReturn($body);

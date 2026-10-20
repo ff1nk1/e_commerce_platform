@@ -118,7 +118,7 @@ class ProductAttributeSeeder extends Seeder
                 'name' => $product->name,
             ]));
 
-        $this->command?->info(sprintf(
+        $this->command->info(sprintf(
             'Seeded attributes and republished %d products to Kafka.',
             Product::query()->count()
         ));

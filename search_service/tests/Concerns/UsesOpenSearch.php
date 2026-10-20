@@ -31,9 +31,18 @@ trait UsesOpenSearch
 
     protected function recreateSearchIndices(): void
     {
+        $productsIndex = $_ENV['OPENSEARCH_PRODUCTS_INDEX']
+            ?? $_SERVER['OPENSEARCH_PRODUCTS_INDEX']
+            ?? getenv('OPENSEARCH_PRODUCTS_INDEX')
+            ?: 'products_test';
+        $categoriesIndex = $_ENV['OPENSEARCH_CATEGORIES_INDEX']
+            ?? $_SERVER['OPENSEARCH_CATEGORIES_INDEX']
+            ?? getenv('OPENSEARCH_CATEGORIES_INDEX')
+            ?: 'categories_test';
+
         config([
-            'opensearch.indices.products' => env('OPENSEARCH_PRODUCTS_INDEX', 'products_test'),
-            'opensearch.indices.categories' => env('OPENSEARCH_CATEGORIES_INDEX', 'categories_test'),
+            'opensearch.indices.products' => is_string($productsIndex) ? $productsIndex : 'products_test',
+            'opensearch.indices.categories' => is_string($categoriesIndex) ? $categoriesIndex : 'categories_test',
         ]);
 
         // Client is a singleton — rebuild if hosts changed in tests.

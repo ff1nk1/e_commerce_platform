@@ -41,9 +41,9 @@
         <env name="OPENSEARCH_HOSTS" value="http://search_opensearch:9200"/>
         <env name="OPENSEARCH_PRODUCTS_INDEX" value="products_test"/>
         <env name="OPENSEARCH_CATEGORIES_INDEX" value="categories_test"/>
-        <env name="OPENSEARCH_REFRESH_ON_WRITE" value="true"/>
+        <env name="OPENSEARCH_REFRESH_ON_WRITE" value="true" force="true"/>
         <env name="OPENSEARCH_TRACK_TOTAL_HITS" value="10000"/>
-        <env name="ALLOW_SKIP_ANALYTICS" value="true"/>
+        <env name="ALLOW_SKIP_ANALYTICS" value="true" force="true"/>
         <env name="SEARCH_THROTTLE_PER_MINUTE" value="1000"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
