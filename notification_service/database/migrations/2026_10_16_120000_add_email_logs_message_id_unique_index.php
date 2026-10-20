@@ -8,10 +8,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::connection('mongodb')->table('email_logs', function ($collection) {
-            $collection->index('message_id', [
-                'unique' => true,
-                'sparse' => true,
-            ]);
+            // index($columns, $name, …) — 2nd arg is index name, not options.
+            $collection->sparse_and_unique('message_id');
         });
     }
 
