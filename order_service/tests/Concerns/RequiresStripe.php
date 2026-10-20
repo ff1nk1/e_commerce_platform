@@ -6,7 +6,11 @@ trait RequiresStripe
 {
     protected function requireStripeSecret(): string
     {
-        $secret = (string) config('services.stripe.secret', $this->envString('STRIPE_SECRET', ''));
+        // config() default is unused when the key exists but is ""; fall back explicitly.
+        $secret = (string) config('services.stripe.secret');
+        if ($secret === '' || str_contains($secret, 'dummy')) {
+            $secret = $this->envString('STRIPE_SECRET', '');
+        }
         if ($secret === '' || str_contains($secret, 'dummy')) {
             $this->fail('STRIPE_SECRET is not configured for integration tests.');
         }
@@ -16,7 +20,10 @@ trait RequiresStripe
 
     protected function requireStripeWebhookSecret(): string
     {
-        $secret = (string) config('services.stripe.webhook_secret', $this->envString('STRIPE_WEBHOOK_SECRET', ''));
+        $secret = (string) config('services.stripe.webhook_secret');
+        if ($secret === '') {
+            $secret = $this->envString('STRIPE_WEBHOOK_SECRET', '');
+        }
         if ($secret === '') {
             $this->fail('STRIPE_WEBHOOK_SECRET is not configured for integration tests.');
         }
