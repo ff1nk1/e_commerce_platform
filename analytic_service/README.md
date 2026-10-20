@@ -200,6 +200,23 @@ go run ./cmd/api
 go run ./cmd/consumers
 ```
 
+## Lint
+
+Нужны host Go 1.23+ и [golangci-lint](https://golangci-lint.run/) v1.64.x. Конфиг: [`.golangci.yml`](.golangci.yml).
+
+```bash
+# из корня репозитория
+./scripts/lint-all.sh analytic
+./scripts/lint-all.sh --fix analytic   # gofmt/goimports и другие автофиксы
+
+# или напрямую
+cd analytic_service
+golangci-lint run ./...
+golangci-lint run --fix ./...
+```
+
+В CI (`deploy.yml` job lint) analytic прогоняется вместе с Laravel через `./scripts/lint-all.sh --no-fix`.
+
 ## Тесты
 
 ```bash

@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint (Pint + PHPStan)
+    name: Lint (Pint + PHPStan + golangci)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -29,6 +29,18 @@ jobs:
           php-version: "8.5"
           coverage: none
           tools: composer:v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: analytic_service/go.sum
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          install-only: true
 
       - name: Install root lint tooling
         run: composer install --no-interaction --prefer-dist --no-progress
@@ -44,6 +56,7 @@ jobs:
       STRIPE_SECRET: ${{ secrets.STRIPE_SECRET }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -64,6 +77,22 @@ jobs:
           fi
           sed -i "s|^STRIPE_SECRET=.*|STRIPE_SECRET=${STRIPE_SECRET}|" order_service/.env
           sed -i "s|^STRIPE_WEBHOOK_SECRET=.*|STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}|" order_service/.env
+
+      - name: Inject JWT secret for auth
+        run: |
+          if [[ -z "${JWT_SECRET}" ]]; then
+            echo "::error::Set repository secret JWT_SECRET."
+            exit 1
+          fi
+          sed -i "s|^JWT_SECRET=.*|JWT_SECRET=${JWT_SECRET}|" auth_service/.env
+
+      - name: Inject Gemini API key for recommendation integration
+        run: |
+          if [[ -z "${GEMINI_API_KEY}" ]]; then
+            echo "::error::Set repository secret GEMINI_API_KEY."
+            exit 1
+          fi
+          sed -i "s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=${GEMINI_API_KEY}|" recommendation_service/.env
 
       - name: Start services required by test-all
         run: |

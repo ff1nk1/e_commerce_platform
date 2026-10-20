@@ -27,9 +27,15 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Filament calls Guard::logout(); RequestGuard (viaRequest) does not define it.
+        // Setting user=null alone is not enough: user() treats null as "not resolved yet"
+        // and re-runs the gateway-headers callback against the same X-User-* headers.
         RequestGuard::macro('logout', function (): void {
-            /** @var RequestGuard $this */
-            $this->user = null;
+            /** @var RequestGuard $guard */
+            $guard = $this;
+            foreach (['X-User-Id', 'X-User-Role', 'X-User-Name', 'X-User-Email'] as $header) {
+                $guard->request->headers->remove($header);
+            }
+            $guard->user = null;
         });
 
         Auth::viaRequest('gateway-headers', function (Request $request): ?User {

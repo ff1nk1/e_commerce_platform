@@ -20,6 +20,16 @@ abstract class TestCase extends BaseTestCase
         $_ENV['DB_URL'] = $_SERVER['DB_URL'] = '';
         $_ENV['DB_HOST'] = $_SERVER['DB_HOST'] = '';
 
+        // auth_app often starts with JWT_SECRET="" in $_SERVER (empty .env at
+        // container create). Laravel Env::get prefers $_SERVER over $_ENV, so
+        // phpunit.xml force=true alone leaves config('jwt.secret') empty.
+        $jwtSecret = (string) ($_ENV['JWT_SECRET'] ?? getenv('JWT_SECRET') ?: '');
+        if ($jwtSecret === '') {
+            $jwtSecret = 'test-secret-key-for-phpunit-only';
+        }
+        putenv('JWT_SECRET='.$jwtSecret);
+        $_ENV['JWT_SECRET'] = $_SERVER['JWT_SECRET'] = $jwtSecret;
+
         parent::setUp();
 
         $this->withoutMiddleware(ThrottleRequests::class);
