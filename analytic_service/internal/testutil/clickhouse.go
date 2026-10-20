@@ -24,11 +24,18 @@ const defaultClickHousePassword = "analytic_local_secret"
 func OpenTestStore(t *testing.T) (*store.Store, driver.Conn) {
 	t.Helper()
 
+	asyncInsert, _, busyTimeoutMs, maxDataSize, maxQueryNumber := config.DefaultAsyncInsertConfig()
 	cfg := config.Config{
 		ClickHouseAddr:     config.EnvOr("CLICKHOUSE_ADDR", "localhost:19000"),
 		ClickHouseDatabase: config.EnvOr("CLICKHOUSE_DATABASE", "analytics_test"),
 		ClickHouseUser:     config.EnvOr("CLICKHOUSE_USER", "default"),
 		ClickHousePassword: config.EnvOr("CLICKHOUSE_PASSWORD", defaultClickHousePassword),
+		// Same async_insert path as prod, but wait for flush so insert→SELECT tests are deterministic.
+		ClickHouseAsyncInsert:               asyncInsert,
+		ClickHouseWaitForAsyncInsert:        1,
+		ClickHouseAsyncInsertBusyTimeoutMs:  busyTimeoutMs,
+		ClickHouseAsyncInsertMaxDataSize:    maxDataSize,
+		ClickHouseAsyncInsertMaxQueryNumber: maxQueryNumber,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

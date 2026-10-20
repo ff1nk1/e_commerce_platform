@@ -22,12 +22,24 @@ func options(cfg config.Config, withDB bool) *ch.Options {
 	if withDB {
 		auth.Database = cfg.ClickHouseDatabase
 	}
-	return &ch.Options{
+	opt := &ch.Options{
 		Addr:             []string{cfg.ClickHouseAddr},
 		Auth:             auth,
 		DialTimeout:      10 * time.Second,
 		ConnOpenStrategy: ch.ConnOpenInOrder,
 	}
+	// Server-side INSERT batching — only on DB connections (ingest + API).
+	// EnsureDatabase (withDB=false) stays without these settings.
+	if withDB {
+		opt.Settings = ch.Settings{
+			"async_insert":                  cfg.ClickHouseAsyncInsert,
+			"wait_for_async_insert":         cfg.ClickHouseWaitForAsyncInsert,
+			"async_insert_busy_timeout_ms":  cfg.ClickHouseAsyncInsertBusyTimeoutMs,
+			"async_insert_max_data_size":    cfg.ClickHouseAsyncInsertMaxDataSize,
+			"async_insert_max_query_number": cfg.ClickHouseAsyncInsertMaxQueryNumber,
+		}
+	}
+	return opt
 }
 
 func Connect(ctx context.Context, cfg config.Config) (driver.Conn, error) {

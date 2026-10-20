@@ -84,9 +84,18 @@ flowchart LR
 | `CLICKHOUSE_DATABASE` | `analytics` | БД |
 | `CLICKHOUSE_USER` | `default` | Пользователь |
 | `CLICKHOUSE_PASSWORD` | **обязателен** | Пустой пароль → ошибка `config.Load` |
+| `CLICKHOUSE_ASYNC_INSERT` | `1` | Server-side буфер INSERT |
+| `CLICKHOUSE_WAIT_FOR_ASYNC_INSERT` | `0` | `0` = ack сразу (fire-and-forget); `1` = ждать flush |
+| `CLICKHOUSE_ASYNC_INSERT_BUSY_TIMEOUT_MS` | `1000` | Flush по времени (мс) |
+| `CLICKHOUSE_ASYNC_INSERT_MAX_DATA_SIZE` | `10485760` | Flush по размеру (байты, 10 МБ) |
+| `CLICKHOUSE_ASYNC_INSERT_MAX_QUERY_NUMBER` | `100` | Flush примерно после N INSERT’ов |
 | `MIGRATIONS_DIR` | `migrations` | Каталог `.sql` миграций |
 
 Локальный compose подставляет `${CLICKHOUSE_PASSWORD:-analytic_local_secret}` в ClickHouse, API и consumers.
+
+### Async insert (батчинг на стороне CH)
+
+Клиент шлёт мелкие `PrepareBatch` INSERT’ы; ClickHouse склеивает их по `async_insert_*` (session settings на native Connect). При `wait_for_async_insert=0` Kafka commit может пройти до физического flush — при краше CH до сброса пачки возможна потеря уже «принятых» строк. В тестах `testutil` форсирует `wait_for_async_insert=1`.
 
 ### Смена пароля на уже созданном volume
 

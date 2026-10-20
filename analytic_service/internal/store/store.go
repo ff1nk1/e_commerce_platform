@@ -1,4 +1,5 @@
-// CLICKHOUSE GET ONLY ONE ROW INSTEAD OF MANY AT ONE TIME BECAUSE ITS A DEV MODE
+// Inserts send one (or few) rows per PrepareBatch call; ClickHouse coalesces them
+// via async_insert session settings on the connection (see internal/clickhouse).
 
 package store
 

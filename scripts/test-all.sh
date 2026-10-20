@@ -98,15 +98,60 @@ should_run() {
   return 1
 }
 
+# Read KEY from a dotenv file (first match). Strips surrounding single/double quotes.
+dotenv_get() {
+  local file="$1"
+  local key="$2"
+  local line value
+  [[ -f "$file" ]] || return 0
+  line="$(grep -E "^${key}=" "$file" | head -n1 || true)"
+  [[ -n "$line" ]] || return 0
+  value="${line#*=}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  if [[ "$value" == \"*\" ]]; then
+    value="${value:1:-1}"
+  elif [[ "$value" == \'*\' ]]; then
+    value="${value:1:-1}"
+  fi
+  printf '%s' "$value"
+}
+
+# Real Stripe test-mode keys only — reject empty / phpunit dummy placeholders.
+stripe_env_usable() {
+  local value="$1"
+  [[ -n "$value" && "$value" != *dummy* ]]
+}
+
+# Ensure order_service/.env has usable Stripe secrets; print clear error if not.
+require_stripe_env() {
+  local envfile="$ROOT/order_service/.env"
+  STRIPE_SECRET="$(dotenv_get "$envfile" STRIPE_SECRET)"
+  STRIPE_WEBHOOK_SECRET="$(dotenv_get "$envfile" STRIPE_WEBHOOK_SECRET)"
+  if ! stripe_env_usable "$STRIPE_SECRET" || ! stripe_env_usable "$STRIPE_WEBHOOK_SECRET"; then
+    log "${RED}ERROR:${NC} order integration needs real Stripe test-mode keys in ${BOLD}order_service/.env${NC}:"
+    log "  STRIPE_SECRET + STRIPE_WEBHOOK_SECRET (non-empty, not *dummy*)"
+    log "  CI: set repository secrets STRIPE_SECRET and STRIPE_WEBHOOK_SECRET (see deploy.yml inject step)."
+    return 1
+  fi
+  return 0
+}
+
 run_php_suite() {
   local label="$1"
   local app="$2"
   shift 2
+  local -a exec_env=()
+  # Optional leading -e KEY=VALUE pairs (passed to docker compose exec).
+  while [[ $# -gt 0 && "$1" == -e ]]; do
+    exec_env+=(-e "$2")
+    shift 2
+  done
   local start end elapsed rc
   log ""
   log "${BOLD}═══ [${label}] $* ═══${NC}"
   start=$(date +%s)
-  if "${COMPOSE[@]}" exec -T "$app" "$@"; then
+  if "${COMPOSE[@]}" exec -T "${exec_env[@]}" "$app" "$@"; then
     rc=0
   else
     rc=$?
@@ -246,7 +291,17 @@ if should_run notification; then
 fi
 if should_run order; then
   run_php_suite order order_app php artisan test
-  run_php_suite "order/integration" order_app php artisan test -c phpunit.integration.xml
+  # Inject Stripe secrets at exec time so stale empty container $_SERVER cannot
+  # block Laravel (same class of bug as JWT; keys must come from .env / CI).
+  if require_stripe_env; then
+    run_php_suite "order/integration" order_app \
+      -e "STRIPE_SECRET=${STRIPE_SECRET}" \
+      -e "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}" \
+      php artisan test -c phpunit.integration.xml
+  else
+    RESULTS+=("FAIL order/integration")
+    FAILED=1
+  fi
 fi
 if should_run search; then
   run_php_suite search search_app php artisan test
