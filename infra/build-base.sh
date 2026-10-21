@@ -8,4 +8,4 @@ DOCKER_BUILDKIT=1 docker build \
   -f infra/php-base/Dockerfile \
   infra/php-base
 
-echo "Built php-project-php-base:8.5 (bookworm + mirror.yandex.ru)"
+echo "Built php-project-php-base:8.5 (php-fpm + nginx, bookworm + mirror.yandex.ru)"

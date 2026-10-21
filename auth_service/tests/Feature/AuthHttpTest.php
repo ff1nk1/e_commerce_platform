@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Junges\Kafka\Facades\Kafka;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class AuthHttpTest extends TestCase
@@ -44,7 +45,54 @@ class AuthHttpTest extends TestCase
         ]);
 
         $response->assertCreated();
-        $this->assertDatabaseHas('users', ['email' => 'john@example.com']);
+        $this->assertDatabaseHas('users', [
+            'email' => 'john@example.com',
+            'number' => '+12345678901',
+        ]);
+    }
+
+    public function test_registration_normalizes_phone_with_spaces(): void
+    {
+        Kafka::fake();
+
+        $response = $this->postJson('/api/registration', [
+            'name' => 'Jane Doe',
+            'email' => 'jane@example.com',
+            'password' => 'secret123',
+            'number' => '+48 123 456 789',
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('users', [
+            'email' => 'jane@example.com',
+            'number' => '+48123456789',
+        ]);
+    }
+
+    #[DataProvider('invalidRegistrationPhoneProvider')]
+    public function test_registration_rejects_invalid_phone(string $number): void
+    {
+        Kafka::fake();
+
+        $response = $this->postJson('/api/registration', [
+            'name' => 'John Doe',
+            'email' => 'invalid-phone@example.com',
+            'password' => 'secret123',
+            'number' => $number,
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['number']);
+    }
+
+    public static function invalidRegistrationPhoneProvider(): array
+    {
+        return [
+            'missing plus' => ['48123456789'],
+            'too short' => ['+481234567'],
+            'letters' => ['+48abcdefghi'],
+            'leading zero after plus' => ['+048123456789'],
+        ];
     }
 
     public function test_login_sets_http_only_token_cookies(): void

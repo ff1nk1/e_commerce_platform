@@ -1,7 +1,10 @@
-# PHP base image (build once, used by all microservices):
+# PHP base image (php-fpm + nginx + CLI; build once, used by all Laravel services):
 #   ./infra/build-base.sh
 # or from repo root:
 #   docker compose build php-base
+#
+# Each Laravel *_app runs entrypoint-http.sh (nginx on :800x → php-fpm :9000).
+# Workers override command to `php artisan …` (CLI from the same image).
 #
 # Edge (Traefik): frontend + catalog admin (/admin-catalog via auth_service).
 # React admin UI is served by frontend at /admin/*.

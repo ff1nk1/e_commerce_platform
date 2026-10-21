@@ -8,6 +8,7 @@ use App\Models\ProductCatalog;
 use App\Services\Catalog\Contracts\RelevanceGate;
 use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\DTOs\SearchFilters;
+use App\Services\Llm\Exceptions\LlmException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -343,6 +344,48 @@ class RecommendationsApiTest extends TestCase
         $this->postJson('/api/recommendations/reindex')
             ->assertOk()
             ->assertJsonPath('indexed', 0);
+    }
+
+    public function test_chat_returns_friendly_message_when_gemini_unavailable(): void
+    {
+        $this->app->instance(LlmClient::class, new class implements LlmClient
+        {
+            public function embed(string $text, string $taskType = 'RETRIEVAL_DOCUMENT'): array
+            {
+                return [];
+            }
+
+            public function chat(array $messages, ?string $systemPrompt = null): string
+            {
+                return '';
+            }
+
+            public function extractFilters(string $userMessage): SearchFilters
+            {
+                throw LlmException::http(
+                    'Gemini extractFilters failed (503): {"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}',
+                    503,
+                );
+            }
+
+            public function extractFiltersAndEmbed(string $userMessage, string $embedTaskType = 'RETRIEVAL_QUERY'): array
+            {
+                return [$this->extractFilters($userMessage), []];
+            }
+        });
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'найди джинсы',
+            'limit' => 5,
+        ]);
+
+        $response->assertStatus(503)
+            ->assertJsonPath('message', 'Сервис ИИ сейчас перегружен. Попробуйте чуть позже.')
+            ->assertJsonMissingPath('exception');
+
+        $this->assertStringNotContainsString('high demand', $response->getContent());
+        $this->assertStringNotContainsString('Gemini extractFilters', $response->getContent());
     }
 
     /**

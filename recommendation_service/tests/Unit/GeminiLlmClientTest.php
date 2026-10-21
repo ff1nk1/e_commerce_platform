@@ -11,7 +11,7 @@ use Tests\TestCase;
 
 class GeminiLlmClientTest extends TestCase
 {
-    private function client(): GeminiLlmClient
+    private function client(int $timeout = 12): GeminiLlmClient
     {
         return new GeminiLlmClient(
             apiKey: 'test-key',
@@ -20,6 +20,7 @@ class GeminiLlmClientTest extends TestCase
             embeddingModel: 'text-embedding-004',
             temperature: 0.3,
             embeddingDimensions: 768,
+            timeout: $timeout,
         );
     }
 
@@ -143,10 +144,44 @@ class GeminiLlmClientTest extends TestCase
             '*/models/text-embedding-004:embedContent' => Http::response(['error' => 'boom'], 500),
         ]);
 
-        $this->expectException(LlmException::class);
-        $this->expectExceptionMessage('Gemini embed failed (500)');
+        try {
+            $this->client()->embed('fail');
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertStringContainsString('Gemini embed failed (500)', $e->getMessage());
+            $this->assertSame(500, $e->statusCode());
+            $this->assertSame(LlmException::KIND_HTTP, $e->kind());
+            $this->assertSame(502, $e->publicHttpStatus());
+        }
+    }
 
-        $this->client()->embed('fail');
+    public function test_extract_filters_503_preserves_status_for_user_message(): void
+    {
+        $body = json_encode([
+            'error' => [
+                'code' => 503,
+                'message' => 'This model is currently experiencing high demand.',
+                'status' => 'UNAVAILABLE',
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        Http::fake([
+            '*/models/gemini-3.8-flash:generateContent' => Http::response($body, 503),
+        ]);
+
+        try {
+            $this->client()->extractFilters('найди джинсы');
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertStringContainsString('Gemini extractFilters failed (503)', $e->getMessage());
+            $this->assertStringContainsString('high demand', $e->getMessage());
+            $this->assertSame(503, $e->statusCode());
+            $this->assertSame(
+                'Сервис ИИ сейчас перегружен. Попробуйте чуть позже.',
+                $e->userMessage(),
+            );
+            $this->assertSame(503, $e->publicHttpStatus());
+        }
     }
 
     public function test_missing_api_key_throws_llm_exception(): void
@@ -158,12 +193,18 @@ class GeminiLlmClientTest extends TestCase
             embeddingModel: 'text-embedding-004',
             temperature: 0.3,
             embeddingDimensions: 768,
+            timeout: 12,
         );
 
-        $this->expectException(LlmException::class);
-        $this->expectExceptionMessage('GEMINI_API_KEY is not configured');
-
-        $client->embed('x');
+        try {
+            $client->embed('x');
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertSame('GEMINI_API_KEY is not configured', $e->getMessage());
+            $this->assertSame(LlmException::KIND_CONFIGURATION, $e->kind());
+            $this->assertSame('Сервис рекомендаций временно недоступен.', $e->userMessage());
+            $this->assertSame(503, $e->publicHttpStatus());
+        }
     }
 
     public function test_extract_filters_and_embed_embeds_cleaned_query(): void
@@ -234,5 +275,28 @@ class GeminiLlmClientTest extends TestCase
             return ($body['generationConfig']['temperature'] ?? null) === 0
                 && ($body['generationConfig']['responseMimeType'] ?? null) === 'application/json';
         });
+    }
+
+    public function test_exhausted_budget_throws_friendly_timeout(): void
+    {
+        $client = $this->client(timeout: 12);
+        $client->startBudget(12);
+        // Simulate prior Gemini calls consuming the chat budget.
+        $ref = new \ReflectionClass($client);
+        $prop = $ref->getProperty('budgetRemaining');
+        $prop->setValue($client, 0.0);
+
+        try {
+            $client->embed('x');
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertSame(504, $e->statusCode());
+            $this->assertSame(
+                'ИИ слишком долго отвечает. Попробуйте позже.',
+                $e->userMessage(),
+            );
+        } finally {
+            $client->clearBudget();
+        }
     }
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { register } from '../api/auth'
 import '../styles/auth.css'
 
@@ -142,6 +142,11 @@ export default function Registration() {
                         {processing ? 'Registering...' : 'Create account'}
                     </button>
                 </form>
+
+                <div className="auth-footer">
+                    <span>Уже есть аккаунт?</span>
+                    <Link to="/login">Войти</Link>
+                </div>
             </div>
         </div>
     )

@@ -154,7 +154,7 @@ Storefront listing кэширует ключ с hash фильтров ([`Catalog
 
 | Сервис | Команда |
 |--------|---------|
-| app | `php artisan serve` (internal) |
+| app | nginx + php-fpm (`entrypoint-http.sh`, port 8002) |
 | order consumer | `php artisan kafka:consume:order-events` |
 | outbox | `php artisan kafka:outbox:work` |
 

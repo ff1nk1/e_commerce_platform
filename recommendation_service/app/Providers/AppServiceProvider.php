@@ -32,6 +32,7 @@ class AppServiceProvider extends ServiceProvider
                     embeddingModel: (string) config('llm.gemini.embedding_model', 'gemini-embedding-001'),
                     temperature: (float) config('llm.gemini.temperature', 0.3),
                     embeddingDimensions: (int) config('llm.gemini.embedding_dimensions', 768),
+                    timeout: max(1, (int) config('llm.gemini.timeout', 12)),
                 ),
                 default => throw new InvalidArgumentException("Unsupported LLM_DRIVER [{$driver}]"),
             };

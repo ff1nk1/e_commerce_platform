@@ -111,7 +111,7 @@ class GeminiIntegrationTest extends TestCase
         // Live chat does extractFilters + chat (generateContent) and often hits the
         // 60s HTTP timeout in CI/act even when embed smoke tests pass.
         $this->markTestSkipped(
-            'Gemini chat E2E is flaky (HTTP timeout) in CI; embed/search cover the live API key path'
+            'Gemini chat E2E is flaky (HTTP timeout / 12s budget) in CI; embed/search cover the live API key path'
         );
     }
 }

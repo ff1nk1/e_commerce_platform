@@ -13,6 +13,7 @@ use App\Services\Catalog\SearchFiltersNormalizer;
 use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\DTOs\SearchFilters;
+use App\Services\Llm\Gemini\GeminiLlmClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -77,35 +78,45 @@ PROMPT;
             ->reverse()
             ->values();
 
-        [$extracted, $queryVector] = $this->resolveFiltersAndVector($messageText, $input, $history);
-        $merged = $this->mergeFilters($extracted, $input);
-        $filters = $this->filtersNormalizer->normalize($merged);
-        $limit = max(1, min((int) ($input['limit'] ?? 5), 20));
-
-        $hits = $this->search->search($filters, $limit, $queryVector);
-
-        $preGateHits = $hits;
-        $hits = $this->relevanceGate->accept($hits);
-        if ($preGateHits !== [] && $hits === []) {
-            $this->logGateDroppedAll($preGateHits);
+        if ($this->llm instanceof GeminiLlmClient) {
+            $this->llm->startBudget((int) config('llm.gemini.timeout', 12));
         }
 
-        $hits = $this->freshnessChecker->keepFresh($hits);
+        try {
+            [$extracted, $queryVector] = $this->resolveFiltersAndVector($messageText, $input, $history);
+            $merged = $this->mergeFilters($extracted, $input);
+            $filters = $this->filtersNormalizer->normalize($merged);
+            $limit = max(1, min((int) ($input['limit'] ?? 5), 20));
 
-        $productCards = array_map(
-            static fn (SearchHit $hit): array => $hit->product->toCardArray(),
-            $hits,
-        );
+            $hits = $this->search->search($filters, $limit, $queryVector);
 
-        $chatMessages = [];
-        foreach ($history as $row) {
-            $chatMessages[] = $row->role === Message::ROLE_ASSISTANT
-                ? ChatMessage::assistant((string) $row->content)
-                : ChatMessage::user((string) $row->content);
+            $preGateHits = $hits;
+            $hits = $this->relevanceGate->accept($hits);
+            if ($preGateHits !== [] && $hits === []) {
+                $this->logGateDroppedAll($preGateHits);
+            }
+
+            $hits = $this->freshnessChecker->keepFresh($hits);
+
+            $productCards = array_map(
+                static fn (SearchHit $hit): array => $hit->product->toCardArray(),
+                $hits,
+            );
+
+            $chatMessages = [];
+            foreach ($history as $row) {
+                $chatMessages[] = $row->role === Message::ROLE_ASSISTANT
+                    ? ChatMessage::assistant((string) $row->content)
+                    : ChatMessage::user((string) $row->content);
+            }
+            $chatMessages[] = ChatMessage::user($messageText."\n\nCandidates:\n".$this->formatCandidates($productCards));
+
+            $answer = $this->llm->chat($chatMessages, self::SYSTEM_PROMPT);
+        } finally {
+            if ($this->llm instanceof GeminiLlmClient) {
+                $this->llm->clearBudget();
+            }
         }
-        $chatMessages[] = ChatMessage::user($messageText."\n\nCandidates:\n".$this->formatCandidates($productCards));
-
-        $answer = $this->llm->chat($chatMessages, self::SYSTEM_PROMPT);
 
         DB::transaction(function () use ($conversation, $messageText, $answer, $productCards): void {
             Message::query()->create([

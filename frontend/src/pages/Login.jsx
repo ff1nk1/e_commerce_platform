@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { login } from '../api/auth'
 import PageShell from '../components/PageShell'
 import Button from '../components/Button'
@@ -73,6 +73,11 @@ export default function Login() {
           {processing ? 'Signing in...' : 'Sign in'}
         </Button>
       </form>
+
+      <div className="auth-footer">
+        <span>Первый раз на сайте?</span>
+        <Link to="/registration">Зарегистрироваться</Link>
+      </div>
     </PageShell>
   )
 }

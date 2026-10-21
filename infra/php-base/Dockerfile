@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
+# Shared base for all Laravel microservices: php-fpm + nginx (+ CLI for workers).
 # deb.debian.org часто таймаутится — зеркало Yandex.
-FROM php:8.5-cli-bookworm
+FROM php:8.5-fpm-bookworm
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
@@ -37,6 +38,22 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         zip \
         intl
 
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
+        nginx \
+        gettext-base \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /etc/nginx/sites-enabled/default \
+    && mkdir -p /etc/nginx/templates
+
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+COPY zz-laravel-fpm.conf /usr/local/etc/php-fpm.d/zz-laravel.conf
+COPY zz-laravel-php.ini /usr/local/etc/php/conf.d/zz-laravel.ini
+COPY nginx-laravel.conf.template /etc/nginx/templates/laravel.conf.template
+COPY entrypoint-http.sh /usr/local/bin/entrypoint-http.sh
+
+RUN chmod +x /usr/local/bin/entrypoint-http.sh
 
 WORKDIR /var/www

@@ -6,6 +6,7 @@ use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\DTOs\SearchFilters;
 use App\Services\Llm\Exceptions\LlmException;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -36,6 +37,9 @@ Example follow-up after jeans: "а синие?" → query="джинсы", attrib
 Only extract values clearly implied by the user or prior turns.
 PROMPT;
 
+    /** Remaining seconds for a chat turn (extract+embed+chat); null = no shared budget. */
+    private ?float $budgetRemaining = null;
+
     public function __construct(
         private readonly string $apiKey,
         private readonly string $baseUrl,
@@ -43,7 +47,21 @@ PROMPT;
         private readonly string $embeddingModel,
         private readonly float $temperature,
         private readonly int $embeddingDimensions,
+        private readonly int $timeout = 12,
     ) {}
+
+    /**
+     * Cap total Gemini HTTP wait for one chat turn (does not include DB/search time).
+     */
+    public function startBudget(?int $seconds = null): void
+    {
+        $this->budgetRemaining = (float) max(1, $seconds ?? $this->timeout);
+    }
+
+    public function clearBudget(): void
+    {
+        $this->budgetRemaining = null;
+    }
 
     public function embed(string $text, string $taskType = 'RETRIEVAL_DOCUMENT'): array
     {
@@ -62,7 +80,7 @@ PROMPT;
         }
 
         return $this->parseEmbedResponse(
-            $this->http()->post($this->endpoint($this->embeddingModel, 'embedContent'), $payload)
+            $this->post($this->endpoint($this->embeddingModel, 'embedContent'), $payload)
         );
     }
 
@@ -89,20 +107,18 @@ PROMPT;
             ];
         }
 
-        $response = $this->http()
-            ->post($this->endpoint($this->chatModel, 'generateContent'), $payload);
+        $response = $this->post($this->endpoint($this->chatModel, 'generateContent'), $payload);
 
         if (! $response->successful()) {
-            throw new LlmException(sprintf(
-                'Gemini chat failed (%s): %s',
+            throw LlmException::http(
+                sprintf('Gemini chat failed (%s): %s', $response->status(), $response->body()),
                 $response->status(),
-                $response->body()
-            ));
+            );
         }
 
         $text = $response->json('candidates.0.content.parts.0.text');
         if (! is_string($text) || trim($text) === '') {
-            throw new LlmException('Gemini chat response missing candidate text');
+            throw LlmException::parse('Gemini chat response missing candidate text');
         }
 
         return $text;
@@ -131,7 +147,7 @@ PROMPT;
         ];
 
         return $this->parseExtractFiltersResponse(
-            $this->http()->post($this->endpoint($this->chatModel, 'generateContent'), $payload)
+            $this->post($this->endpoint($this->chatModel, 'generateContent'), $payload)
         );
     }
 
@@ -144,7 +160,46 @@ PROMPT;
         return [$filters, $this->embed($embedText, $embedTaskType)];
     }
 
-    private function http(): PendingRequest
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function post(string $endpoint, array $payload): Response
+    {
+        $timeout = $this->effectiveTimeout();
+        $started = microtime(true);
+
+        try {
+            return $this->http($timeout)->post($endpoint, $payload);
+        } catch (ConnectionException $e) {
+            $isTimeout = str_contains(strtolower($e->getMessage()), 'timed out')
+                || str_contains(strtolower($e->getMessage()), 'timeout');
+
+            throw LlmException::connection(
+                sprintf('Gemini request failed: %s', $e->getMessage()),
+                $isTimeout ? 504 : null,
+                $e,
+            );
+        } finally {
+            if ($this->budgetRemaining !== null) {
+                $this->budgetRemaining -= microtime(true) - $started;
+            }
+        }
+    }
+
+    private function effectiveTimeout(): int
+    {
+        if ($this->budgetRemaining === null) {
+            return $this->timeout;
+        }
+
+        if ($this->budgetRemaining <= 0.05) {
+            throw LlmException::connection('Gemini request budget exceeded', 504);
+        }
+
+        return max(1, (int) ceil($this->budgetRemaining));
+    }
+
+    private function http(int $timeout): PendingRequest
     {
         $this->ensureApiKey();
 
@@ -154,13 +209,14 @@ PROMPT;
             ->withHeaders([
                 'x-goog-api-key' => $this->apiKey,
             ])
-            ->timeout(60);
+            ->connectTimeout(min(5, $timeout))
+            ->timeout($timeout);
     }
 
     private function ensureApiKey(): void
     {
         if ($this->apiKey === '') {
-            throw new LlmException('GEMINI_API_KEY is not configured');
+            throw LlmException::configuration('GEMINI_API_KEY is not configured');
         }
     }
 
@@ -175,16 +231,15 @@ PROMPT;
     private function parseEmbedResponse(Response $response): array
     {
         if (! $response->successful()) {
-            throw new LlmException(sprintf(
-                'Gemini embed failed (%s): %s',
+            throw LlmException::http(
+                sprintf('Gemini embed failed (%s): %s', $response->status(), $response->body()),
                 $response->status(),
-                $response->body()
-            ));
+            );
         }
 
         $values = $response->json('embedding.values');
         if (! is_array($values) || $values === []) {
-            throw new LlmException('Gemini embed response missing embedding.values');
+            throw LlmException::parse('Gemini embed response missing embedding.values');
         }
 
         return array_map(static fn (mixed $v): float => (float) $v, array_values($values));
@@ -193,21 +248,20 @@ PROMPT;
     private function parseExtractFiltersResponse(Response $response): SearchFilters
     {
         if (! $response->successful()) {
-            throw new LlmException(sprintf(
-                'Gemini extractFilters failed (%s): %s',
+            throw LlmException::http(
+                sprintf('Gemini extractFilters failed (%s): %s', $response->status(), $response->body()),
                 $response->status(),
-                $response->body()
-            ));
+            );
         }
 
         $text = $response->json('candidates.0.content.parts.0.text');
         if (! is_string($text) || trim($text) === '') {
-            throw new LlmException('Gemini extractFilters response missing JSON text');
+            throw LlmException::parse('Gemini extractFilters response missing JSON text');
         }
 
         $decoded = json_decode($text, true);
         if (! is_array($decoded)) {
-            throw new LlmException('Gemini extractFilters returned invalid JSON');
+            throw LlmException::parse('Gemini extractFilters returned invalid JSON');
         }
 
         return SearchFilters::fromArray($decoded);
@@ -239,7 +293,7 @@ PROMPT;
         }
 
         if ($contents === []) {
-            throw new LlmException('chat() requires at least one user/assistant message');
+            throw LlmException::parse('chat() requires at least one user/assistant message');
         }
 
         return [$contents, implode("\n\n", $systemBits)];

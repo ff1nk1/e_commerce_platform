@@ -10,6 +10,8 @@ docker compose up -d --build
 
 `bootstrap.sh` копирует `.env.example` → `.env` (если файла ещё нет), генерирует пустые `APP_KEY` и ставит PHP `vendor/` через Docker. Пароли БД/Redis/MinIO/ClickHouse уже с локальными дефолтами — их обычно трогать не нужно.
 
+Laravel HTTP-контейнеры (`*_app`) слушают свои порты через **nginx + php-fpm** (общий образ `php-project-php-base:8.5`). Kafka/scheduler/outbox в тех же образах запускают `php artisan …` через CLI. Edge `frontend_nginx` / Traefik без изменений.
+
 ## Секреты (заполнить вручную)
 
 Реальные ключи **не** лежат в репозитории (только в локальных `.env` и в GitHub Actions secrets). После bootstrap отредактируй:

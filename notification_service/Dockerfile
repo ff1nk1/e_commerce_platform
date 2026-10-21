@@ -8,6 +8,7 @@ COPY --chown=www-data:www-data . .
 RUN mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
+ENV NGINX_PORT=8003
 EXPOSE 8003
 
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8003"]
+CMD ["/usr/local/bin/entrypoint-http.sh"]

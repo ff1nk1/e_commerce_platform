@@ -20,6 +20,11 @@ services:
       KAFKA_BROKERS: kafka:29092
       OPENSEARCH_HOSTS: http://search_opensearch:9200
       KAFKA_CACHE_DRIVER: array
+      # No SQL — pin drivers so a stale .env cannot fall back to sqlite/database cache
+      # (throttle:search uses RateLimiter → CACHE_STORE).
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
       APP_URL: http://search_service_app:8005
     depends_on:
       search_opensearch:
