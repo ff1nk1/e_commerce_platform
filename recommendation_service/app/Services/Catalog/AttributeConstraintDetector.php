@@ -9,6 +9,7 @@ class AttributeConstraintDetector
 {
     public function __construct(
         private readonly AttributeNameNormalizer $names = new AttributeNameNormalizer,
+        private readonly ValueMatchStrategyResolver $valueStrategies = new ValueMatchStrategyResolver,
     ) {}
 
     /**
@@ -79,9 +80,7 @@ class AttributeConstraintDetector
 
     public function isSizeAttributeName(string $name): bool
     {
-        $normalized = str_replace('ё', 'е', mb_strtolower(trim($name)));
-
-        return str_contains($normalized, 'размер') || str_contains($normalized, 'size');
+        return $this->valueStrategies->isSizeRange($name);
     }
 
     public function isPreferredAttributeName(string $name): bool

@@ -110,7 +110,7 @@ class GeminiIntegrationTest extends TestCase
     {
         // Live extract+embed+chat needs a generous shared budget (CI/network variance).
         config(['llm.gemini.timeout' => 60]);
-        $this->app->forgetInstance(\App\Services\Llm\Contracts\LlmClient::class);
+        $this->app->forgetInstance(LlmClient::class);
 
         app(ProductIndexer::class)->upsertFromEvent([
             'id' => self::PRODUCT_ID,

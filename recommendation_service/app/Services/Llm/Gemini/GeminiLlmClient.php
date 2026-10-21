@@ -164,8 +164,17 @@ PROMPT;
         return $text;
     }
 
-    public function extractFilters(string $userMessage): SearchFilters
+    /**
+     * @param  list<string>  $catalogAttributeNames
+     */
+    public function extractFilters(string $userMessage, array $catalogAttributeNames = []): SearchFilters
     {
+        $system = self::FILTER_SYSTEM_PROMPT;
+        if ($catalogAttributeNames !== []) {
+            $system .= "\n\nCatalog attribute names for this product type (prefer these exact names when applicable):\n"
+                .implode(', ', $catalogAttributeNames);
+        }
+
         $payload = [
             'contents' => [
                 [
@@ -177,7 +186,7 @@ PROMPT;
             ],
             'systemInstruction' => [
                 'parts' => [
-                    ['text' => self::FILTER_SYSTEM_PROMPT],
+                    ['text' => $system],
                 ],
             ],
             'generationConfig' => [
@@ -192,13 +201,17 @@ PROMPT;
         );
     }
 
+    /**
+     * @param  list<string>  $catalogAttributeNames
+     */
     public function extractFiltersAndEmbed(
         string $userMessage,
         string $embedTaskType = 'RETRIEVAL_QUERY',
         ?string $embedText = null,
+        array $catalogAttributeNames = [],
     ): array {
         // Embed after extract so the vector uses cleaned query text, not the raw utterance.
-        $filters = $this->extractFilters($userMessage);
+        $filters = $this->extractFilters($userMessage, $catalogAttributeNames);
         $text = $filters->query ?: ($embedText ?? $userMessage);
 
         return [$filters, $this->embed($text, $embedTaskType)];

@@ -3,6 +3,7 @@
 namespace Tests\Fakes;
 
 use App\Services\Llm\Contracts\LlmClient;
+use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\DTOs\SearchFilters;
 
 class FakeLlmClient implements LlmClient
@@ -19,6 +20,14 @@ class FakeLlmClient implements LlmClient
 
     public string $lastExtractInput = '';
 
+    /** @var list<string> */
+    public array $lastCatalogAttributeNames = [];
+
+    /** @var list<ChatMessage> */
+    public array $lastChatMessages = [];
+
+    public ?string $lastChatSystemPrompt = null;
+
     public function __construct()
     {
         $this->filters = new SearchFilters(query: 'sneakers');
@@ -33,13 +42,17 @@ class FakeLlmClient implements LlmClient
 
     public function chat(array $messages, ?string $systemPrompt = null): string
     {
+        $this->lastChatMessages = $messages;
+        $this->lastChatSystemPrompt = $systemPrompt;
+
         return $this->lastChatAnswer;
     }
 
-    public function extractFilters(string $userMessage): SearchFilters
+    public function extractFilters(string $userMessage, array $catalogAttributeNames = []): SearchFilters
     {
         $this->extractCalls++;
         $this->lastExtractInput = $userMessage;
+        $this->lastCatalogAttributeNames = $catalogAttributeNames;
 
         return $this->filters;
     }
@@ -48,9 +61,11 @@ class FakeLlmClient implements LlmClient
         string $userMessage,
         string $embedTaskType = 'RETRIEVAL_QUERY',
         ?string $embedText = null,
+        array $catalogAttributeNames = [],
     ): array {
         $this->extractAndEmbedCalls++;
         $this->lastExtractInput = $userMessage;
+        $this->lastCatalogAttributeNames = $catalogAttributeNames;
 
         return [$this->filters, array_fill(0, 768, 0.01)];
     }

@@ -184,7 +184,78 @@ class RecommendationsApiTest extends TestCase
         // Preferred color soft-fallback must not empty results when attributes miss.
         $response->assertOk()
             ->assertJsonPath('products.0.product_id', 1);
-        $this->assertNotEmpty($response->json('extracted_filters.relaxed'));
+        $relaxed = $response->json('extracted_filters.relaxed');
+        $this->assertNotEmpty($relaxed);
+        $this->assertStringContainsString('точный Цвет не обязателен', implode('; ', $relaxed));
+
+        $system = (string) $this->llm->lastChatSystemPrompt;
+        $this->assertStringContainsString('запрещено говорить', $system);
+        $this->assertStringContainsString('точного совпадения нет', $system);
+
+        $lastUser = collect($this->llm->lastChatMessages)->last();
+        $this->assertNotNull($lastUser);
+        $this->assertStringContainsString('Ослабленные условия:', $lastUser->content);
+        $this->assertStringNotContainsString('Relaxed filters', $lastUser->content);
+        $this->assertStringNotContainsString('soft fallback', $lastUser->content);
+        $this->assertStringContainsString('Candidates:', $lastUser->content);
+        $this->assertStringNotContainsString('Candidates: (none)', $lastUser->content);
+    }
+
+    public function test_chat_omits_color_relax_when_final_hits_match_preferred(): void
+    {
+        $this->seedProduct(201, 'Black jeans 30', attributes: [
+            ['name' => 'Цвет', 'value' => 'Черный'],
+            ['name' => 'Размер', 'value' => '30'],
+        ], categoryName: 'Джинсы');
+
+        $this->llm->filters = new SearchFilters(
+            query: 'джинсы',
+            attributes: [
+                ['name' => 'Цвет', 'value' => 'черные'],
+                ['name' => 'Размер', 'value' => '30'],
+            ],
+        );
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'покажи мне черные джинсы 30 размера',
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertSame(201, $response->json('products.0.product_id'));
+        $relaxed = $response->json('extracted_filters.relaxed') ?? [];
+        $this->assertStringNotContainsString('Цвет', implode('; ', $relaxed));
+
+        $lastUser = collect($this->llm->lastChatMessages)->last();
+        $this->assertNotNull($lastUser);
+        $this->assertStringNotContainsString('точный Цвет не обязателен', $lastUser->content);
+    }
+
+    public function test_chat_labels_color_relax_only_when_hits_miss_color(): void
+    {
+        $this->seedProduct(202, 'Blue jeans 30', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+            ['name' => 'Размер', 'value' => '30'],
+        ], categoryName: 'Джинсы');
+
+        $this->llm->filters = new SearchFilters(
+            query: 'джинсы',
+            attributes: [
+                ['name' => 'Цвет', 'value' => 'черные'],
+                ['name' => 'Размер', 'value' => '30'],
+            ],
+        );
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'черные джинсы 30 размера',
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertSame(202, $response->json('products.0.product_id'));
+        $relaxed = $response->json('extracted_filters.relaxed') ?? [];
+        $this->assertNotEmpty($relaxed);
+        $this->assertStringContainsString('точный Цвет не обязателен', implode('; ', $relaxed));
     }
 
     public function test_chat_prefers_matching_color_over_mismatch(): void
@@ -227,6 +298,58 @@ class RecommendationsApiTest extends TestCase
         $this->assertSame([], $response->json('products'));
         $this->assertSame(1, $this->llm->extractAndEmbedCalls);
         $this->assertSame(0, $this->llm->embedCalls);
+    }
+
+    public function test_product_search_answer_chat_ignores_prior_turns(): void
+    {
+        $this->seedProduct(301, 'Phone 6.1', attributes: [
+            ['name' => 'Экран', 'value' => '6.1"'],
+        ], categoryName: 'Смартфоны');
+
+        $now = now();
+        $conversation = Conversation::query()->create([
+            'user_id' => '42',
+            'last_activity_at' => $now,
+            'expires_at' => $now->copy()->addHour(),
+            'active_filters' => [
+                'query' => 'джинсы',
+                'attributes' => [['name' => 'Цвет', 'value' => 'чёрный']],
+            ],
+        ]);
+        Message::query()->create([
+            'conversation_id' => $conversation->id,
+            'role' => Message::ROLE_USER,
+            'content' => 'черные джинсы 32 размера',
+        ]);
+        Message::query()->create([
+            'conversation_id' => $conversation->id,
+            'role' => Message::ROLE_ASSISTANT,
+            'content' => 'По вашему запросу на черные джинсы 32 размера подходящих товаров не нашлось.',
+        ]);
+
+        $this->llm->filters = new SearchFilters(
+            query: 'телефон',
+            attributes: [['name' => 'Экран', 'value' => '6.1']],
+        );
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'conversation_id' => $conversation->id,
+            'message' => 'покажи мне телефон с экраном 6.1',
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertSame(301, $response->json('products.0.product_id'));
+
+        $this->assertCount(1, $this->llm->lastChatMessages);
+        $this->assertSame('user', $this->llm->lastChatMessages[0]->role);
+        $this->assertStringContainsString('телефон с экраном 6.1', $this->llm->lastChatMessages[0]->content);
+        $this->assertStringContainsString('Candidates:', $this->llm->lastChatMessages[0]->content);
+        $this->assertStringNotContainsString('джинсы', $this->llm->lastChatMessages[0]->content);
+        $this->assertStringNotContainsString('не нашлось', $this->llm->lastChatMessages[0]->content);
+
+        $system = (string) $this->llm->lastChatSystemPrompt;
+        $this->assertStringContainsString('Не упоминай предыдущие запросы', $system);
     }
 
     public function test_chat_client_store_id_clears_extracted_store_name(): void
@@ -448,6 +571,51 @@ class RecommendationsApiTest extends TestCase
         $this->assertDatabaseHas('conversations', ['id' => $conversation->id]);
     }
 
+    public function test_chat_injects_phone_scoped_attribute_names_and_resolves_diagonal(): void
+    {
+        $this->seedProduct(101, 'Phone A', attributes: [
+            ['name' => 'Экран', 'value' => '6.1"'],
+            ['name' => 'Память', 'value' => '128 ГБ'],
+        ], categoryName: 'Смартфоны');
+        $this->seedProduct(102, 'Jeans B', attributes: [
+            ['name' => 'Размер', 'value' => '32'],
+            ['name' => 'Цвет', 'value' => 'Синий'],
+        ], categoryName: 'Джинсы');
+
+        $this->llm->filters = new SearchFilters(
+            query: 'телефон',
+            attributes: [['name' => 'Диагональ', 'value' => '6.1']],
+        );
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'найди телефон с диагональю 6.1',
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertContains('Экран', $this->llm->lastCatalogAttributeNames);
+        $this->assertNotContains('Размер', $this->llm->lastCatalogAttributeNames);
+        // Диагональ → Экран via synonym group against phone-scoped vocab (soft bucket).
+        $this->assertSame(
+            [['name' => 'Экран', 'value' => '6.1']],
+            $response->json('extracted_filters.attributes')
+        );
+        $this->assertSame(101, $response->json('products.0.product_id'));
+    }
+
+    public function test_chat_without_product_type_hint_skips_global_attr_dump(): void
+    {
+        $this->seedProduct(1, 'Blue sneakers');
+
+        $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'что-нибудь подешевле',
+            'limit' => 1,
+        ])->assertOk();
+
+        $this->assertSame([], $this->llm->lastCatalogAttributeNames);
+    }
+
     public function test_get_and_delete_conversation_are_scoped_to_owner(): void
     {
         $now = now();
@@ -522,7 +690,7 @@ class RecommendationsApiTest extends TestCase
                 return '';
             }
 
-            public function extractFilters(string $userMessage): SearchFilters
+            public function extractFilters(string $userMessage, array $catalogAttributeNames = []): SearchFilters
             {
                 throw LlmException::http(
                     'Gemini extractFilters failed (503): {"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}',
@@ -534,8 +702,9 @@ class RecommendationsApiTest extends TestCase
                 string $userMessage,
                 string $embedTaskType = 'RETRIEVAL_QUERY',
                 ?string $embedText = null,
+                array $catalogAttributeNames = [],
             ): array {
-                return [$this->extractFilters($userMessage), []];
+                return [$this->extractFilters($userMessage, $catalogAttributeNames), []];
             }
         });
 
@@ -556,8 +725,12 @@ class RecommendationsApiTest extends TestCase
     /**
      * @param  list<array{name: string, value: string}>|null  $attributes
      */
-    private function seedProduct(int $productId, string $name, ?array $attributes = null): void
-    {
+    private function seedProduct(
+        int $productId,
+        string $name,
+        ?array $attributes = null,
+        string $categoryName = 'Shoes',
+    ): void {
         $product = ProductCatalog::query()->create([
             'product_id' => $productId,
             'store_id' => 1,
@@ -565,7 +738,7 @@ class RecommendationsApiTest extends TestCase
             'name' => $name,
             'description' => $name,
             'category_id' => 2,
-            'category_name' => 'Shoes',
+            'category_name' => $categoryName,
             'image_url' => '/img/'.$productId.'.jpg',
             'price' => 100,
             'attributes' => $attributes ?? [['name' => 'Color', 'value' => 'Blue']],

@@ -52,8 +52,8 @@ class AttributeNameNormalizer
     {
         $out = [];
         foreach ($attributes as $row) {
-            $name = $this->canonicalize((string) ($row['name'] ?? ''));
-            $value = trim((string) ($row['value'] ?? ''));
+            $name = $this->canonicalize((string) $row['name']);
+            $value = trim((string) $row['value']);
             if ($name === '' || $value === '') {
                 continue;
             }

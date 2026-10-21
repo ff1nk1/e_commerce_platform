@@ -77,7 +77,7 @@ readonly class SearchFilters
     }
 
     /**
-     * @return list<array{name: string, value: string}>
+     * @return list<array{name: string, value: string, value_only?: bool}>
      */
     private static function parseAttributes(mixed $rawAttributes): array
     {
@@ -92,10 +92,18 @@ readonly class SearchFilters
             }
             $name = trim((string) ($row['name'] ?? ''));
             $value = trim((string) ($row['value'] ?? ''));
-            if ($name === '' || $value === '') {
+            $valueOnly = (bool) ($row['value_only'] ?? false);
+            if ($value === '') {
                 continue;
             }
-            $attributes[] = ['name' => $name, 'value' => $value];
+            if ($name === '' && ! $valueOnly) {
+                continue;
+            }
+            $attr = ['name' => $name, 'value' => $value];
+            if ($valueOnly) {
+                $attr['value_only'] = true;
+            }
+            $attributes[] = $attr;
         }
 
         return $attributes;

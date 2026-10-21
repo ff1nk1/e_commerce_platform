@@ -12,6 +12,7 @@ class ProductIndexer
     public function __construct(
         private readonly LlmClient $llm,
         private readonly ProductTextBuilder $textBuilder,
+        private readonly AttributeVocabulary $attributeVocabulary = new AttributeVocabulary,
     ) {}
 
     /**
@@ -78,12 +79,15 @@ class ProductIndexer
             $this->embedAndStore($product);
         }
 
+        $this->attributeVocabulary->forgetAll();
+
         return $product->fresh() ?? $product;
     }
 
     public function remove(int $productId): void
     {
         ProductCatalog::query()->where('product_id', $productId)->delete();
+        $this->attributeVocabulary->forgetAll();
     }
 
     public function setPublished(int $productId, bool $published): void

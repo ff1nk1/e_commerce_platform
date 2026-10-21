@@ -24,10 +24,10 @@ class Conversation extends Model
 
     public const HARD_TTL_HOURS = 24;
 
-    public const IDLE_TTL_MINUTES = 1;
+    public const IDLE_TTL_MINUTES = 30;
 
     /** Physical delete only after this many minutes past expires_at (API already blocks access). */
-    public const CLEANUP_GRACE_MINUTES = 0;
+    public const CLEANUP_GRACE_MINUTES = 5;
 
     protected $fillable = [
         'user_id',

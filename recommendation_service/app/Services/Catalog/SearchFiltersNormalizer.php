@@ -31,9 +31,41 @@ class SearchFiltersNormalizer
             priceMin: $priceMin,
             priceMax: $priceMax,
             query: $query !== '' ? $query : null,
-            attributes: $this->attributeNames->normalizeList($filters->attributes),
-            requiredAttributes: $this->attributeNames->normalizeList($filters->requiredAttributes),
-            preferredAttributes: $this->attributeNames->normalizeList($filters->preferredAttributes),
+            attributes: $this->normalizeAttrRows($filters->attributes),
+            requiredAttributes: $this->normalizeAttrRows($filters->requiredAttributes),
+            preferredAttributes: $this->normalizeAttrRows($filters->preferredAttributes),
         );
+    }
+
+    /**
+     * @param  list<array{name: string, value: string, value_only?: bool}>  $attributes
+     * @return list<array{name: string, value: string, value_only?: bool}>
+     */
+    private function normalizeAttrRows(array $attributes): array
+    {
+        $out = [];
+        foreach ($attributes as $row) {
+            $valueOnly = (bool) ($row['value_only'] ?? false);
+            $value = trim((string) $row['value']);
+            if ($value === '') {
+                continue;
+            }
+            if ($valueOnly) {
+                $out[] = [
+                    'name' => trim((string) $row['name']),
+                    'value' => $value,
+                    'value_only' => true,
+                ];
+
+                continue;
+            }
+            $name = $this->attributeNames->canonicalize((string) $row['name']);
+            if ($name === '') {
+                continue;
+            }
+            $out[] = ['name' => $name, 'value' => $value];
+        }
+
+        return $out;
     }
 }

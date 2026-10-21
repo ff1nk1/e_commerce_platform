@@ -73,28 +73,176 @@ flowchart LR
 
 ---
 
-## 2. Пайплайн одного сообщения чата (пошагово)
+## 2. Как работает ИИ по шагам (полный пайплайн)
 
-Внутри `RecommendationChatService::chat()`:
+Модель **не ищет** товары сама. PHP ищет в локальном `product_catalog`; Gemini только (1) извлекает фильтры + embedding и (2) пишет текст по готовому списку Candidates.
 
-1. **Диалог** — если `conversation_id` пустой → создать новый; иначе найти активный по `conversation_id`+`user_id`+`expires_at > now()` (истёкший/чужой → 404). Frontend при chat 404 сбрасывает id и один раз ретраит без него.
-2. **История** — последние **6** сообщений (`HISTORY_LIMIT`) для контекста LLM + `conversations.active_filters` (sticky JSON).
-3. **Фильтры + embedding** — всегда `extractFiltersAndEmbed(...)` (даже если клиент прислал structured-фильтры; клиентские поля побеждают в `mergeFilters`). В extract уходят previous filters + user turns.
-4. **merge + normalize** — client `store_id` обнуляет extracted `store_name` (и наоборот); default `in_stock=true`; swap inverted `price_min/max`; атрибуты → soft / preferred (цвет/бренд/материал) / required (размер + exclusive-язык, в т.ч. из истории).
-5. **Intent gate** — если нет product intent (`query` и фильтры пусты) → chitchat-ответ без поиска.
-6. **Поиск** → preferred attrs как hard с soft-fallback → soft pool до 80 → при пустом результате progressive relaxation (материал → бренд → цвет → store → price) → **RelevanceGate** → **ProductFreshnessChecker**.
-7. **Карточки** — `toCardArray()` (включая `path`).
-8. **Промпт к LLM** — история + текущий user turn с Candidates (+ `Relaxed filters` при ослаблении).
-9. **Ответ** — `llm->chat`, затем сохранить user+assistant messages, `active_filters`, `touchActivity()`.
-10. Вернуть JSON с `answer` + `extracted_filters` (+ `relaxed`) + `products`.
+Оркестрация: [`RecommendationChatService::chat()`](app/Services/Chat/RecommendationChatService.php). Общий budget Gemini на turn: `GEMINI_TIMEOUT` (~25s) на extract + embed + answer.
 
-System prompt ассистента: краткий ответ по-русски (имя/цена/магазин), без сырых `/products/...` — карточки уже в UI.
+```mermaid
+flowchart TB
+  http[POST chat] --> conv[Диалог + история 6]
+  conv --> hint[ProductTypeHint + AttributeVocabulary]
+  hint --> gemini1[Gemini extractFiltersAndEmbed]
+  gemini1 --> merge[merge + buckets + AttributeResolver + normalize]
+  merge --> intent{hasSearchIntent?}
+  intent -->|нет| chitchat[Gemini chitchat + история]
+  intent -->|да| search[ProductSearchService]
+  search --> relax[Progressive relaxation если пусто]
+  relax --> gate[RelevanceGate cosine]
+  gate --> fresh[FreshnessChecker]
+  fresh --> label[Outcome preferred labels]
+  label --> gemini2[Gemini answer: только текущий turn + Candidates]
+  gemini2 --> save[Save messages + active_filters]
+```
 
-Модель **не ищет** товары сама — только извлекает фильтры и рассуждает по списку, который уже нашёл PHP.
+### 2.1. Диалог и история
+
+1. Нет `conversation_id` → новый `Conversation` (`expires_at = min(hard 24h, idle 30m)`).
+2. Есть id → только свой и `expires_at > now()`, иначе 404 (UI сбрасывает id и ретраит).
+3. История: последние **6** сообщений (`HISTORY_LIMIT`).
+4. Sticky: `conversations.active_filters` с прошлого хода.
+
+История для **extract** ≠ история для **answer**:
+- extract: sticky JSON + **только user turns** + текущее сообщение;
+- product-search answer: **только** текущий turn + Candidates (без прошлых «не нашлось»);
+- chitchat: короткая история остаётся.
+
+### 2.2. Product-type hint и scoped vocabulary (до extract)
+
+Чтобы в extract не попадал глобальный top-N attrs (джинсы `Размер` + телефоны `Экран`).
+
+[`ProductTypeHint`](app/Services/Catalog/ProductTypeHint.php) (приоритет):
+
+1. Keywords текущего сообщения (`телефон` → smartphones, …) — **перекрывают** sticky.
+2. Client `category_name` (если придёт с UI).
+3. Sticky `category_name` / `query`.
+4. Нет hint → пустой список в промпте (не глобальный dump).
+
+[`AttributeVocabulary::namesForScope`](app/Services/Catalog/AttributeVocabulary.php): SQL по published + `category_name ILIKE`, частоты имён, Cache (file/db, без Redis), cap ~30 → в extract system: *prefer these exact names*. Invalidate в `ProductIndexer`. Конфиг: [`config/attributes.php`](config/attributes.php).
+
+### 2.3. Gemini #1: extract + embed
+
+`extractFiltersAndEmbed` → `SearchFilters` + вектор `RETRIEVAL_QUERY`.
+
+LLM возвращает: `query`, store/category, prices, `attributes[{name,value}]` (плоский список **без** required/preferred). Embed по `filters.query`, иначе raw message.
+
+Модель здесь не видит каталог товаров — только текст и scoped имена attrs.
+
+### 2.4. Merge, бакеты attrs, resolver, normalize
+
+#### Бакеты: soft / preferred / required
+
+LLM не назначает бакеты. Это делает PHP — [`AttributeConstraintDetector::split`](app/Services/Catalog/AttributeConstraintDetector.php) — после extract, в `mergeFilters`.
+
+Для каждого attr (после `canonicalize` имени):
+
+```
+пустое name/value → выкинуть
+          │
+          ▼
+exclusive?  ИЛИ  это размер?  ──да──► required
+          │
+         нет
+          ▼
+цвет / бренд / материал?  ──да──► preferred
+          │
+         нет
+          ▼
+        soft
+```
+
+| Bucket | Условие | Поведение в поиске |
+|--------|---------|-------------------|
+| **required** | exclusive-слова **или** attr = размер (`size_range`) | hard: товар обязан матчить |
+| **preferred** | Цвет / Бренд / Материал (whitelist после canonicalize) | сначала hard, если пусто → soft fallback |
+| **soft** | всё остальное (Экран, Память, …) | только re-rank / boost |
+
+**Exclusive** (`только|исключительно|именно|строго|ровно|точно` как целое слово, ё→е):
+
+- в **текущем** сообщении → все attrs из extract → required;
+- или в любом **user**-turn истории → то же на follow-up (sticky exclusive).
+
+**Размер** → всегда required (через synonym group `size` → strategy `size_range` в config), даже без exclusive.
+
+**Preferred whitelist** в коде: `цвет`, `бренд`, `материал` (aliases: color→Цвет, brand/марка→Бренд, …).
+
+Приоритет: exclusive/size **бьёт** preferred («только синие» → Цвет в required, не preferred).
+
+На бакеты влияет текст пользователя так:
+
+1. какие attrs вытащил LLM из формулировки;
+2. есть ли exclusive-слова сейчас или в истории;
+3. имя attr (размер / цвет / …) после canonicalize.
+
+#### AttributeResolver (scoped vocab)
+
+[`AttributeResolver`](app/Services/Catalog/AttributeResolver.php): exact / synonym (`диагональ`↔`Экран`) / fuzzy ≥80%. Не резолвится при непустом vocab → `value_only` soft. Unresolved `value_only` из required/preferred **спускается в soft**.
+
+#### Client overrides + normalize
+
+- Client `store_id` побеждает, extracted `store_name` обнуляется (и наоборот).
+- `query` **не** подменяется на raw message (null = chitchat).
+- [`SearchFiltersNormalizer`](app/Services/Catalog/SearchFiltersNormalizer.php): trim, swap inverted prices, default `in_stock=true`.
+
+#### Intent gate
+
+`hasSearchIntent()` = есть `query` или любой фильтр/attrs (кроме «голого» default in_stock).
+
+- Нет → chitchat Gemini, `products = []`, поиск не вызывается.
+- Есть → поиск.
+
+### 2.5. Поиск в `product_catalog`
+
+Локальный индекс (Kafka), не live catalog на каждый hit (кроме freshness в конце).
+
+**Preferred soft-fallback** ([`ProductSearchService`](app/Services/Catalog/ProductSearchService.php)):
+
+1. Hard attempt: required ∪ preferred как hard.
+2. Хиты есть → `preferredRelaxed = false`.
+3. Пусто → preferred в soft, required остаются → `preferredRelaxed = true`.
+
+**`searchWithHardAndSoft`:**
+
+1. SQL base: `is_published`, embedding not null; опционально store/category (ILIKE+ё→е), `in_stock`, price.
+2. Vector top-K (cosine): soft → pool до **80**, hard → до **200**.
+3. ≥2 soft attrs → доп. attribute-first fallback + merge.
+4. Hard attrs: PHP должен матчить **все** required; если 0 → fallback pool **500** + SQL prefilter + снова hard PHP.
+5. Soft re-rank по числу совпавших attrs, затем distance; slice до `limit`.
+
+**Match значений** — [`AttributeValueMatcher`](app/Services/Catalog/AttributeValueMatcher.php): strategies `numeric` / `text` / `size_range` из config (`value_match`); слова/единицы только в config.
+
+### 2.6. Progressive relaxation (если поиск пустой)
+
+До **3** шагов. [`SearchFiltersRelaxer`](app/Services/Catalog/SearchFiltersRelaxer.php) снимает по одному: Материал → Бренд → Цвет (preferred, иначе required) → `store_name` → price. После каждого — повторный поиск. Label → `relaxedLabels`.
+
+### 2.7. Отбрасывание после поиска
+
+| Этап | Что отсекает |
+|------|----------------|
+| SQL base | unpublished, no embedding, store/category/stock/price |
+| Hard attrs | PHP: не все required совпали |
+| Preferred hard miss | не отбрасывает выдачу — soft path |
+| Soft attrs | не отбрасывают; только поднимают в рейтинге |
+| RelevanceGate | `distance > max_cosine_distance` (default **0.75**) |
+| FreshnessChecker | удалён / unpublished в live catalog; transport fail → fail-open |
+| Answer LLM | не фильтрует список |
+
+### 2.8. «Ослабленные условия» (копирайт для LLM)
+
+Не по флагу soft-path, а по **исходу**: preferred soft-path + финальный hit **не** матчит attr → label `Цвет=… (точный Цвет не обязателен)`. Если hit матчит цвет — label не пишем. Плюс labels progressive relaxer.
+
+### 2.9. Gemini #2: ответ
+
+User content = сообщение + `Candidates:` (+ `Ослабленные условия`). Вызов **без** истории. System: рекомендовать только текущие Candidates; при непустом списке нельзя писать «не найдено»; не упоминать прошлые запросы.
+
+### 2.10. Сохранение
+
+User + assistant messages, `active_filters` (+ `relaxed`), `touchActivity()`. JSON: `answer`, `extracted_filters`, `products` (карточки с `path`).
 
 ---
 
-## 3. Как работает поиск (где и что ищется)
+## 3. Как работает поиск (индекс и SQL)
 
 ### Локальный индекс `product_catalog`
 
@@ -105,10 +253,11 @@ System prompt ассистента: краткий ответ по-русски 
 - всегда: `is_published = true`, `embedding IS NOT NULL`
 - опционально: `store_id` и/или `store_name` / `category_name` (ILIKE, case-insensitive, ё→е), `in_stock`, `price` min/max
 - attributes: soft re-rank / preferred (semi-hard) / required (hard); SQL JSON prefilter на hard/fallback и при ≥2 soft attrs
-- match имён атрибутов: canonical aliases (цвет/color → Цвет), без substring по имени
+- match имён: exact / `AttributeResolver` (синонимы `диагональ↔Экран` в scope) / fuzzy; `value_only` — soft match только по значению
+- match значений: [`AttributeValueMatcher`](app/Services/Catalog/AttributeValueMatcher.php) — стратегии `numeric` / `text` / `size_range` из `config/attributes.php` (`value_match`); единицы и stems только в config
 - сортировка: cosine distance `embedding <=> ?::vector`, затем boost по числу совпавших attributes
 
-Вектор запроса: embedding очищенного `filters.query` (после extract), fallback — raw message / `"recommended products"`. Shared Gemini budget: `GEMINI_TIMEOUT` (default 25s).
+Семантический матчинг attrs (hint → vocab → resolver → value strategies) — см. §2.2–2.5.
 
 ### Откуда берутся товары (индексация)
 

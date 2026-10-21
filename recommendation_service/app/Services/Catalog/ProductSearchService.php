@@ -21,7 +21,18 @@ class ProductSearchService
     public function __construct(
         private readonly LlmClient $llm,
         private readonly AttributeNameNormalizer $attributeNames = new AttributeNameNormalizer,
+        private readonly AttributeValueMatcher $attributeValues = new AttributeValueMatcher,
+        private readonly AttributeValueNormalizer $valueNormalizer = new AttributeValueNormalizer,
     ) {}
+
+    public function productSatisfiesAttribute(
+        ProductCatalog $product,
+        string $name,
+        string $value,
+        bool $valueOnly = false,
+    ): bool {
+        return $this->productMatchesAttribute($product, $name, $value, $valueOnly);
+    }
 
     /**
      * @param  list<float>|null  $precomputedVector
@@ -279,15 +290,25 @@ class ProductSearchService
     private function applyAttributeSqlPrefilter(Builder $builder, array $attributes): void
     {
         foreach ($attributes as $attr) {
-            $value = trim($attr['value']);
+            $value = trim((string) $attr['value']);
             if ($value === '') {
                 continue;
             }
-            $token = $value;
-            if (preg_match('/(\d+(?:[.,]\d+)?)/u', $value, $matches) === 1) {
-                $token = $matches[1];
+
+            $number = $this->valueNormalizer->extractNumber($value);
+            $token = $number !== null
+                ? str_replace(',', '.', (string) $number)
+                : $this->valueNormalizer->normalizeForCompare($value);
+
+            if ($token === '') {
+                continue;
             }
-            $builder->whereRaw('attributes::text ILIKE ?', ['%'.$this->escapeLike($token).'%']);
+
+            // Align with PHP matcher: lower + ё→е on JSON text; token already stemmed/stripped.
+            $builder->whereRaw(
+                "replace(lower(attributes::text), 'ё', 'е') LIKE ?",
+                ['%'.$this->escapeLike($token).'%']
+            );
         }
     }
 
@@ -333,13 +354,19 @@ class ProductSearchService
     }
 
     /**
-     * @param  list<array{name: string, value: string}>  $attributes
+     * @param  list<array{name: string, value: string, value_only?: bool}>  $attributes
      */
     private function attributeMatchScore(ProductCatalog $product, array $attributes): int
     {
         $score = 0;
         foreach ($attributes as $attr) {
-            if ($this->productMatchesAttribute($product, $attr['name'], $attr['value'])) {
+            $valueOnly = (bool) ($attr['value_only'] ?? false);
+            if ($this->productMatchesAttribute(
+                $product,
+                (string) $attr['name'],
+                (string) $attr['value'],
+                $valueOnly,
+            )) {
                 $score++;
             }
         }
@@ -347,10 +374,13 @@ class ProductSearchService
         return $score;
     }
 
-    private function productMatchesAttribute(ProductCatalog $product, string $name, string $value): bool
-    {
-        $valueNeedle = $this->normalizeAttrValue($value);
-        if ($this->attributeNames->canonicalize($name) === '' || $valueNeedle === '') {
+    private function productMatchesAttribute(
+        ProductCatalog $product,
+        string $name,
+        string $value,
+        bool $valueOnly = false,
+    ): bool {
+        if (trim($value) === '') {
             return false;
         }
 
@@ -364,81 +394,19 @@ class ProductSearchService
             if ($attrName === '' || $attrValue === '') {
                 continue;
             }
-            if (! $this->attributeNames->namesMatch($attrName, $name)) {
-                continue;
+            if (! $valueOnly) {
+                if ($name === '' || ! $this->attributeNames->namesMatch($attrName, $name)) {
+                    continue;
+                }
             }
-            if ($this->attributeValuesMatch($attrName, $attrValue, $value, $valueNeedle)) {
+            // value_only: match against the product attr name's strategy (or default text).
+            $strategyName = $valueOnly ? $attrName : $name;
+            if ($this->attributeValues->matches($strategyName, $attrValue, $value)) {
                 return true;
             }
         }
 
         return false;
-    }
-
-    private function attributeValuesMatch(
-        string $productAttrName,
-        string $productValue,
-        string $requestedRaw,
-        string $requestedNormalized,
-    ): bool {
-        if ($this->isSizeAttribute($productAttrName)) {
-            $constraint = $this->parseSizeConstraint($requestedRaw);
-            $productSize = $this->parseSizeNumber($productValue);
-            if ($constraint !== null && $productSize !== null) {
-                if ($productSize < $constraint['min']) {
-                    return false;
-                }
-                if ($constraint['max'] !== null && $productSize > $constraint['max']) {
-                    return false;
-                }
-
-                return true;
-            }
-        }
-
-        $normalizedProduct = $this->normalizeCaseYo($productValue);
-
-        return str_contains($normalizedProduct, $requestedNormalized);
-    }
-
-    private function isSizeAttribute(string $normalizedName): bool
-    {
-        $key = $this->normalizeCaseYo($normalizedName);
-
-        return str_contains($key, 'размер')
-            || str_contains($key, 'size');
-    }
-
-    /**
-     * @return array{min: float, max: float|null}|null
-     */
-    private function parseSizeConstraint(string $value): ?array
-    {
-        $normalized = $this->normalizeCaseYo($value);
-
-        if (preg_match('/от\s*(\d+(?:[.,]\d+)?)/u', $normalized, $matches) === 1) {
-            return [
-                'min' => (float) str_replace(',', '.', $matches[1]),
-                'max' => null,
-            ];
-        }
-
-        if (preg_match('/^(\d+(?:[.,]\d+)?)$/u', trim($normalized), $matches) === 1) {
-            $n = (float) str_replace(',', '.', $matches[1]);
-
-            return ['min' => $n, 'max' => $n];
-        }
-
-        return null;
-    }
-
-    private function parseSizeNumber(string $value): ?float
-    {
-        if (preg_match('/(\d+(?:[.,]\d+)?)/u', $this->normalizeCaseYo($value), $matches) !== 1) {
-            return null;
-        }
-
-        return (float) str_replace(',', '.', $matches[1]);
     }
 
     /**
@@ -460,18 +428,6 @@ class ProductSearchService
     private function normalizeCaseYo(string $value): string
     {
         return str_replace('ё', 'е', mb_strtolower(trim($value)));
-    }
-
-    private function normalizeAttrValue(string $value): string
-    {
-        $normalized = $this->normalizeCaseYo($value);
-        $stripped = preg_replace(
-            '/(ого|его|ому|ему|ой|ый|ий|ая|ое|ые|их|ую|ими|ыми)$/u',
-            '',
-            $normalized
-        );
-
-        return is_string($stripped) && $stripped !== '' ? $stripped : $normalized;
     }
 
     private function escapeLike(string $value): string

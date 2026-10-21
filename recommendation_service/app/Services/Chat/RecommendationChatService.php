@@ -5,10 +5,13 @@ namespace App\Services\Chat;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Services\Catalog\AttributeConstraintDetector;
+use App\Services\Catalog\AttributeResolver;
+use App\Services\Catalog\AttributeVocabulary;
 use App\Services\Catalog\Contracts\ProductFreshnessChecker;
 use App\Services\Catalog\Contracts\RelevanceGate;
 use App\Services\Catalog\DTOs\SearchHit;
 use App\Services\Catalog\ProductSearchService;
+use App\Services\Catalog\ProductTypeHint;
 use App\Services\Catalog\SearchFiltersNormalizer;
 use App\Services\Catalog\SearchFiltersRelaxer;
 use App\Services\Llm\Contracts\LlmClient;
@@ -25,11 +28,13 @@ class RecommendationChatService
 {
     private const SYSTEM_PROMPT = <<<'PROMPT'
 Ты помощник по подбору товаров в интернет-магазине.
-Отвечай кратко по-русски и только по списку Candidates ниже.
+Отвечай кратко по-русски и только по текущему сообщению и списку Candidates ниже.
+Не упоминай предыдущие запросы, товары или отказы из истории диалога — их нет в этом запросе.
 Упоминай название товара, цену и магазин, если они есть.
 Не пиши пути вроде /products/123, path:, markdown-код и ссылки — карточки товаров уже показываются в интерфейсе под ответом.
-Если подходящих кандидатов нет (Candidates: (none)), честно скажи, что точного совпадения не найдено, и предложи изменить или упростить запрос (например, убрать фильтр по цвету, магазину или бюджету).
-Если в сообщении указано Relaxed filters, кратко упомяни, что часть условий была ослаблена, чтобы показать близкие варианты.
+Если Candidates: (none) — скажи, что подходящих товаров не нашлось, и предложи упростить запрос (убрать цвет, магазин или бюджет).
+Если Candidates — нумерованный список (не (none)) — обязательно рекомендуй эти товары; запрещено говорить «не найдено», «точного совпадения нет» или что поиск не дал результатов.
+Если указаны «Ослабленные условия» и Candidates не пуст — одна короткая оговорка (например, точный цвет не попал), затем рекомендуй товары из списка.
 PROMPT;
 
     private const CHITCHAT_SYSTEM_PROMPT = <<<'PROMPT'
@@ -50,6 +55,9 @@ PROMPT;
         private readonly RelevanceGate $relevanceGate,
         private readonly ProductFreshnessChecker $freshnessChecker,
         private readonly AttributeConstraintDetector $attributeConstraints,
+        private readonly ProductTypeHint $productTypeHint = new ProductTypeHint,
+        private readonly AttributeVocabulary $attributeVocabulary = new AttributeVocabulary,
+        private readonly AttributeResolver $attributeResolver = new AttributeResolver,
         private readonly SearchFiltersRelaxer $filtersRelaxer = new SearchFiltersRelaxer,
     ) {}
 
@@ -99,23 +107,30 @@ PROMPT;
         $filters = new SearchFilters;
 
         try {
+            $previousFilters = is_array($conversation->active_filters) ? $conversation->active_filters : null;
+            $clientCategory = isset($input['category_name']) && trim((string) $input['category_name']) !== ''
+                ? trim((string) $input['category_name'])
+                : null;
+            $typeHint = $this->productTypeHint->resolve($messageText, $previousFilters, $clientCategory);
+            $catalogAttrNames = $this->attributeVocabulary->namesForScope($typeHint);
+
             [$extracted, $queryVector] = $this->resolveFiltersAndVector(
                 $messageText,
                 $history,
-                is_array($conversation->active_filters) ? $conversation->active_filters : null,
+                $previousFilters,
+                $catalogAttrNames,
             );
-            $merged = $this->mergeFilters($extracted, $input, $history);
+            $merged = $this->mergeFilters($extracted, $input, $history, $catalogAttrNames);
             $filters = $this->filtersNormalizer->normalize($merged);
             $limit = max(1, min((int) ($input['limit'] ?? 5), 20));
 
-            $chatMessages = [];
-            foreach ($history as $row) {
-                $chatMessages[] = $row->role === Message::ROLE_ASSISTANT
-                    ? ChatMessage::assistant((string) $row->content)
-                    : ChatMessage::user((string) $row->content);
-            }
-
             if (! $filters->hasSearchIntent()) {
+                $chatMessages = [];
+                foreach ($history as $row) {
+                    $chatMessages[] = $row->role === Message::ROLE_ASSISTANT
+                        ? ChatMessage::assistant((string) $row->content)
+                        : ChatMessage::user((string) $row->content);
+                }
                 $chatMessages[] = ChatMessage::user($messageText);
                 $answer = $this->llm->chat($chatMessages, self::CHITCHAT_SYSTEM_PROMPT);
                 Log::info('Recommendation chat skipped catalog search (no product intent)', [
@@ -124,11 +139,8 @@ PROMPT;
             } else {
                 $searchResult = $this->search->searchDetailed($filters, $limit, $queryVector);
                 $hits = $searchResult->hits;
-                if ($searchResult->preferredRelaxed && $filters->preferredAttributes !== []) {
-                    foreach ($filters->preferredAttributes as $attr) {
-                        $relaxedLabels[] = $attr['name'].'='.$attr['value'].' (soft fallback)';
-                    }
-                }
+                $preferredSoftPath = $searchResult->preferredRelaxed;
+                $preferredForLabel = $filters->preferredAttributes;
 
                 // Progressive relaxation when still empty.
                 $steps = 0;
@@ -152,6 +164,16 @@ PROMPT;
 
                 $hits = $this->freshnessChecker->keepFresh($hits);
 
+                // Label preferred soft-fallback only when final hits miss that attr (not merely because soft path ran).
+                if ($preferredSoftPath && $preferredForLabel !== []) {
+                    foreach ($preferredForLabel as $attr) {
+                        if (! $this->anyHitSatisfiesAttribute($hits, $attr)) {
+                            $relaxedLabels[] = $attr['name'].'='.$attr['value']
+                                .' (точный '.$attr['name'].' не обязателен)';
+                        }
+                    }
+                }
+
                 $productCards = array_map(
                     static fn (SearchHit $hit): array => $hit->product->toCardArray(),
                     $hits,
@@ -161,10 +183,13 @@ PROMPT;
 
                 $userContent = $messageText."\n\nCandidates:\n".$this->formatCandidates($productCards);
                 if ($relaxedLabels !== []) {
-                    $userContent .= "\n\nRelaxed filters: ".implode('; ', $relaxedLabels);
+                    $userContent .= "\n\nОслабленные условия: ".implode('; ', $relaxedLabels);
                 }
-                $chatMessages[] = ChatMessage::user($userContent);
-                $answer = $this->llm->chat($chatMessages, self::SYSTEM_PROMPT);
+                // Answer chat is isolated from prior turns so past "не нашлось" does not leak into this reply.
+                $answer = $this->llm->chat(
+                    [ChatMessage::user($userContent)],
+                    self::SYSTEM_PROMPT,
+                );
             }
         } finally {
             if ($this->llm instanceof GeminiLlmClient) {
@@ -216,10 +241,15 @@ PROMPT;
     /**
      * @param  Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
      * @param  array<string, mixed>|null  $previousFilters
+     * @param  list<string>  $catalogAttributeNames
      * @return array{0: SearchFilters, 1: list<float>}
      */
-    private function resolveFiltersAndVector(string $messageText, $history, ?array $previousFilters): array
-    {
+    private function resolveFiltersAndVector(
+        string $messageText,
+        $history,
+        ?array $previousFilters,
+        array $catalogAttributeNames = [],
+    ): array {
         $extractInput = $this->buildExtractInput($messageText, $history, $previousFilters);
 
         return $this->llm->extractFiltersAndEmbed(
@@ -227,6 +257,7 @@ PROMPT;
             'RETRIEVAL_QUERY',
             // Fallback embed text when extract.query is null (never the full extract prompt).
             $messageText,
+            $catalogAttributeNames,
         );
     }
 
@@ -299,9 +330,14 @@ PROMPT;
     /**
      * @param  array<string, mixed>  $input
      * @param  Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
+     * @param  list<string>  $catalogAttributeNames
      */
-    private function mergeFilters(SearchFilters $extracted, array $input, $history): SearchFilters
-    {
+    private function mergeFilters(
+        SearchFilters $extracted,
+        array $input,
+        $history,
+        array $catalogAttributeNames = [],
+    ): SearchFilters {
         $messageText = trim((string) ($input['message'] ?? ''));
         $exclusiveFromHistory = $this->attributeConstraints->historyImpliesExclusive($history);
         $split = $this->attributeConstraints->split(
@@ -309,6 +345,8 @@ PROMPT;
             $extracted->attributes,
             $exclusiveFromHistory,
         );
+
+        $resolved = $this->resolveAttributeBuckets($split, $catalogAttributeNames);
 
         $clientStoreId = isset($input['store_id']) ? (int) $input['store_id'] : null;
         $clientStoreName = isset($input['store_name']) && trim((string) $input['store_name']) !== ''
@@ -337,10 +375,55 @@ PROMPT;
             priceMax: isset($input['price_max']) ? (float) $input['price_max'] : $extracted->priceMax,
             // Keep extracted query as-is (null for chitchat); do not force raw message into query.
             query: $extracted->query,
-            attributes: $split['soft'],
-            requiredAttributes: $split['required'],
-            preferredAttributes: $split['preferred'],
+            attributes: $resolved['soft'],
+            requiredAttributes: $resolved['required'],
+            preferredAttributes: $resolved['preferred'],
         );
+    }
+
+    /**
+     * @param  array{
+     *     required: list<array{name: string, value: string}>,
+     *     preferred: list<array{name: string, value: string}>,
+     *     soft: list<array{name: string, value: string}>
+     * }  $split
+     * @param  list<string>  $vocabulary
+     * @return array{
+     *     required: list<array{name: string, value: string, value_only?: bool}>,
+     *     preferred: list<array{name: string, value: string, value_only?: bool}>,
+     *     soft: list<array{name: string, value: string, value_only?: bool}>
+     * }
+     */
+    private function resolveAttributeBuckets(array $split, array $vocabulary): array
+    {
+        $required = [];
+        $preferred = [];
+        $soft = [];
+
+        foreach (['required' => $split['required'], 'preferred' => $split['preferred'], 'soft' => $split['soft']] as $bucket => $attrs) {
+            foreach ($this->attributeResolver->resolveList($attrs, $vocabulary) as $attr) {
+                $valueOnly = (bool) ($attr['value_only'] ?? false);
+                // Unresolved names stay soft so bare numbers do not hard-filter wrongly.
+                if ($valueOnly && $bucket !== 'soft') {
+                    $soft[] = $attr;
+
+                    continue;
+                }
+                if ($bucket === 'required') {
+                    $required[] = $attr;
+                } elseif ($bucket === 'preferred') {
+                    $preferred[] = $attr;
+                } else {
+                    $soft[] = $attr;
+                }
+            }
+        }
+
+        return [
+            'required' => $required,
+            'preferred' => $preferred,
+            'soft' => $soft,
+        ];
     }
 
     /**
@@ -384,6 +467,24 @@ PROMPT;
             'hits_pre_gate' => $preGateCount,
             'hits_post_freshness' => $postFreshCount,
         ]);
+    }
+
+    /**
+     * @param  list<SearchHit>  $hits
+     * @param  array{name: string, value: string, value_only?: bool}  $attr
+     */
+    private function anyHitSatisfiesAttribute(array $hits, array $attr): bool
+    {
+        $name = (string) $attr['name'];
+        $value = (string) $attr['value'];
+        $valueOnly = (bool) ($attr['value_only'] ?? false);
+        foreach ($hits as $hit) {
+            if ($this->search->productSatisfiesAttribute($hit->product, $name, $value, $valueOnly)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

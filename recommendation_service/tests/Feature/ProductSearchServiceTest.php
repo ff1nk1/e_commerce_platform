@@ -290,6 +290,27 @@ class ProductSearchServiceTest extends TestCase
         $this->assertNotEmpty($soft->hits);
     }
 
+    public function test_hard_preferred_matches_stemmed_color_with_size_required(): void
+    {
+        $this->insertProduct(72, 'Black jeans', attributes: [
+            ['name' => 'Цвет', 'value' => 'Черный'],
+            ['name' => 'Размер', 'value' => '30'],
+        ]);
+
+        $result = $this->search->searchDetailed(
+            new SearchFilters(
+                query: 'джинсы',
+                requiredAttributes: [['name' => 'Размер', 'value' => '30']],
+                preferredAttributes: [['name' => 'Цвет', 'value' => 'черные']],
+            ),
+            limit: 5,
+            precomputedVector: $this->queryVector,
+        );
+
+        $this->assertFalse($result->preferredRelaxed);
+        $this->assertSame([72], array_map(static fn (SearchHit $h): int => $h->product->product_id, $result->hits));
+    }
+
     public function test_attribute_name_match_is_not_substring(): void
     {
         $this->insertProduct(80, 'Sole', attributes: [
