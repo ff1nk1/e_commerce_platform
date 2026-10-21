@@ -5,8 +5,9 @@ namespace App\Services\Llm\DTOs;
 readonly class SearchFilters
 {
     /**
-     * @param  list<array{name: string, value: string}>  $attributes  Soft preferences (re-rank)
+     * @param  list<array{name: string, value: string}>  $attributes  Soft preferences (re-rank only)
      * @param  list<array{name: string, value: string}>  $requiredAttributes  Hard constraints (must match)
+     * @param  list<array{name: string, value: string}>  $preferredAttributes  Semi-hard (try hard, then soft fallback)
      */
     public function __construct(
         public ?int $storeId = null,
@@ -18,6 +19,7 @@ readonly class SearchFilters
         public ?string $query = null,
         public array $attributes = [],
         public array $requiredAttributes = [],
+        public array $preferredAttributes = [],
     ) {}
 
     /**
@@ -35,6 +37,7 @@ readonly class SearchFilters
             query: self::nullableString($data['query'] ?? null),
             attributes: self::parseAttributes($data['attributes'] ?? []),
             requiredAttributes: self::parseAttributes($data['required_attributes'] ?? []),
+            preferredAttributes: self::parseAttributes($data['preferred_attributes'] ?? []),
         );
     }
 
@@ -53,7 +56,24 @@ readonly class SearchFilters
             'query' => $this->query,
             'attributes' => $this->attributes,
             'required_attributes' => $this->requiredAttributes,
+            'preferred_attributes' => $this->preferredAttributes,
         ];
+    }
+
+    /**
+     * True when the filters imply a catalog search (ignore default in_stock alone).
+     */
+    public function hasSearchIntent(): bool
+    {
+        return $this->query !== null
+            || $this->storeId !== null
+            || $this->storeName !== null
+            || $this->categoryName !== null
+            || $this->priceMin !== null
+            || $this->priceMax !== null
+            || $this->attributes !== []
+            || $this->requiredAttributes !== []
+            || $this->preferredAttributes !== [];
     }
 
     /**

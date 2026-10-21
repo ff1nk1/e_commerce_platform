@@ -217,6 +217,101 @@ class ProductSearchServiceTest extends TestCase
         $this->assertSame([], $results);
     }
 
+    public function test_soft_pool_includes_matches_beyond_limit_times_four(): void
+    {
+        $near = array_fill(0, 768, 0.0);
+        $near[0] = 1.0;
+        $far = array_fill(0, 768, 0.0);
+        $far[1] = 1.0;
+        $query = array_fill(0, 768, 0.0);
+        $query[0] = 1.0;
+
+        for ($i = 1; $i <= 25; $i++) {
+            $this->insertProduct(
+                200 + $i,
+                "Near{$i}",
+                attributes: [['name' => 'Цвет', 'value' => 'Синий']],
+                embeddingVector: $near,
+            );
+        }
+
+        $this->insertProduct(
+            299,
+            'FarBlack',
+            attributes: [
+                ['name' => 'Цвет', 'value' => 'Чёрный'],
+                ['name' => 'Материал', 'value' => 'Кожа'],
+            ],
+            embeddingVector: $far,
+        );
+
+        $results = $this->search->search(
+            new SearchFilters(
+                query: 'item',
+                attributes: [
+                    ['name' => 'Цвет', 'value' => 'чёрный'],
+                    ['name' => 'Материал', 'value' => 'кожа'],
+                ],
+            ),
+            limit: 5,
+            precomputedVector: $query,
+        );
+
+        $ids = array_map(static fn (SearchHit $h): int => $h->product->product_id, $results);
+        $this->assertContains(299, $ids);
+        $this->assertSame(299, $ids[0]);
+    }
+
+    public function test_preferred_color_hard_filters_then_soft_fallback(): void
+    {
+        $this->insertProduct(70, 'Blue', attributes: [['name' => 'Цвет', 'value' => 'Синий']]);
+        $this->insertProduct(71, 'Red', attributes: [['name' => 'Цвет', 'value' => 'Красный']]);
+
+        $hard = $this->search->searchDetailed(
+            new SearchFilters(
+                query: 'item',
+                preferredAttributes: [['name' => 'Цвет', 'value' => 'красный']],
+            ),
+            limit: 5,
+            precomputedVector: $this->queryVector,
+        );
+        $this->assertFalse($hard->preferredRelaxed);
+        $this->assertSame([71], array_map(static fn (SearchHit $h): int => $h->product->product_id, $hard->hits));
+
+        $soft = $this->search->searchDetailed(
+            new SearchFilters(
+                query: 'item',
+                preferredAttributes: [['name' => 'Цвет', 'value' => 'зелёный']],
+            ),
+            limit: 5,
+            precomputedVector: $this->queryVector,
+        );
+        $this->assertTrue($soft->preferredRelaxed);
+        $this->assertNotEmpty($soft->hits);
+    }
+
+    public function test_attribute_name_match_is_not_substring(): void
+    {
+        $this->insertProduct(80, 'Sole', attributes: [
+            ['name' => 'Цвет подошвы', 'value' => 'Красный'],
+        ]);
+        $this->insertProduct(81, 'Body', attributes: [
+            ['name' => 'Цвет', 'value' => 'Красный'],
+        ]);
+
+        $results = $this->search->search(
+            new SearchFilters(
+                query: 'item',
+                requiredAttributes: [['name' => 'Цвет', 'value' => 'красный']],
+            ),
+            limit: 5,
+            precomputedVector: $this->queryVector,
+        );
+
+        $ids = array_map(static fn (SearchHit $h): int => $h->product->product_id, $results);
+        $this->assertSame([81], $ids);
+    }
+
     public function test_filters_by_store_id(): void
     {
         $this->insertProduct(20, 'InStore', storeId: 3, storeName: 'ТЦ Галерея');

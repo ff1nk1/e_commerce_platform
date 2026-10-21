@@ -14,9 +14,12 @@ use Illuminate\Support\Facades\Http;
 class GeminiLlmClient implements LlmClient
 {
     private const FILTER_SYSTEM_PROMPT = <<<'PROMPT'
-You extract e-commerce search filters from a user message (and optional prior conversation turns).
-When prior turns are provided, carry forward sticky filters (product type, store, budget, attributes)
-unless the current message clearly replaces or clears them (e.g. a new product type).
+You extract e-commerce search filters from a user message (and optional prior conversation / structured filters).
+Merge rules:
+- KEEP sticky filters (product type/query, store, budget, attributes) from "Previous structured filters" and prior user turns
+  unless the current message clearly replaces or clears them (new product type, "без фильтра", "любой цвет", etc.).
+- REPLACE a field when the user gives a new value for it (e.g. "а подешевле" → lower price_max; "а синие" → update Цвет).
+- CLEAR a field only when the user explicitly drops it.
 Return ONLY a JSON object with these keys (use null when unknown):
 - store_id: integer store id ONLY if the user explicitly gave a numeric store id; otherwise null (do not invent)
 - store_name: store name string as mentioned by the user (e.g. "ТЦ Галерея"), or null
@@ -26,7 +29,8 @@ Return ONLY a JSON object with these keys (use null when unknown):
 - price_max: number or null
 - query: short product-type text for semantic retrieval (e.g. "джинсы", "ноутбук"), without colors/sizes/materials, or null
 - attributes: array of {"name": string, "value": string} using Russian catalog names when possible
-  (Цвет, Размер, Материал, Бренд, …), or []
+  (Цвет, Размер, Материал, Бренд), or []
+For greetings / off-topic with no product intent, set query=null and leave other fields null/empty.
 Put color/size/material/brand into attributes, not into query.
 For exact size requests use numeric value only (e.g. "28", not "28 размер").
 Words like только/исключительно/именно do not change the JSON shape — still put constraints into attributes.
@@ -34,8 +38,44 @@ Example: "найди черные джинсы" → query="джинсы", attrib
 Example: "синие джинсы исключительно 28 размера" → query="джинсы", attributes=[{"name":"Цвет","value":"синий"},{"name":"Размер","value":"28"}]
 Example: "товары из ТЦ Галерея" → store_name="ТЦ Галерея", query=null
 Example follow-up after jeans: "а синие?" → query="джинсы", attributes=[{"name":"Цвет","value":"синий"}]
-Only extract values clearly implied by the user or prior turns.
+Example: "привет" → query=null, attributes=[]
+Only extract values clearly implied by the user or prior turns / previous structured filters.
 PROMPT;
+
+    /** @var array<string, mixed> */
+    private const FILTER_RESPONSE_SCHEMA = [
+        'type' => 'OBJECT',
+        'properties' => [
+            'store_id' => ['type' => 'INTEGER', 'nullable' => true],
+            'store_name' => ['type' => 'STRING', 'nullable' => true],
+            'category_name' => ['type' => 'STRING', 'nullable' => true],
+            'in_stock' => ['type' => 'BOOLEAN', 'nullable' => true],
+            'price_min' => ['type' => 'NUMBER', 'nullable' => true],
+            'price_max' => ['type' => 'NUMBER', 'nullable' => true],
+            'query' => ['type' => 'STRING', 'nullable' => true],
+            'attributes' => [
+                'type' => 'ARRAY',
+                'items' => [
+                    'type' => 'OBJECT',
+                    'properties' => [
+                        'name' => ['type' => 'STRING'],
+                        'value' => ['type' => 'STRING'],
+                    ],
+                    'required' => ['name', 'value'],
+                ],
+            ],
+        ],
+        'required' => [
+            'store_id',
+            'store_name',
+            'category_name',
+            'in_stock',
+            'price_min',
+            'price_max',
+            'query',
+            'attributes',
+        ],
+    ];
 
     /** Remaining seconds for a chat turn (extract+embed+chat); null = no shared budget. */
     private ?float $budgetRemaining = null;
@@ -143,6 +183,7 @@ PROMPT;
             'generationConfig' => [
                 'temperature' => 0,
                 'responseMimeType' => 'application/json',
+                'responseSchema' => self::FILTER_RESPONSE_SCHEMA,
             ],
         ];
 
@@ -151,13 +192,16 @@ PROMPT;
         );
     }
 
-    public function extractFiltersAndEmbed(string $userMessage, string $embedTaskType = 'RETRIEVAL_QUERY'): array
-    {
+    public function extractFiltersAndEmbed(
+        string $userMessage,
+        string $embedTaskType = 'RETRIEVAL_QUERY',
+        ?string $embedText = null,
+    ): array {
         // Embed after extract so the vector uses cleaned query text, not the raw utterance.
         $filters = $this->extractFilters($userMessage);
-        $embedText = $filters->query ?: $userMessage;
+        $text = $filters->query ?: ($embedText ?? $userMessage);
 
-        return [$filters, $this->embed($embedText, $embedTaskType)];
+        return [$filters, $this->embed($text, $embedTaskType)];
     }
 
     /**

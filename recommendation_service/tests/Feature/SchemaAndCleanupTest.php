@@ -88,13 +88,14 @@ class SchemaAndCleanupTest extends TestCase
 
     public function test_cleanup_command_deletes_expired_conversations_and_messages(): void
     {
-        $expiredAt = now()->subMinute();
+        // Past grace: expired more than CLEANUP_GRACE_MINUTES ago.
+        $pastGraceAt = now()->subMinutes(Conversation::CLEANUP_GRACE_MINUTES + 1);
         $activeAt = now()->addHour();
 
         $expired = Conversation::query()->create([
             'user_id' => 'user-expired',
             'last_activity_at' => now()->subHours(2),
-            'expires_at' => $expiredAt,
+            'expires_at' => $pastGraceAt,
         ]);
         Message::query()->create([
             'conversation_id' => $expired->id,
@@ -120,5 +121,37 @@ class SchemaAndCleanupTest extends TestCase
         $this->assertDatabaseMissing('messages', ['conversation_id' => $expired->id]);
         $this->assertDatabaseHas('conversations', ['id' => $active->id]);
         $this->assertDatabaseHas('messages', ['conversation_id' => $active->id]);
+    }
+
+    public function test_cleanup_keeps_conversations_inside_grace_period(): void
+    {
+        $insideGrace = Conversation::query()->create([
+            'user_id' => 'user-grace',
+            'last_activity_at' => now()->subHour(),
+            'expires_at' => now()->subMinute(),
+        ]);
+        Message::query()->create([
+            'conversation_id' => $insideGrace->id,
+            'role' => Message::ROLE_USER,
+            'content' => 'Just expired for API, still in grace',
+        ]);
+
+        Artisan::call('conversations:cleanup');
+
+        $this->assertDatabaseHas('conversations', ['id' => $insideGrace->id]);
+        $this->assertDatabaseHas('messages', ['conversation_id' => $insideGrace->id]);
+    }
+
+    public function test_cleanup_deletes_exactly_at_grace_boundary(): void
+    {
+        $atBoundary = Conversation::query()->create([
+            'user_id' => 'user-boundary',
+            'last_activity_at' => now()->subHour(),
+            'expires_at' => now()->subMinutes(Conversation::CLEANUP_GRACE_MINUTES),
+        ]);
+
+        Artisan::call('conversations:cleanup');
+
+        $this->assertDatabaseMissing('conversations', ['id' => $atBoundary->id]);
     }
 }

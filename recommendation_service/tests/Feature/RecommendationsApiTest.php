@@ -102,9 +102,9 @@ class RecommendationsApiTest extends TestCase
             'role' => Message::ROLE_ASSISTANT,
         ]);
 
-        $this->assertSame(1, $this->llm->extractCalls);
-        $this->assertSame(1, $this->llm->embedCalls);
-        $this->assertSame(0, $this->llm->extractAndEmbedCalls);
+        $this->assertSame(1, $this->llm->extractAndEmbedCalls);
+        $this->assertSame(0, $this->llm->extractCalls);
+        $this->assertSame(0, $this->llm->embedCalls);
     }
 
     public function test_chat_still_extracts_when_client_filters_present(): void
@@ -124,14 +124,13 @@ class RecommendationsApiTest extends TestCase
             'limit' => 5,
         ])->assertOk();
 
-        $this->assertSame(0, $this->llm->extractAndEmbedCalls);
-        $this->assertSame(1, $this->llm->extractCalls);
-        $this->assertSame(1, $this->llm->embedCalls);
+        $this->assertSame(1, $this->llm->extractAndEmbedCalls);
         // Client price_max wins over extracted.
         $this->assertEquals(500, $response->json('extracted_filters.price_max'));
-        // Soft color stays in attributes; size would move to required_attributes.
-        $this->assertSame([['name' => 'Цвет', 'value' => 'синий']], $response->json('extracted_filters.attributes'));
+        // Color is preferred (semi-hard); size would be required.
+        $this->assertSame([], $response->json('extracted_filters.attributes'));
         $this->assertSame([], $response->json('extracted_filters.required_attributes'));
+        $this->assertSame([['name' => 'Цвет', 'value' => 'синий']], $response->json('extracted_filters.preferred_attributes'));
     }
 
     public function test_chat_marks_size_and_exclusive_color_as_required(): void
@@ -182,9 +181,154 @@ class RecommendationsApiTest extends TestCase
             'limit' => 5,
         ]);
 
-        // Soft re-rank must not empty results when attributes miss.
+        // Preferred color soft-fallback must not empty results when attributes miss.
         $response->assertOk()
             ->assertJsonPath('products.0.product_id', 1);
+        $this->assertNotEmpty($response->json('extracted_filters.relaxed'));
+    }
+
+    public function test_chat_prefers_matching_color_over_mismatch(): void
+    {
+        $this->seedProduct(1, 'Blue sneakers', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+        ]);
+        $this->seedProduct(2, 'Red sneakers', attributes: [
+            ['name' => 'Цвет', 'value' => 'Красный'],
+        ]);
+
+        $this->llm->filters = new SearchFilters(
+            query: 'sneakers',
+            attributes: [['name' => 'Цвет', 'value' => 'красный']],
+        );
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'красные кроссовки',
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertSame([2], collect($response->json('products'))->pluck('product_id')->all());
+        $this->assertSame([['name' => 'Цвет', 'value' => 'красный']], $response->json('extracted_filters.preferred_attributes'));
+    }
+
+    public function test_chat_greeting_skips_catalog_search(): void
+    {
+        $this->seedProduct(1, 'Blue sneakers');
+        $this->llm->filters = new SearchFilters(query: null);
+        $this->llm->lastChatAnswer = 'Привет! Что ищем?';
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'привет',
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertSame('Привет! Что ищем?', $response->json('answer'));
+        $this->assertSame([], $response->json('products'));
+        $this->assertSame(1, $this->llm->extractAndEmbedCalls);
+        $this->assertSame(0, $this->llm->embedCalls);
+    }
+
+    public function test_chat_client_store_id_clears_extracted_store_name(): void
+    {
+        $this->seedProduct(1, 'Item', attributes: []);
+        $this->llm->filters = new SearchFilters(
+            query: 'item',
+            storeName: 'Чужой магазин',
+        );
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'item',
+            'store_id' => 1,
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertSame(1, $response->json('extracted_filters.store_id'));
+        $this->assertNull($response->json('extracted_filters.store_name'));
+    }
+
+    public function test_chat_exclusive_persists_across_turns(): void
+    {
+        $this->seedProduct(1, 'Blue28', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+            ['name' => 'Размер', 'value' => '28'],
+        ]);
+        $this->seedProduct(2, 'Black28', attributes: [
+            ['name' => 'Цвет', 'value' => 'Чёрный'],
+            ['name' => 'Размер', 'value' => '28'],
+        ]);
+
+        $this->llm->filters = new SearchFilters(
+            query: 'джинсы',
+            attributes: [
+                ['name' => 'Цвет', 'value' => 'синий'],
+                ['name' => 'Размер', 'value' => '28'],
+            ],
+        );
+
+        $first = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'только синие джинсы',
+            'limit' => 5,
+        ])->assertOk();
+
+        $conversationId = $first->json('conversation_id');
+        $this->assertSame([], $first->json('extracted_filters.attributes'));
+        $this->assertSame([
+            ['name' => 'Цвет', 'value' => 'синий'],
+            ['name' => 'Размер', 'value' => '28'],
+        ], $first->json('extracted_filters.required_attributes'));
+
+        // Follow-up without exclusive wording — history still hardens color.
+        $this->llm->filters = new SearchFilters(
+            query: 'джинсы',
+            attributes: [
+                ['name' => 'Цвет', 'value' => 'синий'],
+                ['name' => 'Размер', 'value' => '28'],
+            ],
+        );
+
+        $second = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'conversation_id' => $conversationId,
+            'message' => 'а размер 28?',
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertSame([
+            ['name' => 'Цвет', 'value' => 'синий'],
+            ['name' => 'Размер', 'value' => '28'],
+        ], $second->json('extracted_filters.required_attributes'));
+        $this->assertSame([1], collect($second->json('products'))->pluck('product_id')->all());
+        $this->assertNotEmpty($this->llm->lastExtractInput);
+        $this->assertStringContainsString('Previous structured filters', $this->llm->lastExtractInput);
+    }
+
+    public function test_chat_relaxes_impossible_hard_filters(): void
+    {
+        $this->seedProduct(1, 'Blue jeans', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+            ['name' => 'Материал', 'value' => 'Хлопок'],
+        ]);
+
+        $this->llm->filters = new SearchFilters(
+            query: 'джинсы',
+            attributes: [
+                ['name' => 'Цвет', 'value' => 'синий'],
+                ['name' => 'Материал', 'value' => 'шёлк'],
+            ],
+        );
+
+        // Exclusive → both attrs required; silk missing → relax material → keep blue cotton.
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'только синие шёлковые джинсы',
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertNotEmpty($response->json('extracted_filters.relaxed'));
+        $this->assertSame([1], collect($response->json('products'))->pluck('product_id')->all());
     }
 
     public function test_chat_logs_when_relevance_gate_drops_all_hits(): void
@@ -226,8 +370,7 @@ class RecommendationsApiTest extends TestCase
             'limit' => 5,
         ])->assertOk();
 
-        $this->assertSame(1, $this->llm->extractCalls);
-        $this->assertSame(1, $this->llm->embedCalls);
+        $this->assertSame(1, $this->llm->extractAndEmbedCalls);
     }
 
     public function test_get_conversation_returns_persisted_product_cards(): void
@@ -284,6 +427,25 @@ class RecommendationsApiTest extends TestCase
             'conversation_id' => $conversation->id,
             'message' => 'Hi',
         ])->assertNotFound();
+    }
+
+    public function test_chat_rejects_expired_conversation(): void
+    {
+        $conversation = Conversation::query()->create([
+            'user_id' => '42',
+            'last_activity_at' => now()->subHour(),
+            'expires_at' => now()->subMinute(),
+        ]);
+
+        $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'conversation_id' => $conversation->id,
+            'message' => 'Hi again',
+            'limit' => 1,
+        ])->assertNotFound();
+
+        // Still in DB during grace — cleanup must not have removed it yet.
+        $this->assertDatabaseHas('conversations', ['id' => $conversation->id]);
     }
 
     public function test_get_and_delete_conversation_are_scoped_to_owner(): void
@@ -368,8 +530,11 @@ class RecommendationsApiTest extends TestCase
                 );
             }
 
-            public function extractFiltersAndEmbed(string $userMessage, string $embedTaskType = 'RETRIEVAL_QUERY'): array
-            {
+            public function extractFiltersAndEmbed(
+                string $userMessage,
+                string $embedTaskType = 'RETRIEVAL_QUERY',
+                ?string $embedText = null,
+            ): array {
                 return [$this->extractFilters($userMessage), []];
             }
         });

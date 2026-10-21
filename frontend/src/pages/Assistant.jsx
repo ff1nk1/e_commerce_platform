@@ -160,15 +160,33 @@ export default function Assistant() {
     ])
 
     try {
-      const payload = { message: text }
-      if (conversationId) {
-        payload.conversation_id = conversationId
-      }
-      if (storeId) {
-        payload.store_id = Number(storeId)
+      const buildPayload = (id) => {
+        const payload = { message: text }
+        if (id) {
+          payload.conversation_id = id
+        }
+        if (storeId) {
+          payload.store_id = Number(storeId)
+        }
+        return payload
       }
 
-      const { data } = await sendChatMessage(payload)
+      let data
+      try {
+        ;({ data } = await sendChatMessage(buildPayload(conversationId)))
+      } catch (err) {
+        // Expired/foreign id → drop stale storage and start a fresh conversation once.
+        if (err.response?.status === 404 && conversationId) {
+          persistConversationId(null)
+          setConversationId(null)
+          setMessages([
+            { id: optimisticId, role: 'user', content: text, products: null },
+          ])
+          ;({ data } = await sendChatMessage(buildPayload(null)))
+        } else {
+          throw err
+        }
+      }
 
       const nextId = data.conversation_id
       setConversationId(nextId)

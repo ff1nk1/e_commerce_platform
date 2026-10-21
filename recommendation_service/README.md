@@ -77,31 +77,20 @@ flowchart LR
 
 Внутри `RecommendationChatService::chat()`:
 
-1. **Диалог** — найти активный по `conversation_id`+`user_id`+`expires_at > now()`, иначе создать новый.
-2. **История** — последние **6** сообщений (`HISTORY_LIMIT`) для контекста LLM.
-3. **Сохранить** user message в `messages`.
-4. **Фильтры + embedding**:
-   - Если клиент передал structured-фильтры (`category_name|in_stock|price_*`) → без extract, только `embed(message)`.
-   - Иначе → `extractFilters`, затем `embed(filters.query ?: message)`. `store_id` с UI мержится, но extract не отключает.
-5. **normalize** — default `in_stock=true` (config); merge клиентских полей.
-6. **Поиск** → `SearchHit[]` (product + cosine distance; attributes — soft re-rank в PHP, не жёсткий SQL) → **RelevanceGate** (порог cosine distance, default `RECOMMENDATION_MAX_COSINE_DISTANCE=0.75`) → **ProductFreshnessChecker** (Catalog API).
+1. **Диалог** — если `conversation_id` пустой → создать новый; иначе найти активный по `conversation_id`+`user_id`+`expires_at > now()` (истёкший/чужой → 404). Frontend при chat 404 сбрасывает id и один раз ретраит без него.
+2. **История** — последние **6** сообщений (`HISTORY_LIMIT`) для контекста LLM + `conversations.active_filters` (sticky JSON).
+3. **Фильтры + embedding** — всегда `extractFiltersAndEmbed(...)` (даже если клиент прислал structured-фильтры; клиентские поля побеждают в `mergeFilters`). В extract уходят previous filters + user turns.
+4. **merge + normalize** — client `store_id` обнуляет extracted `store_name` (и наоборот); default `in_stock=true`; swap inverted `price_min/max`; атрибуты → soft / preferred (цвет/бренд/материал) / required (размер + exclusive-язык, в т.ч. из истории).
+5. **Intent gate** — если нет product intent (`query` и фильтры пусты) → chitchat-ответ без поиска.
+6. **Поиск** → preferred attrs как hard с soft-fallback → soft pool до 80 → при пустом результате progressive relaxation (материал → бренд → цвет → store → price) → **RelevanceGate** → **ProductFreshnessChecker**.
 7. **Карточки** — `toCardArray()` (включая `path`).
-8. **Промпт к LLM** — история + текущий user turn с блоком кандидатов:
-
-   ```
-   {message}
-
-   Candidates:
-   1. Name | 1999 ₽ | магазин: ТЦ Галерея
-   ...
-   ```
-
-9. **Ответ** — `llm->chat(..., SYSTEM_PROMPT)`, сохранить assistant message **с `products` JSON**, `touchActivity()`.
-10. Вернуть JSON с `answer` + `products`.
+8. **Промпт к LLM** — история + текущий user turn с Candidates (+ `Relaxed filters` при ослаблении).
+9. **Ответ** — `llm->chat`, затем сохранить user+assistant messages, `active_filters`, `touchActivity()`.
+10. Вернуть JSON с `answer` + `extracted_filters` (+ `relaxed`) + `products`.
 
 System prompt ассистента: краткий ответ по-русски (имя/цена/магазин), без сырых `/products/...` — карточки уже в UI.
 
-Модель **не ищет** товары сама — только рассуждает по списку, который уже нашёл PHP.
+Модель **не ищет** товары сама — только извлекает фильтры и рассуждает по списку, который уже нашёл PHP.
 
 ---
 
@@ -115,10 +104,11 @@ System prompt ассистента: краткий ответ по-русски 
 
 - всегда: `is_published = true`, `embedding IS NOT NULL`
 - опционально: `store_id` и/или `store_name` / `category_name` (ILIKE, case-insensitive, ё→е), `in_stock`, `price` min/max
-- attributes: **не** в SQL; после vector top-k — soft re-rank в PHP (ё→е, обрезка окончаний; размер «от N» → `>= N`)
+- attributes: soft re-rank / preferred (semi-hard) / required (hard); SQL JSON prefilter на hard/fallback и при ≥2 soft attrs
+- match имён атрибутов: canonical aliases (цвет/color → Цвет), без substring по имени
 - сортировка: cosine distance `embedding <=> ?::vector`, затем boost по числу совпавших attributes
 
-Вектор запроса: embedding очищенного `filters.query` (после extract), либо `embed(message)` при клиентских фильтрах / fallback `"recommended products"`.
+Вектор запроса: embedding очищенного `filters.query` (после extract), fallback — raw message / `"recommended products"`. Shared Gemini budget: `GEMINI_TIMEOUT` (default 25s).
 
 ### Откуда берутся товары (индексация)
 
@@ -190,10 +180,12 @@ Filter system prompt извлекает: `store_id` (только если по�
 
 ## 6. Диалоги и TTL
 
-- Таблицы: `conversations` (uuid, user_id, last_activity_at, expires_at), `messages` (role user|assistant, content, products jsonb, cascade delete)
+- Таблицы: `conversations` (uuid, user_id, last_activity_at, expires_at, active_filters), `messages` (role user|assistant, content, products jsonb, cascade delete)
 - Hard TTL **24h** от создания, idle **30m** от активности → `expires_at = min(hard, idle)`
-- Cleanup: `conversations:cleanup` каждую минуту (`routes/console.php`)
-- Доступ только владельцу и только к не истёкшим
+- API gate: `expires_at > now()` (для пользователя диалог уже протух)
+- Cleanup: `conversations:cleanup` каждую минуту с `withoutOverlapping` (`routes/console.php` / `recommendation_scheduler`)
+- Grace period **5 мин** (`Conversation::CLEANUP_GRACE_MINUTES`): физическое удаление только при `expires_at <= now() - 5m`, чтобы in-flight LLM-запрос не ловил FK после удаления
+- Доступ только владельцу и только к не истёкшим; expired `conversation_id` → 404 (не auto-create)
 
 ---
 
@@ -202,5 +194,5 @@ Filter system prompt извлекает: `store_id` (только если по�
 - Это **не** поиск по полному catalog_service в runtime — только локальный снимок + семантика.
 - Без Kafka-консьюмеров ассистент «пустой»; без Gemini — падает на embed/chat.
 - Ссылки на товары — SPA-пути `/products/{id}`, не внешние URL магазинов.
-- Клиентские фильтры (`store_id` / `store_name` / `category_name` / цена / stock) отключают LLM-extract и оставляют только embed.
+- Клиентские structured-фильтры **не** отключают extract: extract всегда, client fields побеждают в merge.
 - После обновления индексатора нужен restart kafka product consumer и republish, иначе `store_name` останется NULL.

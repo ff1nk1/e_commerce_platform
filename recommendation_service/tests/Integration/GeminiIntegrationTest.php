@@ -108,10 +108,45 @@ class GeminiIntegrationTest extends TestCase
 
     public function test_chat_end_to_end_via_gemini(): void
     {
-        // Live chat does extractFilters + chat (generateContent) and often hits the
-        // 60s HTTP timeout in CI/act even when embed smoke tests pass.
-        $this->markTestSkipped(
-            'Gemini chat E2E is flaky (HTTP timeout / 12s budget) in CI; embed/search cover the live API key path'
-        );
+        // Live extract+embed+chat needs a generous shared budget (CI/network variance).
+        config(['llm.gemini.timeout' => 60]);
+        $this->app->forgetInstance(\App\Services\Llm\Contracts\LlmClient::class);
+
+        app(ProductIndexer::class)->upsertFromEvent([
+            'id' => self::PRODUCT_ID,
+            'store_id' => 1,
+            'store' => ['id' => 1, 'name' => 'Main'],
+            'name' => self::PRODUCT_NAME,
+            'description' => 'Мягкий диван для гостиной, бархат, насыщенный алый цвет.',
+            'price' => 45990,
+            'category' => ['id' => 7, 'name' => 'Мебель'],
+            'attributes' => [
+                ['name' => 'Цвет', 'value' => 'Алый'],
+                ['name' => 'Материал', 'value' => 'Бархат'],
+            ],
+            'is_published' => true,
+            'quantity' => 3,
+        ], reembed: true);
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => 'integration-user',
+            'message' => 'Найди алый бархатный диван OrionX',
+            'limit' => 3,
+        ]);
+
+        // Soft-skip transient Gemini overload/timeouts; embed/search cover the live key path.
+        if (in_array($response->status(), [429, 503, 504], true)) {
+            $this->markTestSkipped(
+                'Gemini temporarily unavailable ('.$response->status().'): '
+                .(string) $response->json('message')
+            );
+        }
+
+        $response->assertOk();
+        $this->assertNotEmpty($response->json('answer'));
+        $productIds = collect($response->json('products'))->pluck('product_id')->all();
+        $this->assertContains(self::PRODUCT_ID, $productIds);
+        $query = mb_strtolower((string) ($response->json('extracted_filters.query') ?? ''));
+        $this->assertTrue($query === '' || str_contains($query, 'диван'));
     }
 }

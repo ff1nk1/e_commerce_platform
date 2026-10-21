@@ -10,6 +10,7 @@ use App\Services\Catalog\Contracts\RelevanceGate;
 use App\Services\Catalog\DTOs\SearchHit;
 use App\Services\Catalog\ProductSearchService;
 use App\Services\Catalog\SearchFiltersNormalizer;
+use App\Services\Catalog\SearchFiltersRelaxer;
 use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\DTOs\SearchFilters;
@@ -28,9 +29,19 @@ class RecommendationChatService
 Упоминай название товара, цену и магазин, если они есть.
 Не пиши пути вроде /products/123, path:, markdown-код и ссылки — карточки товаров уже показываются в интерфейсе под ответом.
 Если подходящих кандидатов нет (Candidates: (none)), честно скажи, что точного совпадения не найдено, и предложи изменить или упростить запрос (например, убрать фильтр по цвету, магазину или бюджету).
+Если в сообщении указано Relaxed filters, кратко упомяни, что часть условий была ослаблена, чтобы показать близкие варианты.
+PROMPT;
+
+    private const CHITCHAT_SYSTEM_PROMPT = <<<'PROMPT'
+Ты помощник по подбору товаров в интернет-магазине.
+Отвечай кратко по-русски. Пользователь не ищет товар прямо сейчас — поздоровайся или ответь на вопрос
+и предложи описать, что нужно найти (тип товара, цвет, размер, бюджет, магазин).
+Не выдумывай конкретные товары и цены.
 PROMPT;
 
     private const HISTORY_LIMIT = 6;
+
+    private const MAX_RELAXATION_STEPS = 3;
 
     public function __construct(
         private readonly LlmClient $llm,
@@ -39,6 +50,7 @@ PROMPT;
         private readonly RelevanceGate $relevanceGate,
         private readonly ProductFreshnessChecker $freshnessChecker,
         private readonly AttributeConstraintDetector $attributeConstraints,
+        private readonly SearchFiltersRelaxer $filtersRelaxer = new SearchFiltersRelaxer,
     ) {}
 
     /**
@@ -79,29 +91,22 @@ PROMPT;
             ->values();
 
         if ($this->llm instanceof GeminiLlmClient) {
-            $this->llm->startBudget((int) config('llm.gemini.timeout', 12));
+            $this->llm->startBudget((int) config('llm.gemini.timeout', 25));
         }
 
+        $relaxedLabels = [];
+        $productCards = [];
+        $filters = new SearchFilters;
+
         try {
-            [$extracted, $queryVector] = $this->resolveFiltersAndVector($messageText, $input, $history);
-            $merged = $this->mergeFilters($extracted, $input);
+            [$extracted, $queryVector] = $this->resolveFiltersAndVector(
+                $messageText,
+                $history,
+                is_array($conversation->active_filters) ? $conversation->active_filters : null,
+            );
+            $merged = $this->mergeFilters($extracted, $input, $history);
             $filters = $this->filtersNormalizer->normalize($merged);
             $limit = max(1, min((int) ($input['limit'] ?? 5), 20));
-
-            $hits = $this->search->search($filters, $limit, $queryVector);
-
-            $preGateHits = $hits;
-            $hits = $this->relevanceGate->accept($hits);
-            if ($preGateHits !== [] && $hits === []) {
-                $this->logGateDroppedAll($preGateHits);
-            }
-
-            $hits = $this->freshnessChecker->keepFresh($hits);
-
-            $productCards = array_map(
-                static fn (SearchHit $hit): array => $hit->product->toCardArray(),
-                $hits,
-            );
 
             $chatMessages = [];
             foreach ($history as $row) {
@@ -109,16 +114,70 @@ PROMPT;
                     ? ChatMessage::assistant((string) $row->content)
                     : ChatMessage::user((string) $row->content);
             }
-            $chatMessages[] = ChatMessage::user($messageText."\n\nCandidates:\n".$this->formatCandidates($productCards));
 
-            $answer = $this->llm->chat($chatMessages, self::SYSTEM_PROMPT);
+            if (! $filters->hasSearchIntent()) {
+                $chatMessages[] = ChatMessage::user($messageText);
+                $answer = $this->llm->chat($chatMessages, self::CHITCHAT_SYSTEM_PROMPT);
+                Log::info('Recommendation chat skipped catalog search (no product intent)', [
+                    'conversation_id' => (string) $conversation->id,
+                ]);
+            } else {
+                $searchResult = $this->search->searchDetailed($filters, $limit, $queryVector);
+                $hits = $searchResult->hits;
+                if ($searchResult->preferredRelaxed && $filters->preferredAttributes !== []) {
+                    foreach ($filters->preferredAttributes as $attr) {
+                        $relaxedLabels[] = $attr['name'].'='.$attr['value'].' (soft fallback)';
+                    }
+                }
+
+                // Progressive relaxation when still empty.
+                $steps = 0;
+                while ($hits === [] && $steps < self::MAX_RELAXATION_STEPS) {
+                    $step = $this->filtersRelaxer->relaxOnce($filters);
+                    if ($step === null) {
+                        break;
+                    }
+                    $filters = $this->filtersNormalizer->normalize($step['filters']);
+                    $relaxedLabels[] = $step['relaxed'];
+                    $searchResult = $this->search->searchDetailed($filters, $limit, $queryVector);
+                    $hits = $searchResult->hits;
+                    $steps++;
+                }
+
+                $preGateHits = $hits;
+                $hits = $this->relevanceGate->accept($hits);
+                if ($preGateHits !== [] && $hits === []) {
+                    $this->logGateDroppedAll($preGateHits);
+                }
+
+                $hits = $this->freshnessChecker->keepFresh($hits);
+
+                $productCards = array_map(
+                    static fn (SearchHit $hit): array => $hit->product->toCardArray(),
+                    $hits,
+                );
+
+                $this->logSearchTurn($conversation, $filters, $relaxedLabels, count($preGateHits), count($hits));
+
+                $userContent = $messageText."\n\nCandidates:\n".$this->formatCandidates($productCards);
+                if ($relaxedLabels !== []) {
+                    $userContent .= "\n\nRelaxed filters: ".implode('; ', $relaxedLabels);
+                }
+                $chatMessages[] = ChatMessage::user($userContent);
+                $answer = $this->llm->chat($chatMessages, self::SYSTEM_PROMPT);
+            }
         } finally {
             if ($this->llm instanceof GeminiLlmClient) {
                 $this->llm->clearBudget();
             }
         }
 
-        DB::transaction(function () use ($conversation, $messageText, $answer, $productCards): void {
+        $filtersPayload = $filters->toArray();
+        if ($relaxedLabels !== []) {
+            $filtersPayload['relaxed'] = $relaxedLabels;
+        }
+
+        DB::transaction(function () use ($conversation, $messageText, $answer, $productCards, $filtersPayload): void {
             Message::query()->create([
                 'conversation_id' => $conversation->id,
                 'role' => Message::ROLE_USER,
@@ -132,13 +191,14 @@ PROMPT;
                 'products' => $productCards,
             ]);
 
+            $conversation->active_filters = $filtersPayload;
             $conversation->touchActivity();
         });
 
         return [
             'conversation_id' => (string) $conversation->id,
             'answer' => $answer,
-            'extracted_filters' => $filters->toArray(),
+            'extracted_filters' => $filtersPayload,
             'products' => $productCards,
         ];
     }
@@ -154,38 +214,56 @@ PROMPT;
     }
 
     /**
-     * @param  array<string, mixed>  $input
      * @param  Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
+     * @param  array<string, mixed>|null  $previousFilters
      * @return array{0: SearchFilters, 1: list<float>}
      */
-    private function resolveFiltersAndVector(string $messageText, array $input, $history): array
+    private function resolveFiltersAndVector(string $messageText, $history, ?array $previousFilters): array
     {
-        // Always extract so attributes (color/size/…) are available even when the
-        // client sends structured filters; client fields win in mergeFilters().
-        $extracted = $this->llm->extractFilters(
-            $this->buildExtractInput($messageText, $history)
-        );
-        $embedText = $extracted->query ?: $messageText;
+        $extractInput = $this->buildExtractInput($messageText, $history, $previousFilters);
 
-        return [$extracted, $this->llm->embed($embedText, 'RETRIEVAL_QUERY')];
+        return $this->llm->extractFiltersAndEmbed(
+            $extractInput,
+            'RETRIEVAL_QUERY',
+            // Fallback embed text when extract.query is null (never the full extract prompt).
+            $messageText,
+        );
     }
 
     /**
      * @param  Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
+     * @param  array<string, mixed>|null  $previousFilters
      */
-    private function buildExtractInput(string $messageText, $history): string
+    private function buildExtractInput(string $messageText, $history, ?array $previousFilters): string
     {
-        if ($history->isEmpty()) {
-            return $messageText;
+        $parts = [];
+
+        if ($previousFilters !== null && $previousFilters !== []) {
+            $compact = $previousFilters;
+            unset($compact['relaxed']);
+            $parts[] = 'Previous structured filters (JSON): '.json_encode(
+                $compact,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
         }
 
-        $lines = [];
-        foreach ($history as $row) {
-            $role = $row->role === Message::ROLE_ASSISTANT ? 'assistant' : 'user';
-            $lines[] = $role.': '.(string) $row->content;
+        if (! $history->isEmpty()) {
+            $lines = [];
+            foreach ($history as $row) {
+                // Prefer user turns for sticky context; skip long assistant product pitches.
+                if ($row->role !== Message::ROLE_USER) {
+                    continue;
+                }
+                $lines[] = 'user: '.(string) $row->content;
+            }
+            if ($lines !== []) {
+                $parts[] = "Conversation so far (user turns):\n".implode("\n", $lines);
+            }
         }
 
-        return "Conversation so far:\n".implode("\n", $lines)."\n\nCurrent user message:\n".$messageText;
+        $parts[] = "Current user message:\n".$messageText;
+
+        return implode("\n\n", $parts);
     }
 
     private function resolveConversation(string $userId, ?string $conversationId): Conversation
@@ -220,17 +298,35 @@ PROMPT;
 
     /**
      * @param  array<string, mixed>  $input
+     * @param  Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
      */
-    private function mergeFilters(SearchFilters $extracted, array $input): SearchFilters
+    private function mergeFilters(SearchFilters $extracted, array $input, $history): SearchFilters
     {
         $messageText = trim((string) ($input['message'] ?? ''));
-        $split = $this->attributeConstraints->split($messageText, $extracted->attributes);
+        $exclusiveFromHistory = $this->attributeConstraints->historyImpliesExclusive($history);
+        $split = $this->attributeConstraints->split(
+            $messageText,
+            $extracted->attributes,
+            $exclusiveFromHistory,
+        );
+
+        $clientStoreId = isset($input['store_id']) ? (int) $input['store_id'] : null;
+        $clientStoreName = isset($input['store_name']) && trim((string) $input['store_name']) !== ''
+            ? trim((string) $input['store_name'])
+            : null;
+
+        // Client store_id wins; drop conflicting extracted store_name (and vice versa).
+        $storeId = $clientStoreId ?? $extracted->storeId;
+        $storeName = $clientStoreName ?? $extracted->storeName;
+        if ($clientStoreId !== null) {
+            $storeName = null;
+        } elseif ($clientStoreName !== null) {
+            $storeId = null;
+        }
 
         return new SearchFilters(
-            storeId: isset($input['store_id']) ? (int) $input['store_id'] : $extracted->storeId,
-            storeName: isset($input['store_name']) && trim((string) $input['store_name']) !== ''
-                ? trim((string) $input['store_name'])
-                : $extracted->storeName,
+            storeId: $storeId,
+            storeName: $storeName,
             categoryName: isset($input['category_name']) && trim((string) $input['category_name']) !== ''
                 ? trim((string) $input['category_name'])
                 : $extracted->categoryName,
@@ -239,10 +335,11 @@ PROMPT;
                 : $extracted->inStock,
             priceMin: isset($input['price_min']) ? (float) $input['price_min'] : $extracted->priceMin,
             priceMax: isset($input['price_max']) ? (float) $input['price_max'] : $extracted->priceMax,
-            query: $extracted->query ?: $messageText,
-            // Soft re-rank uses non-required attrs; size / exclusive go to requiredAttributes.
+            // Keep extracted query as-is (null for chitchat); do not force raw message into query.
+            query: $extracted->query,
             attributes: $split['soft'],
             requiredAttributes: $split['required'],
+            preferredAttributes: $split['preferred'],
         );
     }
 
@@ -260,6 +357,32 @@ PROMPT;
                 ],
                 $hits,
             ),
+        ]);
+    }
+
+    /**
+     * @param  list<string>  $relaxedLabels
+     */
+    private function logSearchTurn(
+        Conversation $conversation,
+        SearchFilters $filters,
+        array $relaxedLabels,
+        int $preGateCount,
+        int $postFreshCount,
+    ): void {
+        Log::info('Recommendation chat search turn', [
+            'conversation_id' => (string) $conversation->id,
+            'query' => $filters->query,
+            'soft_attributes' => $filters->attributes,
+            'required_attributes' => $filters->requiredAttributes,
+            'preferred_attributes' => $filters->preferredAttributes,
+            'store_id' => $filters->storeId,
+            'store_name' => $filters->storeName,
+            'price_min' => $filters->priceMin,
+            'price_max' => $filters->priceMax,
+            'relaxed' => $relaxedLabels,
+            'hits_pre_gate' => $preGateCount,
+            'hits_post_freshness' => $postFreshCount,
         ]);
     }
 

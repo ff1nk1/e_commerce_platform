@@ -17,6 +17,8 @@ class FakeLlmClient implements LlmClient
 
     public int $extractAndEmbedCalls = 0;
 
+    public string $lastExtractInput = '';
+
     public function __construct()
     {
         $this->filters = new SearchFilters(query: 'sneakers');
@@ -37,13 +39,18 @@ class FakeLlmClient implements LlmClient
     public function extractFilters(string $userMessage): SearchFilters
     {
         $this->extractCalls++;
+        $this->lastExtractInput = $userMessage;
 
         return $this->filters;
     }
 
-    public function extractFiltersAndEmbed(string $userMessage, string $embedTaskType = 'RETRIEVAL_QUERY'): array
-    {
+    public function extractFiltersAndEmbed(
+        string $userMessage,
+        string $embedTaskType = 'RETRIEVAL_QUERY',
+        ?string $embedText = null,
+    ): array {
         $this->extractAndEmbedCalls++;
+        $this->lastExtractInput = $userMessage;
 
         return [$this->filters, array_fill(0, 768, 0.01)];
     }

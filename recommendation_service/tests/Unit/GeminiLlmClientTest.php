@@ -134,7 +134,8 @@ class GeminiLlmClientTest extends TestCase
         Http::assertSent(function ($request) {
             $body = $request->data();
 
-            return ($body['generationConfig']['responseMimeType'] ?? null) === 'application/json';
+            return ($body['generationConfig']['responseMimeType'] ?? null) === 'application/json'
+                && isset($body['generationConfig']['responseSchema']['type']);
         });
     }
 

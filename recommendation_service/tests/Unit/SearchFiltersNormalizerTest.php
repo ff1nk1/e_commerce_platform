@@ -39,4 +39,30 @@ class SearchFiltersNormalizerTest extends TestCase
         $this->assertNull($normalized->query);
         $this->assertNull($normalized->inStock);
     }
+
+    public function test_swaps_inverted_price_range(): void
+    {
+        $normalizer = new SearchFiltersNormalizer(requireInStock: false);
+        $normalized = $normalizer->normalize(new SearchFilters(
+            priceMin: 500,
+            priceMax: 100,
+            query: 'x',
+        ));
+
+        $this->assertSame(100.0, $normalized->priceMin);
+        $this->assertSame(500.0, $normalized->priceMax);
+    }
+
+    public function test_canonicalizes_attribute_aliases(): void
+    {
+        $normalizer = new SearchFiltersNormalizer(requireInStock: false);
+        $normalized = $normalizer->normalize(new SearchFilters(
+            query: 'x',
+            attributes: [['name' => 'color', 'value' => 'red']],
+            preferredAttributes: [['name' => 'brand', 'value' => 'Nike']],
+        ));
+
+        $this->assertSame([['name' => 'Цвет', 'value' => 'red']], $normalized->attributes);
+        $this->assertSame([['name' => 'Бренд', 'value' => 'Nike']], $normalized->preferredAttributes);
+    }
 }

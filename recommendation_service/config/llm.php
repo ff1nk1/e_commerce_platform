@@ -12,7 +12,7 @@ return [
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
         'embedding_dimensions' => (int) env('GEMINI_EMBEDDING_DIMENSIONS', 768),
         // Per HTTP call + shared chat budget (extract+embed+chat), seconds.
-        'timeout' => (int) env('GEMINI_TIMEOUT', 12),
+        'timeout' => (int) env('GEMINI_TIMEOUT', 25),
     ],
 
 ];

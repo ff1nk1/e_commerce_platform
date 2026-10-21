@@ -4,6 +4,7 @@ namespace App\Services\Catalog;
 
 use App\Models\ProductCatalog;
 use App\Services\Catalog\DTOs\SearchHit;
+use App\Services\Catalog\DTOs\SearchResult;
 use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\DTOs\SearchFilters;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,6 +20,7 @@ class ProductSearchService
 
     public function __construct(
         private readonly LlmClient $llm,
+        private readonly AttributeNameNormalizer $attributeNames = new AttributeNameNormalizer,
     ) {}
 
     /**
@@ -27,6 +29,14 @@ class ProductSearchService
      */
     public function search(SearchFilters $filters, int $limit = 5, ?array $precomputedVector = null): array
     {
+        return $this->searchDetailed($filters, $limit, $precomputedVector)->hits;
+    }
+
+    /**
+     * @param  list<float>|null  $precomputedVector
+     */
+    public function searchDetailed(SearchFilters $filters, int $limit = 5, ?array $precomputedVector = null): SearchResult
+    {
         $limit = max(1, min($limit, 20));
         $vector = $precomputedVector ?? $this->llm->embed(
             $filters->query ?: 'recommended products',
@@ -34,6 +44,60 @@ class ProductSearchService
         );
         $literal = $this->toVectorLiteral($vector);
 
+        $softAttrs = $filters->attributes;
+        $hardAttrs = $filters->requiredAttributes;
+        $preferredAttrs = $filters->preferredAttributes;
+
+        // Preferred (color/brand/material): try as hard first, fall back to soft re-rank.
+        if ($preferredAttrs !== []) {
+            $hardAttempt = new SearchFilters(
+                storeId: $filters->storeId,
+                storeName: $filters->storeName,
+                categoryName: $filters->categoryName,
+                inStock: $filters->inStock,
+                priceMin: $filters->priceMin,
+                priceMax: $filters->priceMax,
+                query: $filters->query,
+                attributes: $softAttrs,
+                requiredAttributes: array_merge($hardAttrs, $preferredAttrs),
+                preferredAttributes: [],
+            );
+            $hits = $this->searchWithHardAndSoft($hardAttempt, $literal, $limit);
+            if ($hits !== []) {
+                return new SearchResult(hits: $hits, preferredRelaxed: false);
+            }
+
+            // Fallback: preferred become soft so we still return near matches.
+            $filters = new SearchFilters(
+                storeId: $filters->storeId,
+                storeName: $filters->storeName,
+                categoryName: $filters->categoryName,
+                inStock: $filters->inStock,
+                priceMin: $filters->priceMin,
+                priceMax: $filters->priceMax,
+                query: $filters->query,
+                attributes: array_merge($preferredAttrs, $softAttrs),
+                requiredAttributes: $hardAttrs,
+                preferredAttributes: [],
+            );
+
+            return new SearchResult(
+                hits: $this->searchWithHardAndSoft($filters, $literal, $limit),
+                preferredRelaxed: true,
+            );
+        }
+
+        return new SearchResult(
+            hits: $this->searchWithHardAndSoft($filters, $literal, $limit),
+            preferredRelaxed: false,
+        );
+    }
+
+    /**
+     * @return list<SearchHit>
+     */
+    private function searchWithHardAndSoft(SearchFilters $filters, string $literal, int $limit): array
+    {
         $hasSoft = $filters->attributes !== [];
         $hasHard = $filters->requiredAttributes !== [];
 
@@ -41,16 +105,31 @@ class ProductSearchService
         if ($hasHard) {
             $fetchLimit = max($fetchLimit, self::HARD_ATTR_POOL);
         } elseif ($hasSoft) {
-            $fetchLimit = min(self::SOFT_ATTR_POOL, max($limit * 4, $limit));
+            $fetchLimit = max($fetchLimit, self::SOFT_ATTR_POOL);
         }
 
         $hits = $this->vectorSearch($filters, $literal, $fetchLimit);
 
+        // Widen recall when several soft attrs are unlikely to co-occur in the vector top-k.
+        if (! $hasHard && count($filters->attributes) >= 2) {
+            $fallback = $this->attributeFirstFallback(
+                $filters,
+                $literal,
+                self::SOFT_ATTR_POOL,
+                $filters->attributes,
+            );
+            $hits = $this->mergeHitsByProductId($hits, $fallback);
+        }
+
         if ($hasHard) {
             $matched = $this->hardFilterByAttributes($hits, $filters->requiredAttributes);
             if ($matched === []) {
-                // Hybrid recall: structured filters + SQL attribute prefilter, then exact PHP match.
-                $hits = $this->attributeFirstFallback($filters, $literal, self::ATTR_FALLBACK_POOL);
+                $hits = $this->attributeFirstFallback(
+                    $filters,
+                    $literal,
+                    self::ATTR_FALLBACK_POOL,
+                    $filters->requiredAttributes,
+                );
                 $matched = $this->hardFilterByAttributes($hits, $filters->requiredAttributes);
             }
             $hits = $matched;
@@ -60,7 +139,6 @@ class ProductSearchService
             return [];
         }
 
-        // Soft re-rank uses soft attrs plus required (prefer full match).
         $rerankAttrs = array_merge($filters->requiredAttributes, $filters->attributes);
         if ($rerankAttrs !== []) {
             $hits = $this->softRerankByAttributes($hits, $rerankAttrs);
@@ -87,14 +165,19 @@ class ProductSearchService
     }
 
     /**
-     * Wider structured scan with JSON text prefilter when vector pool missed hard attrs.
+     * Wider structured scan with JSON text prefilter when vector pool missed attributes.
      *
+     * @param  list<array{name: string, value: string}>  $attributes
      * @return list<SearchHit>
      */
-    private function attributeFirstFallback(SearchFilters $filters, string $literal, int $fetchLimit): array
-    {
+    private function attributeFirstFallback(
+        SearchFilters $filters,
+        string $literal,
+        int $fetchLimit,
+        array $attributes,
+    ): array {
         $builder = $this->baseFilteredQuery($filters);
-        $this->applyAttributeSqlPrefilter($builder, $filters->requiredAttributes);
+        $this->applyAttributeSqlPrefilter($builder, $attributes);
 
         $rows = $builder
             ->select('id')
@@ -104,6 +187,24 @@ class ProductSearchService
             ->get();
 
         return $this->hydrateHits($rows);
+    }
+
+    /**
+     * @param  list<SearchHit>  $primary
+     * @param  list<SearchHit>  $extra
+     * @return list<SearchHit>
+     */
+    private function mergeHitsByProductId(array $primary, array $extra): array
+    {
+        $byId = [];
+        foreach (array_merge($primary, $extra) as $hit) {
+            $id = (int) $hit->product->id;
+            if (! isset($byId[$id]) || $hit->distance < $byId[$id]->distance) {
+                $byId[$id] = $hit;
+            }
+        }
+
+        return array_values($byId);
     }
 
     /**
@@ -182,7 +283,6 @@ class ProductSearchService
             if ($value === '') {
                 continue;
             }
-            // Prefer the numeric token for sizes ("28", "от 27" → 27).
             $token = $value;
             if (preg_match('/(\d+(?:[.,]\d+)?)/u', $value, $matches) === 1) {
                 $token = $matches[1];
@@ -249,9 +349,8 @@ class ProductSearchService
 
     private function productMatchesAttribute(ProductCatalog $product, string $name, string $value): bool
     {
-        $nameNeedle = $this->normalizeCaseYo($name);
         $valueNeedle = $this->normalizeAttrValue($value);
-        if ($nameNeedle === '' || $valueNeedle === '') {
+        if ($this->attributeNames->canonicalize($name) === '' || $valueNeedle === '') {
             return false;
         }
 
@@ -260,12 +359,12 @@ class ProductSearchService
             if (! is_array($row)) {
                 continue;
             }
-            $attrName = $this->normalizeCaseYo((string) ($row['name'] ?? ''));
+            $attrName = (string) ($row['name'] ?? '');
             $attrValue = (string) ($row['value'] ?? '');
             if ($attrName === '' || $attrValue === '') {
                 continue;
             }
-            if (! str_contains($attrName, $nameNeedle)) {
+            if (! $this->attributeNames->namesMatch($attrName, $name)) {
                 continue;
             }
             if ($this->attributeValuesMatch($attrName, $attrValue, $value, $valueNeedle)) {
@@ -304,8 +403,10 @@ class ProductSearchService
 
     private function isSizeAttribute(string $normalizedName): bool
     {
-        return str_contains($normalizedName, 'размер')
-            || str_contains($normalizedName, 'size');
+        $key = $this->normalizeCaseYo($normalizedName);
+
+        return str_contains($key, 'размер')
+            || str_contains($key, 'size');
     }
 
     /**

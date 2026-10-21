@@ -3,21 +3,27 @@
 namespace App\Services\Catalog;
 
 /**
- * Decides which extracted attributes are hard constraints vs soft preferences.
+ * Decides which extracted attributes are hard, preferred (semi-hard), or soft.
  */
 class AttributeConstraintDetector
 {
+    public function __construct(
+        private readonly AttributeNameNormalizer $names = new AttributeNameNormalizer,
+    ) {}
+
     /**
      * @param  list<array{name: string, value: string}>  $attributes
      * @return array{
      *     required: list<array{name: string, value: string}>,
+     *     preferred: list<array{name: string, value: string}>,
      *     soft: list<array{name: string, value: string}>
      * }
      */
-    public function split(string $userMessage, array $attributes): array
+    public function split(string $userMessage, array $attributes, bool $exclusiveFromHistory = false): array
     {
-        $exclusive = $this->messageImpliesExclusive($userMessage);
+        $exclusive = $exclusiveFromHistory || $this->messageImpliesExclusive($userMessage);
         $required = [];
+        $preferred = [];
         $soft = [];
 
         foreach ($attributes as $attr) {
@@ -26,15 +32,23 @@ class AttributeConstraintDetector
             if ($name === '' || $value === '') {
                 continue;
             }
-            $row = ['name' => $name, 'value' => $value];
-            if ($exclusive || $this->isSizeAttributeName($name)) {
+            $canonical = $this->names->canonicalize($name);
+            $row = ['name' => $canonical !== '' ? $canonical : $name, 'value' => $value];
+
+            if ($exclusive || $this->isSizeAttributeName($row['name'])) {
                 $required[] = $row;
+            } elseif ($this->isPreferredAttributeName($row['name'])) {
+                $preferred[] = $row;
             } else {
                 $soft[] = $row;
             }
         }
 
-        return ['required' => $required, 'soft' => $soft];
+        return [
+            'required' => $required,
+            'preferred' => $preferred,
+            'soft' => $soft,
+        ];
     }
 
     public function messageImpliesExclusive(string $message): bool
@@ -47,10 +61,34 @@ class AttributeConstraintDetector
         ) === 1;
     }
 
+    /**
+     * @param  iterable<int, object{role?: string, content?: string}|array{role?: string, content?: string}>  $history
+     */
+    public function historyImpliesExclusive(iterable $history): bool
+    {
+        foreach ($history as $row) {
+            $role = is_array($row) ? ($row['role'] ?? '') : ($row->role ?? '');
+            $content = is_array($row) ? (string) ($row['content'] ?? '') : (string) ($row->content ?? '');
+            if ($role === 'user' && $this->messageImpliesExclusive($content)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function isSizeAttributeName(string $name): bool
     {
         $normalized = str_replace('ё', 'е', mb_strtolower(trim($name)));
 
         return str_contains($normalized, 'размер') || str_contains($normalized, 'size');
+    }
+
+    public function isPreferredAttributeName(string $name): bool
+    {
+        $canonical = $this->names->canonicalize($name);
+        $key = str_replace('ё', 'е', mb_strtolower($canonical));
+
+        return in_array($key, ['цвет', 'бренд', 'материал'], true);
     }
 }

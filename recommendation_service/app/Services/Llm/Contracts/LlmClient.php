@@ -20,9 +20,14 @@ interface LlmClient
     public function extractFilters(string $userMessage): SearchFilters;
 
     /**
-     * Extract filters then embed the cleaned query (or raw message when query is null).
+     * Extract filters then embed cleaned query text.
+     * When $embedText is null, embeds filters.query or $userMessage.
      *
      * @return array{0: SearchFilters, 1: list<float>}
      */
-    public function extractFiltersAndEmbed(string $userMessage, string $embedTaskType = 'RETRIEVAL_QUERY'): array;
+    public function extractFiltersAndEmbed(
+        string $userMessage,
+        string $embedTaskType = 'RETRIEVAL_QUERY',
+        ?string $embedText = null,
+    ): array;
 }

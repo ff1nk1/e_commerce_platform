@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon $last_activity_at
  * @property Carbon $expires_at
+ * @property array<string, mixed>|null $active_filters
  * @property-read Collection<int, Message> $messages
  */
 class Conversation extends Model
@@ -23,17 +24,22 @@ class Conversation extends Model
 
     public const HARD_TTL_HOURS = 24;
 
-    public const IDLE_TTL_MINUTES = 30;
+    public const IDLE_TTL_MINUTES = 1;
+
+    /** Physical delete only after this many minutes past expires_at (API already blocks access). */
+    public const CLEANUP_GRACE_MINUTES = 0;
 
     protected $fillable = [
         'user_id',
         'last_activity_at',
         'expires_at',
+        'active_filters',
     ];
 
     protected $casts = [
         'last_activity_at' => 'datetime',
         'expires_at' => 'datetime',
+        'active_filters' => 'array',
     ];
 
     /** @return HasMany<Message, $this> */
