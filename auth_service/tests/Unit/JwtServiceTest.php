@@ -62,7 +62,7 @@ class JwtServiceTest extends TestCase
         Role::factory()->create(['id' => 1, 'slug' => 'customer', 'name' => 'Customer']);
         $user = User::factory()->create(['role_id' => 1]);
 
-        $now = time();
+        $now = now()->getTimestamp();
         $token = JWT::encode([
             'sub' => $user->id,
             'iat' => $now - 120,

@@ -4,6 +4,7 @@ namespace App\Services\Stripe;
 
 use App\Contracts\PaymentGateway;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Stripe\Webhook;
@@ -16,6 +17,8 @@ use UnexpectedValueException;
  */
 class StripeClient implements PaymentGateway
 {
+    private const SIGNATURE_TOLERANCE_SECONDS = 300;
+
     public function createCheckoutSession(array $params): array
     {
         return $this->request('post', 'checkout/sessions', $params);
@@ -124,7 +127,8 @@ class StripeClient implements PaymentGateway
             throw new UnexpectedValueException('Unable to extract timestamp and signatures from header');
         }
 
-        if (abs(time() - (int) $timestamp) > 300) {
+        $eventTime = Carbon::createFromTimestamp((int) $timestamp);
+        if ($eventTime->diffInSeconds(now(), absolute: true) > self::SIGNATURE_TOLERANCE_SECONDS) {
             throw new UnexpectedValueException('Timestamp outside the tolerance zone');
         }
 

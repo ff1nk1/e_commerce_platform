@@ -6,6 +6,7 @@ use App\Models\User;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Throwable;
 
 class JwtService
@@ -33,12 +34,12 @@ class JwtService
      */
     public function createAccessToken(User $user): string
     {
-        $now = time();
+        $now = now();
 
         $payload = [
             'sub' => $user->getAuthIdentifier(),
-            'iat' => $now,
-            'exp' => $now + $this->ttl,
+            'iat' => $now->getTimestamp(),
+            'exp' => $now->copy()->addSeconds($this->ttl)->getTimestamp(),
             'jti' => bin2hex(random_bytes(16)),
         ];
 
@@ -105,8 +106,10 @@ class JwtService
                 return;
             }
 
-            $now = time();
-            $remainingTtl = $payload->exp - $now;
+            $remainingTtl = (int) now()->diffInSeconds(
+                Carbon::createFromTimestamp((int) $payload->exp),
+                false
+            );
 
             /*
              * Токен уже истёк — блэклистить нечего,

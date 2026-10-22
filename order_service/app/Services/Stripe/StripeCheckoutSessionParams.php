@@ -7,7 +7,7 @@ use App\Models\Payment;
 
 final class StripeCheckoutSessionParams
 {
-    private const SESSION_TTL_SECONDS = 30 * 60;
+    private const SESSION_TTL_MINUTES = 30;
 
     /**
      * @param  list<array<string, mixed>>  $lineItems
@@ -26,7 +26,7 @@ final class StripeCheckoutSessionParams
                 'order_id' => (string) $order->id,
                 'payment_id' => (string) $payment->id,
             ],
-            'expires_at' => time() + self::SESSION_TTL_SECONDS,
+            'expires_at' => now()->addMinutes(self::SESSION_TTL_MINUTES)->getTimestamp(),
             'line_items' => $lineItems,
         ];
     }

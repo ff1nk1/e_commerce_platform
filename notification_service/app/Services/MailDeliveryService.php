@@ -185,7 +185,7 @@ class MailDeliveryService
                     'retries' => $attempt,
                     'moved_to_dlq' => false,
                     'error_message' => null,
-                    'time' => time(),
+                    'time' => now()->getTimestamp(),
                 ]);
 
                 $isSent = true;

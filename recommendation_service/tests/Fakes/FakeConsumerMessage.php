@@ -54,6 +54,6 @@ class FakeConsumerMessage implements ConsumerMessage
 
     public function getTimestamp(): ?int
     {
-        return time();
+        return now()->getTimestamp();
     }
 }

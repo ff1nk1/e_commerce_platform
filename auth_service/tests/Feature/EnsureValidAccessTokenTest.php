@@ -44,7 +44,7 @@ class EnsureValidAccessTokenTest extends TestCase
             'password' => 'password123',
         ]);
 
-        $now = time();
+        $now = now()->getTimestamp();
         $expiredAccess = JWT::encode([
             'sub' => $user->id,
             'iat' => $now - 120,

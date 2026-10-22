@@ -37,7 +37,7 @@ trait RequiresStripe
     protected function signStripeWebhookPayload(array $event): array
     {
         $payload = json_encode($event, JSON_THROW_ON_ERROR);
-        $timestamp = time();
+        $timestamp = now()->getTimestamp();
         $secret = $this->requireStripeWebhookSecret();
         $signature = hash_hmac('sha256', $timestamp.'.'.$payload, $secret);
 

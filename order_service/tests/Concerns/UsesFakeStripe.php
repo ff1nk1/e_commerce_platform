@@ -27,7 +27,7 @@ trait UsesFakeStripe
     protected function signFakeStripeWebhook(array $event): array
     {
         $payload = json_encode($event, JSON_THROW_ON_ERROR);
-        $timestamp = time();
+        $timestamp = now()->getTimestamp();
         $secret = (string) config('services.stripe.webhook_secret', self::FAKE_WEBHOOK_SECRET);
         $signature = hash_hmac('sha256', $timestamp.'.'.$payload, $secret);
 
