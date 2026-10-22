@@ -9,6 +9,8 @@ use Junges\Kafka\Facades\Kafka;
 
 class KafkaConsumeProductEvents extends Command
 {
+    private const MIGRATION_WAIT_SLEEP_SECONDS = 5;
+
     protected $signature = 'kafka:consume:product-events';
 
     protected $description = 'Консьюмер Order Service для снапшотов product.created / product.updated';
@@ -19,7 +21,7 @@ class KafkaConsumeProductEvents extends Command
 
         while (! Schema::hasTable('product_snapshots')) {
             $this->warn('Таблица product_snapshots ещё нет — ждём миграции (sleep 5s)...');
-            sleep(5);
+            sleep(self::MIGRATION_WAIT_SLEEP_SECONDS);
         }
 
         $consumer = Kafka::consumer(['product.created', 'product.updated'])

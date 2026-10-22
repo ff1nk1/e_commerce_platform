@@ -29,8 +29,11 @@ class ProductEventsHandler
             $body = [];
         }
 
-        $eventType = $headers['event-type'] ?? ($body['event'] ?? null);
-        if (! is_string($eventType) || ! in_array($eventType, self::ALLOWED_TYPES, true)) {
+        $headerEventType = $headers['event-type'] ?? null;
+        $bodyEventType = $body['event'] ?? null;
+        $eventType = $headerEventType ?? $bodyEventType;
+        $isAllowedEventType = is_string($eventType) && in_array($eventType, self::ALLOWED_TYPES, true);
+        if (! $isAllowedEventType) {
             Log::debug('Recommendation: ignore product event', [
                 'event' => is_string($eventType) ? $eventType : get_debug_type($eventType),
             ]);
@@ -39,7 +42,8 @@ class ProductEventsHandler
         }
 
         $data = $body['data'] ?? null;
-        if (! is_array($data)) {
+        $hasDataPayload = is_array($data);
+        if (! $hasDataPayload) {
             Log::warning('Recommendation: product event without data', [
                 'event' => $eventType,
                 'body_keys' => array_keys($body),
@@ -49,7 +53,8 @@ class ProductEventsHandler
         }
 
         $id = $data['id'] ?? $data['product_id'] ?? null;
-        if ($id === null || ! is_numeric($id) || (int) $id <= 0) {
+        $hasValidProductId = $id !== null && is_numeric($id) && (int) $id > 0;
+        if (! $hasValidProductId) {
             Log::warning('Recommendation: product event without valid id', [
                 'event' => $eventType,
                 'data_keys' => array_keys($data),
@@ -59,9 +64,9 @@ class ProductEventsHandler
         }
 
         $productId = (int) $id;
+        $isUpsertEvent = in_array($eventType, ['product.created', 'product.updated'], true);
 
-        if (in_array($eventType, ['product.created', 'product.updated'], true)
-            && ! $this->hasUpsertPayload($data)) {
+        if ($isUpsertEvent && ! $this->hasUpsertPayload($data)) {
             Log::warning('Recommendation: product upsert missing required fields', [
                 'event' => $eventType,
                 'product_id' => $productId,

@@ -11,10 +11,11 @@ const STATUS_OPTIONS = [
 
 function formatDate(dateString) {
   if (!dateString) return '—'
-  const value = typeof dateString === 'number'
-    ? dateString * (dateString < 1e12 ? 1000 : 1)
+  const isProbablyUnixSeconds = typeof dateString === 'number' && dateString < 1e12
+  const toMilliseconds = typeof dateString === 'number'
+    ? (isProbablyUnixSeconds ? dateString * 1000 : dateString)
     : dateString
-  return new Date(value).toLocaleString('ru-RU', {
+  return new Date(toMilliseconds).toLocaleString('ru-RU', {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
@@ -32,15 +33,27 @@ function shortenId(id) {
   return `${id.slice(0, 4)}…${id.slice(-4)}`
 }
 
+const EMAIL_MAX_DISPLAY_LENGTH = 22
+const EMAIL_LOCAL_KEEP = 6
+const EMAIL_LOCAL_SOFT_MAX = 8
+const EMAIL_DOMAIN_KEEP = 10
+const EMAIL_DOMAIN_SOFT_MAX = 14
+const EMAIL_FALLBACK_PREFIX = 10
+
 function shortenEmail(email) {
   if (!email) return '—'
-  if (email.length <= 22) return email
+  if (email.length <= EMAIL_MAX_DISPLAY_LENGTH) return email
   const at = email.indexOf('@')
-  if (at <= 0) return `${email.slice(0, 10)}…`
+  if (at <= 0) return `${email.slice(0, EMAIL_FALLBACK_PREFIX)}…`
   const local = email.slice(0, at)
   const domain = email.slice(at)
-  const shortLocal = local.length > 8 ? `${local.slice(0, 6)}…` : local
-  return `${shortLocal}${domain.length > 14 ? `${domain.slice(0, 10)}…` : domain}`
+  const shortLocal = local.length > EMAIL_LOCAL_SOFT_MAX
+    ? `${local.slice(0, EMAIL_LOCAL_KEEP)}…`
+    : local
+  const shortDomain = domain.length > EMAIL_DOMAIN_SOFT_MAX
+    ? `${domain.slice(0, EMAIL_DOMAIN_KEEP)}…`
+    : domain
+  return `${shortLocal}${shortDomain}`
 }
 
 function shortenText(value, max = 18) {

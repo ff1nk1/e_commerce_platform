@@ -17,6 +17,10 @@ class SearchProductsRequest extends FormRequest
 
     public const MAX_ATTR_STRING_LENGTH = 64;
 
+    public const MAX_PER_PAGE = 50;
+
+    public const DEFAULT_PER_PAGE = 20;
+
     public function authorize(): bool
     {
         return true;
@@ -37,7 +41,7 @@ class SearchProductsRequest extends FormRequest
             'attr' => ['nullable', 'array', 'max:'.self::MAX_ATTR_KEYS],
             'attr.*' => ['nullable'],
             'page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PAGE],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],
             'sort' => ['nullable', 'string', Rule::in(['relevance', 'price_asc', 'price_desc', 'new'])],
         ];
     }
@@ -67,21 +71,24 @@ class SearchProductsRequest extends FormRequest
      */
     public function searchParams(): array
     {
-        $categoryIds = $this->input('category_id', []);
-        if (! is_array($categoryIds)) {
-            $categoryIds = $categoryIds === null || $categoryIds === '' ? [] : [$categoryIds];
+        $rawCategoryIds = $this->input('category_id', []);
+        if (! is_array($rawCategoryIds)) {
+            $rawCategoryIds = $rawCategoryIds === null || $rawCategoryIds === '' ? [] : [$rawCategoryIds];
         }
-        $categoryIds = array_values(array_unique(array_map(
-            'intval',
-            array_filter($categoryIds, fn ($v) => $v !== null && $v !== '')
-        )));
-        $categoryIds = array_slice($categoryIds, 0, self::MAX_CATEGORY_IDS);
+        $nonEmptyCategoryIds = array_filter($rawCategoryIds, fn ($v) => $v !== null && $v !== '');
+        $intCategoryIds = array_map('intval', $nonEmptyCategoryIds);
+        $uniqueCategoryIds = array_values(array_unique($intCategoryIds));
+        $categoryIds = array_slice($uniqueCategoryIds, 0, self::MAX_CATEGORY_IDS);
 
         $inStockRaw = $this->input('in_stock');
         $inStock = null;
-        if ($inStockRaw !== null && $inStockRaw !== '') {
-            $inStock = filter_var($inStockRaw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-            if ($inStock === null && in_array((string) $inStockRaw, ['1', '0'], true)) {
+        $hasInStockInput = $inStockRaw !== null && $inStockRaw !== '';
+        if ($hasInStockInput) {
+            $parsedInStock = filter_var($inStockRaw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            $isBinaryInStock = in_array((string) $inStockRaw, ['1', '0'], true);
+            if ($parsedInStock !== null) {
+                $inStock = $parsedInStock;
+            } elseif ($isBinaryInStock) {
                 $inStock = (string) $inStockRaw === '1';
             }
         }
@@ -123,7 +130,9 @@ class SearchProductsRequest extends FormRequest
             $q = null;
         }
 
-        $sort = (string) ($this->input('sort') ?: ($q ? 'relevance' : 'new'));
+        $requestedSort = $this->input('sort');
+        $defaultSort = $q ? 'relevance' : 'new';
+        $sort = (string) ($requestedSort ?: $defaultSort);
 
         return [
             'q' => $q,
@@ -133,7 +142,7 @@ class SearchProductsRequest extends FormRequest
             'in_stock' => $inStock,
             'attributes' => $attributes,
             'page' => min(self::MAX_PAGE, max(1, (int) $this->input('page', 1))),
-            'per_page' => min(50, max(1, (int) $this->input('per_page', 20))),
+            'per_page' => min(self::MAX_PER_PAGE, max(1, (int) $this->input('per_page', self::DEFAULT_PER_PAGE))),
             'sort' => $sort,
         ];
     }

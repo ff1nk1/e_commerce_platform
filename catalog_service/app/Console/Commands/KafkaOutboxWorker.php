@@ -11,6 +11,22 @@ use Junges\Kafka\Facades\Kafka;
 
 class KafkaOutboxWorker extends Command
 {
+    private const IDLE_SLEEP_SECONDS = 5;
+
+    private const ERROR_SLEEP_SECONDS = 3;
+
+    private const BATCH_LIMIT = 50;
+
+    private const SOCKET_TIMEOUT_MS = 60000;
+
+    private const MESSAGE_TIMEOUT_MS = 60000;
+
+    private const REQUEST_TIMEOUT_MS = 30000;
+
+    private const PUBLISH_RETRIES = 10;
+
+    private const RETRY_BACKOFF_MS = 1000;
+
     protected $signature = 'kafka:outbox:work';
 
     protected $description = 'Читает события из таблицы outbox_events и отправляет их в Kafka';
@@ -23,7 +39,7 @@ class KafkaOutboxWorker extends Command
             $processed = $this->processBatch();
 
             if ($processed === 0) {
-                sleep(5);
+                sleep(self::IDLE_SLEEP_SECONDS);
             }
         }
 
@@ -46,7 +62,7 @@ class KafkaOutboxWorker extends Command
             return 0;
         }
 
-        $events = OutboxEvent::orderBy('created_at', 'asc')->limit(50)->get();
+        $events = OutboxEvent::orderBy('created_at', 'asc')->limit(self::BATCH_LIMIT)->get();
 
         if ($events->isEmpty()) {
             return 0;
@@ -61,11 +77,11 @@ class KafkaOutboxWorker extends Command
                 Kafka::publish(config('kafka.brokers', 'kafka:29092'))
                     ->onTopic($event->topic)
                     ->withConfigOptions([
-                        'socket.timeout.ms' => 60000,
-                        'message.timeout.ms' => 60000,
-                        'request.timeout.ms' => 30000,
-                        'retries' => 10,
-                        'retry.backoff.ms' => 1000,
+                        'socket.timeout.ms' => self::SOCKET_TIMEOUT_MS,
+                        'message.timeout.ms' => self::MESSAGE_TIMEOUT_MS,
+                        'request.timeout.ms' => self::REQUEST_TIMEOUT_MS,
+                        'retries' => self::PUBLISH_RETRIES,
+                        'retry.backoff.ms' => self::RETRY_BACKOFF_MS,
                     ])
                     ->withKafkaKey((string) $event->id)
                     ->withHeaders($headers)
@@ -86,7 +102,7 @@ class KafkaOutboxWorker extends Command
                 ]);
 
                 if (! app()->environment('testing')) {
-                    sleep(3);
+                    sleep(self::ERROR_SLEEP_SECONDS);
                 }
                 break;
             }

@@ -65,64 +65,73 @@ class StockEventsHandler
 
         $this->sagaRunner->run($sagaId, 'stock.reserved', function () use ($orderId, $sagaId, &$releaseOrder) {
             return DB::transaction(function () use ($orderId, $sagaId, &$releaseOrder) {
-                $order = Order::query()->lockForUpdate()->find((int) $orderId);
-                if ($order === null) {
-                    return null;
-                }
-
-                if ($order->saga_id !== $sagaId) {
-                    Log::warning('Kafka stock.reserved saga_id mismatch; ignoring', [
-                        'order_id' => $orderId,
-                        'expected' => $order->saga_id,
-                        'got' => $sagaId,
-                    ]);
-
-                    return null;
-                }
-
-                $status = $order->statusEnum();
-
-                if ($status === OrderStatus::Pending) {
-                    $order->markAwaitingPayment();
-                    $order->save();
-
-                    return [
-                        'status' => SagaStepStore::STATUS_DONE,
-                        'result' => ['order_id' => (int) $orderId, 'outcome' => 'awaiting_payment'],
-                    ];
-                }
-
-                // Late reserve after user cancelled pending (or payment already failed):
-                // stock was reserved after cancel — request release so reserved is not orphaned.
-                if (in_array($status, [OrderStatus::Cancelled, OrderStatus::PaymentFailed], true)) {
-                    if (! $this->saga->isCompleted($sagaId, 'stock.release_requested')) {
-                        $this->stockRelease->dispatch($order);
-                        $releaseOrder = $order;
-                    }
-
-                    return [
-                        'status' => SagaStepStore::STATUS_DONE,
-                        'result' => [
-                            'order_id' => (int) $orderId,
-                            'outcome' => 'compensated_release',
-                        ],
-                    ];
-                }
-
-                return [
-                    'status' => SagaStepStore::STATUS_DONE,
-                    'result' => [
-                        'order_id' => (int) $orderId,
-                        'outcome' => 'ignored_status',
-                        'status' => $status->value,
-                    ],
-                ];
+                return $this->applyReserved((int) $orderId, $sagaId, $releaseOrder);
             });
         });
 
         if ($releaseOrder !== null) {
             $this->stockRelease->recordSagaStep($releaseOrder);
         }
+    }
+
+    /**
+     * @return array{status: string, result: array<string, mixed>}|null
+     */
+    private function applyReserved(int $orderId, string $sagaId, ?Order &$releaseOrder): ?array
+    {
+        $order = Order::query()->lockForUpdate()->find($orderId);
+        if ($order === null) {
+            return null;
+        }
+
+        if ($order->saga_id !== $sagaId) {
+            Log::warning('Kafka stock.reserved saga_id mismatch; ignoring', [
+                'order_id' => $orderId,
+                'expected' => $order->saga_id,
+                'got' => $sagaId,
+            ]);
+
+            return null;
+        }
+
+        $status = $order->statusEnum();
+
+        if ($status === OrderStatus::Pending) {
+            $order->markAwaitingPayment();
+            $order->save();
+
+            return [
+                'status' => SagaStepStore::STATUS_DONE,
+                'result' => ['order_id' => $orderId, 'outcome' => 'awaiting_payment'],
+            ];
+        }
+
+        // Late reserve after user cancelled pending (or payment already failed):
+        // stock was reserved after cancel — request release so reserved is not orphaned.
+        if (in_array($status, [OrderStatus::Cancelled, OrderStatus::PaymentFailed], true)) {
+            $shouldCompensateRelease = ! $this->saga->isCompleted($sagaId, 'stock.release_requested');
+            if ($shouldCompensateRelease) {
+                $this->stockRelease->dispatch($order);
+                $releaseOrder = $order;
+            }
+
+            return [
+                'status' => SagaStepStore::STATUS_DONE,
+                'result' => [
+                    'order_id' => $orderId,
+                    'outcome' => 'compensated_release',
+                ],
+            ];
+        }
+
+        return [
+            'status' => SagaStepStore::STATUS_DONE,
+            'result' => [
+                'order_id' => $orderId,
+                'outcome' => 'ignored_status',
+                'status' => $status->value,
+            ],
+        ];
     }
 
     /**
@@ -146,33 +155,7 @@ class StockEventsHandler
 
         $this->sagaRunner->run($sagaId, 'stock.reservation_failed', function () use ($orderId, $sagaId) {
             $applied = DB::transaction(function () use ($orderId, $sagaId) {
-                $order = Order::query()->lockForUpdate()->find((int) $orderId);
-                if ($order === null) {
-                    return false;
-                }
-
-                if ($order->saga_id !== $sagaId) {
-                    Log::warning('Kafka stock.reservation_failed saga_id mismatch; ignoring', [
-                        'order_id' => $orderId,
-                        'expected' => $order->saga_id,
-                        'got' => $sagaId,
-                    ]);
-
-                    return false;
-                }
-
-                if ($order->statusEnum() !== OrderStatus::Pending) {
-                    return false;
-                }
-
-                $order->cancel();
-                $order->save();
-
-                event(new OrderCancelled(
-                    $this->payloads->notificationPayload($order, ['reason' => 'insufficient_stock'])
-                ));
-
-                return true;
+                return $this->applyReservationFailed((int) $orderId, $sagaId);
             });
 
             if (! $applied) {
@@ -186,4 +169,34 @@ class StockEventsHandler
         });
     }
 
+    private function applyReservationFailed(int $orderId, string $sagaId): bool
+    {
+        $order = Order::query()->lockForUpdate()->find($orderId);
+        if ($order === null) {
+            return false;
+        }
+
+        if ($order->saga_id !== $sagaId) {
+            Log::warning('Kafka stock.reservation_failed saga_id mismatch; ignoring', [
+                'order_id' => $orderId,
+                'expected' => $order->saga_id,
+                'got' => $sagaId,
+            ]);
+
+            return false;
+        }
+
+        if ($order->statusEnum() !== OrderStatus::Pending) {
+            return false;
+        }
+
+        $order->cancel();
+        $order->save();
+
+        event(new OrderCancelled(
+            $this->payloads->notificationPayload($order, ['reason' => 'insufficient_stock'])
+        ));
+
+        return true;
+    }
 }

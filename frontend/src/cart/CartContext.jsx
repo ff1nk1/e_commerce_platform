@@ -16,26 +16,27 @@ export function CartProvider({ children }) {
 
   const addItem = useCallback(
     (product, quantity = 1) => {
-      const qty = Math.max(1, Math.floor(Number(quantity) || 1))
-      const productId = Number(product.id ?? product.product_id)
+      const normalizedQuantity = Math.max(1, Math.floor(Number(quantity) || 1))
+      const resolvedProductId = Number(product.id ?? product.product_id)
+      const resolvedStoreId = product.store_id ?? product.store?.id ?? null
       persist((prev) => {
-        const existing = prev.find((i) => i.product_id === productId)
+        const existing = prev.find((i) => i.product_id === resolvedProductId)
         if (existing) {
           return prev.map((i) =>
-            i.product_id === productId
-              ? { ...i, quantity: i.quantity + qty }
+            i.product_id === resolvedProductId
+              ? { ...i, quantity: i.quantity + normalizedQuantity }
               : i
           )
         }
         return [
           ...prev,
           {
-            product_id: productId,
+            product_id: resolvedProductId,
             name: product.name ?? '',
             price: product.price,
             image_url: product.image_url ?? null,
-            store_id: product.store_id ?? product.store?.id ?? null,
-            quantity: qty,
+            store_id: resolvedStoreId,
+            quantity: normalizedQuantity,
           },
         ]
       })
@@ -45,10 +46,10 @@ export function CartProvider({ children }) {
 
   const updateQuantity = useCallback(
     (productId, quantity) => {
-      const qty = Math.max(1, Math.floor(Number(quantity) || 1))
+      const normalizedQuantity = Math.max(1, Math.floor(Number(quantity) || 1))
       persist((prev) =>
         prev.map((i) =>
-          i.product_id === productId ? { ...i, quantity: qty } : i
+          i.product_id === productId ? { ...i, quantity: normalizedQuantity } : i
         )
       )
     },

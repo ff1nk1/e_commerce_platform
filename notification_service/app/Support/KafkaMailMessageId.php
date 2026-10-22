@@ -17,19 +17,23 @@ final class KafkaMailMessageId
     ): string {
         $headerKey = (string) config('kafka.message_id_key', 'laravel-kafka::message-id');
         $headers = $message->getHeaders() ?? [];
-        $fromHeader = $headers[$headerKey] ?? null;
-        if (is_string($fromHeader) && $fromHeader !== '') {
-            return $fromHeader;
+        $idFromHeader = $headers[$headerKey] ?? null;
+        if (is_string($idFromHeader) && $idFromHeader !== '') {
+            return $idFromHeader;
         }
 
         $kafkaKey = $message->getKey();
-        if ($kafkaKey !== null && $kafkaKey !== '') {
-            return "{$sourceTopic}:{$kafkaKey}:{$eventType}";
+        $idFromKafkaKey = ($kafkaKey !== null && $kafkaKey !== '')
+            ? "{$sourceTopic}:{$kafkaKey}:{$eventType}"
+            : null;
+        if ($idFromKafkaKey !== null) {
+            return $idFromKafkaKey;
         }
 
         $email = (string) ($body['email'] ?? '');
-        $hash = hash('sha256', json_encode($body, JSON_THROW_ON_ERROR));
+        $bodyHash = hash('sha256', json_encode($body, JSON_THROW_ON_ERROR));
+        $idFromBodyHash = "{$sourceTopic}:{$eventType}:{$email}:{$bodyHash}";
 
-        return "{$sourceTopic}:{$eventType}:{$email}:{$hash}";
+        return $idFromBodyHash;
     }
 }

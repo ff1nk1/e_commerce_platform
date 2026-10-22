@@ -176,9 +176,11 @@ func parseRange(r *http.Request) (*time.Time, *time.Time, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		// exclusive end-of-day if date-only (YYYY-MM-DD)
-		if len(raw) == 10 {
-			t = t.Add(24 * time.Hour)
+		isDateOnly := len(raw) == 10
+		if isDateOnly {
+			// exclusive end-of-day for YYYY-MM-DD
+			exclusiveEndOfDay := t.Add(24 * time.Hour)
+			t = exclusiveEndOfDay
 		}
 		to = &t
 	}
@@ -186,7 +188,8 @@ func parseRange(r *http.Request) (*time.Time, *time.Time, error) {
 }
 
 func parseDate(raw string) (time.Time, error) {
-	if len(raw) == 10 {
+	isDateOnly := len(raw) == 10
+	if isDateOnly {
 		return time.ParseInLocation("2006-01-02", raw, time.UTC)
 	}
 	return time.Parse(time.RFC3339, raw)

@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Cache;
 
 class ProductController extends Controller
 {
+    private const PRODUCT_CACHE_TTL_SECONDS = 86400;
+
     public function __construct(
         private ProductService $productService
     ) {}
@@ -20,7 +22,10 @@ class ProductController extends Controller
     // GET /api/admin/products
     public function index(Request $request): JsonResponse
     {
-        $perPage = max(1, min(100, (int) $request->input('per_page', 20)));
+        $minPerPage = 1;
+        $maxPerPage = 100;
+        $defaultPerPage = 20;
+        $perPage = max($minPerPage, min($maxPerPage, (int) $request->input('per_page', $defaultPerPage)));
 
         $query = Product::with(['category', 'store']);
 
@@ -42,7 +47,7 @@ class ProductController extends Controller
 
     public function show($id)
     {   // Когда память редиса заполнится, он будет убирать самые редко вызываемые
-        $product = Cache::tags(['products'])->remember(CatalogCacheKeys::product($id), 86400, function () use ($id) {
+        $product = Cache::tags(['products'])->remember(CatalogCacheKeys::product($id), self::PRODUCT_CACHE_TTL_SECONDS, function () use ($id) {
             return Product::with(['category', 'store', 'attributes'])->findOrFail($id)->toArray();
         });
 

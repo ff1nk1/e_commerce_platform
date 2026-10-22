@@ -31,8 +31,7 @@ class StripeWebhookController extends Controller
 
             return response()->json(['message' => 'Invalid signature'], 400);
         } catch (\Throwable $e) {
-            if (class_exists(SignatureVerificationException::class)
-                && $e instanceof SignatureVerificationException) {
+            if ($this->isSignatureVerificationFailure($e)) {
                 Log::warning('Stripe webhook signature verification failed', [
                     'message' => $e->getMessage(),
                 ]);
@@ -46,5 +45,11 @@ class StripeWebhookController extends Controller
         $this->payments->handleWebhookEvent($event);
 
         return response()->json(['received' => true]);
+    }
+
+    private function isSignatureVerificationFailure(\Throwable $e): bool
+    {
+        return class_exists(SignatureVerificationException::class)
+            && $e instanceof SignatureVerificationException;
     }
 }

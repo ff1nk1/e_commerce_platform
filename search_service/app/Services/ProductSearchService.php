@@ -10,6 +10,8 @@ use OpenSearch\Client;
 
 class ProductSearchService
 {
+    private const MIN_AUTOCOMPLETE_CHARS = 2;
+
     public function __construct(
         private readonly Client $client,
         private readonly SearchIndexService $index,
@@ -85,7 +87,7 @@ class ProductSearchService
         $this->index->ensureIndices();
 
         $q = is_string($q) ? trim($q) : '';
-        if (mb_strlen($q) < 2) {
+        if (mb_strlen($q) < self::MIN_AUTOCOMPLETE_CHARS) {
             return ['suggestions' => []];
         }
 

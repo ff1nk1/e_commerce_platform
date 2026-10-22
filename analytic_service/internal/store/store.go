@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
@@ -40,9 +41,12 @@ func appendTimeRange(q string, args []any, col string, from, to *time.Time) (str
 
 func conversionsFromFunnel(funnel OrderFunnel) OrderConversions {
 	var conv OrderConversions
-	if funnel.Created > 0 {
-		conv.CreatedToPaid = float64(funnel.Paid) / float64(funnel.Created)
-		conv.CreatedToCancelled = float64(funnel.Cancelled) / float64(funnel.Created)
+	createdCount := float64(funnel.Created)
+	if createdCount > 0 {
+		paidCount := float64(funnel.Paid)
+		cancelledCount := float64(funnel.Cancelled)
+		conv.CreatedToPaid = paidCount / createdCount
+		conv.CreatedToCancelled = cancelledCount / createdCount
 	}
 	return conv
 }
@@ -607,7 +611,7 @@ func (s *Store) topQueries(ctx context.Context, from, to *time.Time, zeroOnly bo
 }
 
 func formatMoney(v float64) string {
-	if v != v { // NaN
+	if math.IsNaN(v) {
 		return "0.00"
 	}
 	return fmt.Sprintf("%.2f", v)

@@ -12,14 +12,15 @@ class TextValueMatcher
 
     public function matches(string $productValue, string $requestedValue): bool
     {
-        $requested = $this->values->normalizeForCompare($requestedValue);
-        if ($requested === '') {
+        $requestedStemmed = $this->values->normalizeForCompare($requestedValue);
+        if ($requestedStemmed === '') {
             return false;
         }
 
-        $product = $this->values->normalizeForCompare($productValue);
+        $productNormalized = $this->values->normalizeForCompare($productValue);
+        $requestedUnstemmed = $this->values->normalizeForCompare($requestedValue, applyStem: false);
 
-        return str_contains($product, $requested)
-            || str_contains($product, $this->values->normalizeForCompare($requestedValue, applyStem: false));
+        return str_contains($productNormalized, $requestedStemmed)
+            || str_contains($productNormalized, $requestedUnstemmed);
     }
 }

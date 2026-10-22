@@ -77,6 +77,86 @@ readonly class SearchFilters
     }
 
     /**
+     * Preferred attrs promoted into hard constraints (empty preferred bucket).
+     */
+    public function withPreferredAsHard(): self
+    {
+        return $this->withAttributeBuckets(
+            attributes: $this->attributes,
+            requiredAttributes: array_merge($this->requiredAttributes, $this->preferredAttributes),
+            preferredAttributes: [],
+        );
+    }
+
+    /**
+     * Preferred attrs demoted into soft re-rank (empty preferred bucket).
+     */
+    public function withPreferredAsSoft(): self
+    {
+        return $this->withAttributeBuckets(
+            attributes: array_merge($this->preferredAttributes, $this->attributes),
+            requiredAttributes: $this->requiredAttributes,
+            preferredAttributes: [],
+        );
+    }
+
+    /**
+     * @param  list<array{name: string, value: string, value_only?: bool}>  $attributes
+     * @param  list<array{name: string, value: string, value_only?: bool}>  $requiredAttributes
+     * @param  list<array{name: string, value: string, value_only?: bool}>  $preferredAttributes
+     */
+    public function withAttributeBuckets(
+        array $attributes,
+        array $requiredAttributes,
+        array $preferredAttributes,
+    ): self {
+        return new self(
+            storeId: $this->storeId,
+            storeName: $this->storeName,
+            categoryName: $this->categoryName,
+            inStock: $this->inStock,
+            priceMin: $this->priceMin,
+            priceMax: $this->priceMax,
+            query: $this->query,
+            attributes: $attributes,
+            requiredAttributes: $requiredAttributes,
+            preferredAttributes: $preferredAttributes,
+        );
+    }
+
+    public function withoutStoreName(): self
+    {
+        return new self(
+            storeId: $this->storeId,
+            storeName: null,
+            categoryName: $this->categoryName,
+            inStock: $this->inStock,
+            priceMin: $this->priceMin,
+            priceMax: $this->priceMax,
+            query: $this->query,
+            attributes: $this->attributes,
+            requiredAttributes: $this->requiredAttributes,
+            preferredAttributes: $this->preferredAttributes,
+        );
+    }
+
+    public function withoutPriceRange(): self
+    {
+        return new self(
+            storeId: $this->storeId,
+            storeName: $this->storeName,
+            categoryName: $this->categoryName,
+            inStock: $this->inStock,
+            priceMin: null,
+            priceMax: null,
+            query: $this->query,
+            attributes: $this->attributes,
+            requiredAttributes: $this->requiredAttributes,
+            preferredAttributes: $this->preferredAttributes,
+        );
+    }
+
+    /**
      * @return list<array{name: string, value: string, value_only?: bool}>
      */
     private static function parseAttributes(mixed $rawAttributes): array

@@ -50,7 +50,8 @@ class CategoryEventsHandler
             return;
         }
 
-        if (($data['name'] ?? null) === null) {
+        $hasName = ($data['name'] ?? null) !== null;
+        if (! $hasName) {
             Log::warning('Kafka: category event с неполными полями', [
                 'event' => $eventType,
                 'category_id' => (int) $id,

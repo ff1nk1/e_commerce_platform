@@ -53,8 +53,9 @@ class ProductDocumentWriter
         }
 
         $quantity = (int) ($data['quantity'] ?? 0);
+        $inStock = (bool) ($data['in_stock'] ?? ($quantity > 0));
         $document['quantity'] = $quantity;
-        $document['in_stock'] = (bool) ($data['in_stock'] ?? ($quantity > 0));
+        $document['in_stock'] = $inStock;
 
         $this->client->index([
             'index' => $this->indices->productsIndex(),
@@ -116,18 +117,22 @@ class ProductDocumentWriter
             }
         }
 
+        $categoryId = isset($data['category_id']) ? (int) $data['category_id'] : (
+            isset($data['category']['id']) ? (int) $data['category']['id'] : null
+        );
+        $categoryName = $data['category']['name'] ?? ($data['category_name'] ?? null);
+        $storeName = $data['store']['name'] ?? ($data['store_name'] ?? null);
+
         return [
             'id' => (int) ($data['id'] ?? 0),
             'store_id' => isset($data['store_id']) ? (int) $data['store_id'] : null,
-            'category_id' => isset($data['category_id']) ? (int) $data['category_id'] : (
-                isset($data['category']['id']) ? (int) $data['category']['id'] : null
-            ),
+            'category_id' => $categoryId,
             'name' => $name,
             'description' => $description,
             'image_url' => $imageUrl,
             'price' => isset($data['price']) ? (float) $data['price'] : null,
-            'category_name' => $data['category']['name'] ?? ($data['category_name'] ?? null),
-            'store_name' => $data['store']['name'] ?? ($data['store_name'] ?? null),
+            'category_name' => $categoryName,
+            'store_name' => $storeName,
             'attributes' => $this->normalizeAttributes($data['attributes'] ?? []),
         ];
     }

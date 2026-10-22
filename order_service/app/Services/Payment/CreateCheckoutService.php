@@ -14,6 +14,10 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class CreateCheckoutService
 {
+    private const LOCK_RETRY_ATTEMPTS = 2;
+
+    private const LOCK_RETRY_SLEEP_MICROS = 50_000;
+
     public function __construct(
         private PaymentGateway $stripe,
         private IdempotencyStore $idempotency,
@@ -40,8 +44,8 @@ class CreateCheckoutService
         }
 
         if (! $this->idempotency->acquireLock($scopeKey)) {
-            for ($attempt = 0; $attempt < 2; $attempt++) {
-                usleep(50_000);
+            for ($attempt = 0; $attempt < self::LOCK_RETRY_ATTEMPTS; $attempt++) {
+                usleep(self::LOCK_RETRY_SLEEP_MICROS);
                 $cached = $this->idempotency->get($scopeKey);
                 if ($cached !== null) {
                     /** @var array{checkout_url: string, payment_id: int} $body */
@@ -65,13 +69,13 @@ class CreateCheckoutService
 
             $order->loadMissing(['items.productSnapshot', 'payments']);
 
-            $existing = $order->payments
+            $pendingWithSession = $order->payments
                 ->where('status', 'pending')
                 ->filter(static fn (Payment $payment): bool => filled($payment->stripe_checkout_session_id))
                 ->sortByDesc('id')
                 ->first();
 
-            $result = $this->createCheckout($order, $existing);
+            $result = $this->createCheckout($order, $pendingWithSession);
             $this->idempotency->put($scopeKey, 200, $result);
 
             return $result;
@@ -83,25 +87,26 @@ class CreateCheckoutService
     /**
      * @return array{checkout_url: string, payment_id: int}
      */
-    private function createCheckout(Order $order, ?Payment $existing): array
+    private function createCheckout(Order $order, ?Payment $pendingWithSession): array
     {
         $order->assertPayable();
 
-        if ($existing !== null) {
+        if ($pendingWithSession !== null) {
             try {
-                $session = $this->stripe->retrieveCheckoutSession($existing->stripe_checkout_session_id);
-                if (($session['status'] ?? null) === 'open' && ! empty($session['url'])) {
+                $session = $this->stripe->retrieveCheckoutSession($pendingWithSession->stripe_checkout_session_id);
+                $sessionIsReusable = ($session['status'] ?? null) === 'open' && ! empty($session['url']);
+                if ($sessionIsReusable) {
                     return [
                         'checkout_url' => (string) $session['url'],
-                        'payment_id' => (int) $existing->id,
+                        'payment_id' => (int) $pendingWithSession->id,
                     ];
                 }
             } catch (RuntimeException) {
                 // Session unusable — create a new one below.
             }
 
-            $existing->status = 'failed';
-            $existing->save();
+            $pendingWithSession->status = 'failed';
+            $pendingWithSession->save();
         }
 
         $payment = Payment::query()->create([
@@ -121,10 +126,12 @@ class CreateCheckoutService
             StripeCheckoutSessionParams::forPayment($order, $payment, $lineItems)
         );
 
-        $payment->stripe_checkout_session_id = $session['id'] ?? null;
-        $payment->stripe_payment_intent_id = is_string($session['payment_intent'] ?? null)
+        $paymentIntentId = is_string($session['payment_intent'] ?? null)
             ? $session['payment_intent']
             : null;
+
+        $payment->stripe_checkout_session_id = $session['id'] ?? null;
+        $payment->stripe_payment_intent_id = $paymentIntentId;
         $payment->save();
 
         $url = $session['url'] ?? null;

@@ -18,7 +18,10 @@ class AdminCatalogController extends Controller
     // GET /api/admin/categories
     public function index(Request $request): JsonResponse
     {
-        $perPage = max(1, min(100, (int) $request->input('per_page', 20)));
+        $minPerPage = 1;
+        $maxPerPage = 100;
+        $defaultPerPage = 20;
+        $perPage = max($minPerPage, min($maxPerPage, (int) $request->input('per_page', $defaultPerPage)));
 
         return response()->json(
             Category::with('parent')->paginate($perPage)

@@ -7,6 +7,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class TokenCookieService
 {
+    private const COOKIE_FORGET_MINUTES = -2628000;
+
     /**
      * Attach access + refresh HttpOnly cookies with correct TTLs.
      */
@@ -53,7 +55,7 @@ class TokenCookieService
         $response->headers->setCookie(cookie(
             'access_token',
             '',
-            -2628000,
+            self::COOKIE_FORGET_MINUTES,
             '/',
             $domain,
             $secure,
@@ -65,7 +67,7 @@ class TokenCookieService
         $response->headers->setCookie(cookie(
             'refresh_token',
             '',
-            -2628000,
+            self::COOKIE_FORGET_MINUTES,
             '/',
             $domain,
             $secure,
@@ -102,6 +104,9 @@ class TokenCookieService
 
     private function refreshCookieMinutes(): int
     {
-        return max(1, (int) ceil((int) config('jwt.refresh_ttl') / 60));
+        $refreshTtlSeconds = (int) config('jwt.refresh_ttl');
+        $refreshCookieMinutes = (int) ceil($refreshTtlSeconds / 60);
+
+        return max(1, $refreshCookieMinutes);
     }
 }

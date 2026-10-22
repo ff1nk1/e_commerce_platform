@@ -50,9 +50,14 @@ class User extends Authenticatable implements FilamentUser
         ?string $name = null,
         ?string $email = null,
     ): self {
+        $hasDisplayName = is_string($name) && $name !== '';
+        $hasDisplayEmail = is_string($email) && $email !== '';
+        $displayName = $hasDisplayName ? $name : 'Admin #'.$userId;
+        $displayEmail = $hasDisplayEmail ? $email : 'admin-'.$userId.'@gateway.local';
+
         $user = new self([
-            'name' => (is_string($name) && $name !== '') ? $name : 'Admin #'.$userId,
-            'email' => (is_string($email) && $email !== '') ? $email : 'admin-'.$userId.'@gateway.local',
+            'name' => $displayName,
+            'email' => $displayEmail,
         ]);
         $user->id = $userId;
         $user->role_slug = $role;

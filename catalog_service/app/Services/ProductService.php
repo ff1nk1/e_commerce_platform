@@ -74,10 +74,8 @@ class ProductService
         $product = $product->load(['store', 'category', 'attributes']);
 
         $this->clearProductCache();
-        event(new ProductPublishStateChanged(
-            $product,
-            $product->is_published ? 'product.published' : 'product.unpublished',
-        ));
+        $publishEventType = $product->is_published ? 'product.published' : 'product.unpublished';
+        event(new ProductPublishStateChanged($product, $publishEventType));
 
         return $product;
     }

@@ -77,7 +77,11 @@ class HttpCatalogProductClient implements CatalogProductClient
             $products[$id] = $product;
         }
 
-        if ($products === [] && $notFound === [] && $failed !== [] && count($failed) === count($ids)) {
+        $allRequestsFailed = $products === []
+            && $notFound === []
+            && $failed !== []
+            && count($failed) === count($ids);
+        if ($allRequestsFailed) {
             throw new \RuntimeException('Catalog service unreachable for all product freshness checks');
         }
 

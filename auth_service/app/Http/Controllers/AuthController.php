@@ -110,18 +110,19 @@ class AuthController extends Controller
 
     private function accessTokenFromRequest(Request $request): ?string
     {
-        $token = $request->cookie('access_token')
-            ?? $request->cookies->get('access_token')
-            ?? $request->bearerToken();
+        $fromCookie = $request->cookie('access_token')
+            ?? $request->cookies->get('access_token');
+        $fromBearer = $request->bearerToken();
+        $token = $fromCookie ?? $fromBearer;
 
         return is_string($token) && $token !== '' ? $token : null;
     }
 
     private function refreshTokenFromRequest(Request $request): ?string
     {
-        $token = $request->cookie('refresh_token')
+        $fromCookie = $request->cookie('refresh_token')
             ?? $request->cookies->get('refresh_token');
 
-        return is_string($token) && $token !== '' ? $token : null;
+        return is_string($fromCookie) && $fromCookie !== '' ? $fromCookie : null;
     }
 }

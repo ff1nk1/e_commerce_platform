@@ -26,7 +26,10 @@ final class StockSagaMessage
         $items = $payload['items'] ?? [];
         $sagaId = KafkaPayload::sagaId($payload);
 
-        if (! $orderId || ! is_array($items) || $items === [] || $sagaId === null) {
+        $hasOrderId = (bool) $orderId;
+        $hasItems = is_array($items) && $items !== [];
+        $hasSagaId = $sagaId !== null;
+        if (! $hasOrderId || ! $hasItems || ! $hasSagaId) {
             return null;
         }
 

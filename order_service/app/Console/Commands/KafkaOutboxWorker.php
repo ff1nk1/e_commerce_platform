@@ -11,6 +11,12 @@ use Junges\Kafka\Facades\Kafka;
 
 class KafkaOutboxWorker extends Command
 {
+    private const IDLE_SLEEP_SECONDS = 5;
+
+    private const ERROR_SLEEP_SECONDS = 3;
+
+    private const BATCH_LIMIT = 50;
+
     protected $signature = 'kafka:outbox:work';
 
     protected $description = 'Читает события из таблицы outbox_events и отправляет их в Kafka';
@@ -23,7 +29,7 @@ class KafkaOutboxWorker extends Command
             $processed = $this->processBatch();
 
             if ($processed === 0) {
-                sleep(5);
+                sleep(self::IDLE_SLEEP_SECONDS);
             }
         }
 
@@ -42,7 +48,7 @@ class KafkaOutboxWorker extends Command
             return 0;
         }
 
-        $events = OutboxEvent::query()->orderBy('created_at', 'asc')->limit(50)->get();
+        $events = OutboxEvent::query()->orderBy('created_at', 'asc')->limit(self::BATCH_LIMIT)->get();
 
         if ($events->isEmpty()) {
             return 0;
@@ -82,7 +88,7 @@ class KafkaOutboxWorker extends Command
                 ]);
 
                 if (! app()->environment('testing')) {
-                    sleep(3);
+                    sleep(self::ERROR_SLEEP_SECONDS);
                 }
                 break;
             }

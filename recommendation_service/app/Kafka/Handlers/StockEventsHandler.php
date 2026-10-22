@@ -20,8 +20,11 @@ class StockEventsHandler
             $body = [];
         }
 
-        $eventType = $headers['event-type'] ?? ($body['event'] ?? null);
-        if ($eventType !== 'stock.changed') {
+        $headerEventType = $headers['event-type'] ?? null;
+        $bodyEventType = $body['event'] ?? null;
+        $eventType = $headerEventType ?? $bodyEventType;
+        $isStockChangedEvent = $eventType === 'stock.changed';
+        if (! $isStockChangedEvent) {
             Log::debug('Recommendation: ignore catalog.events', [
                 'event' => is_string($eventType) ? $eventType : get_debug_type($eventType),
             ]);
@@ -31,8 +34,9 @@ class StockEventsHandler
 
         $productId = $body['product_id'] ?? null;
         $quantity = $body['quantity'] ?? null;
-        if ($productId === null || ! is_numeric($productId) || (int) $productId <= 0
-            || $quantity === null || ! is_numeric($quantity)) {
+        $hasValidProductId = $productId !== null && is_numeric($productId) && (int) $productId > 0;
+        $hasValidQuantity = $quantity !== null && is_numeric($quantity);
+        if (! $hasValidProductId || ! $hasValidQuantity) {
             Log::warning('Recommendation: stock.changed incomplete', [
                 'body_keys' => array_keys($body),
             ]);

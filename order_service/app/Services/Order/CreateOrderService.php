@@ -16,6 +16,10 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class CreateOrderService
 {
+    private const LOCK_RETRY_ATTEMPTS = 2;
+
+    private const LOCK_RETRY_SLEEP_MICROS = 50_000;
+
     public function __construct(
         private IdempotencyStore $idempotency,
         private SagaStepStore $saga,
@@ -36,8 +40,8 @@ class CreateOrderService
         }
 
         if (! $this->idempotency->acquireLock($scopeKey)) {
-            for ($attempt = 0; $attempt < 2; $attempt++) {
-                usleep(50_000);
+            for ($attempt = 0; $attempt < self::LOCK_RETRY_ATTEMPTS; $attempt++) {
+                usleep(self::LOCK_RETRY_SLEEP_MICROS);
                 $cached = $this->idempotency->get($scopeKey);
                 if ($cached !== null) {
                     return $cached;

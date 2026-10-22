@@ -19,7 +19,9 @@ class ProductEventsHandler
 
         $headers = $message->getHeaders();
         $body = $message->getBody();
-        $eventType = $headers['event-type'] ?? ($body['event'] ?? null);
+        $eventTypeFromHeader = $headers['event-type'] ?? null;
+        $eventTypeFromBody = $body['event'] ?? null;
+        $eventType = $eventTypeFromHeader ?? $eventTypeFromBody;
 
         if (! in_array($eventType, ['product.created', 'product.updated'], true)) {
             Log::debug("Игнорируем неизвестное событие продукта: {$eventType}");
@@ -61,17 +63,19 @@ class ProductEventsHandler
             return;
         }
 
+        $attributes = [
+            'name' => (string) $name,
+            'price' => $price,
+            'store_id' => (int) $storeId,
+            'store_name' => $storeName !== null ? (string) $storeName : null,
+            'category_id' => $categoryId !== null ? (int) $categoryId : null,
+            'category_name' => $categoryName !== null ? (string) $categoryName : null,
+            'category_slug' => $categorySlug !== null ? (string) $categorySlug : null,
+        ];
+
         $snapshot = ProductSnapshot::query()->updateOrCreate(
             ['id' => (int) $id],
-            [
-                'name' => (string) $name,
-                'price' => $price,
-                'store_id' => (int) $storeId,
-                'store_name' => $storeName !== null ? (string) $storeName : null,
-                'category_id' => $categoryId !== null ? (int) $categoryId : null,
-                'category_name' => $categoryName !== null ? (string) $categoryName : null,
-                'category_slug' => $categorySlug !== null ? (string) $categorySlug : null,
-            ]
+            $attributes
         );
 
         Log::info('Kafka: product snapshot upserted', [

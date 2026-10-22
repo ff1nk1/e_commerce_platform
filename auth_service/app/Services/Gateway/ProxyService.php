@@ -210,7 +210,9 @@ class ProxyService
         $publicHost = $request->getHost();
         $publicPort = $request->getPort();
         $hostHeader = $publicHost;
-        if ($publicPort && ! in_array((int) $publicPort, [80, 443], true)) {
+        $defaultHttpPorts = [80, 443];
+        $needsExplicitPort = $publicPort && ! in_array((int) $publicPort, $defaultHttpPorts, true);
+        if ($needsExplicitPort) {
             $hostHeader .= ':'.$publicPort;
         }
 
@@ -340,10 +342,10 @@ class ProxyService
     private function attachFilesRecursive(PendingRequest $pending, array $files, string $prefix = ''): void
     {
         foreach ($files as $key => $file) {
-            $name = $prefix === '' ? (string) $key : "{$prefix}[{$key}]";
+            $multipartFieldName = $prefix === '' ? (string) $key : "{$prefix}[{$key}]";
 
             if (is_array($file)) {
-                $this->attachFilesRecursive($pending, $file, $name);
+                $this->attachFilesRecursive($pending, $file, $multipartFieldName);
 
                 continue;
             }
@@ -352,9 +354,11 @@ class ProxyService
                 continue;
             }
 
+            $fileContents = file_get_contents($file->getRealPath()) ?: '';
+
             $pending->attach(
-                $name,
-                file_get_contents($file->getRealPath()) ?: '',
+                $multipartFieldName,
+                $fileContents,
                 $file->getClientOriginalName(),
                 ['Content-Type' => $file->getMimeType() ?: 'application/octet-stream'],
             );

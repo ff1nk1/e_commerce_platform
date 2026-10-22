@@ -17,11 +17,12 @@ final class StripeSessionMoney
     ): bool {
         $expectedMinor = Money::of((string) $payment->amount)->toMinorUnits();
         $actualMinor = isset($session['amount_total']) ? (int) $session['amount_total'] : null;
+        $expectedCurrency = strtolower($currency);
         $sessionCurrency = strtolower((string) ($session['currency'] ?? ''));
 
         return $actualMinor !== null
             && $actualMinor === $expectedMinor
-            && $sessionCurrency === strtolower($currency);
+            && $sessionCurrency === $expectedCurrency;
     }
 
     /**
@@ -30,10 +31,12 @@ final class StripeSessionMoney
      */
     public static function compareDetails(Payment $payment, array $session): array
     {
+        $sessionCurrency = strtolower((string) ($session['currency'] ?? ''));
+
         return [
             'expected_minor' => Money::of((string) $payment->amount)->toMinorUnits(),
             'actual_minor' => isset($session['amount_total']) ? (int) $session['amount_total'] : null,
-            'currency' => strtolower((string) ($session['currency'] ?? '')),
+            'currency' => $sessionCurrency,
         ];
     }
 }

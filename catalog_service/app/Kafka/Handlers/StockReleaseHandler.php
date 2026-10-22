@@ -30,7 +30,9 @@ class StockReleaseHandler
 
             $orderId = $payload['order_id'] ?? null;
             $items = $payload['items'] ?? [];
-            if (! $orderId || ! is_array($items) || $items === []) {
+            $hasOrderId = (bool) $orderId;
+            $hasItems = is_array($items) && $items !== [];
+            if (! $hasOrderId || ! $hasItems) {
                 Log::warning('Получено невалидное событие stock.release_requested', ['payload' => $payload]);
 
                 return;

@@ -28,11 +28,13 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
-    if (error.response?.status !== 401 || !originalRequest || originalRequest._retry) {
-      return Promise.reject(error)
-    }
+    const shouldAttemptRefresh =
+      error.response?.status === 401 &&
+      !!originalRequest &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/refresh')
 
-    if (originalRequest.url?.includes('/refresh')) {
+    if (!shouldAttemptRefresh) {
       return Promise.reject(error)
     }
 

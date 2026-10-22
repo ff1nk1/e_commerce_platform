@@ -45,6 +45,8 @@ class ProductResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
+        $maxImageSizeKb = 5120;
+
         return $schema
             ->components([
                 TextInput::make('name')->required()->maxLength(255),
@@ -60,7 +62,7 @@ class ProductResource extends Resource
                     ->label('Photo')
                     ->image()
                     ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
-                    ->maxSize(5120)
+                    ->maxSize($maxImageSizeKb)
                     ->storeFiles(false)
                     ->nullable(),
                 Repeater::make('attributes')
@@ -72,9 +74,15 @@ class ProductResource extends Resource
                     ->columns(2)
                     ->default([])
                     ->collapsible()
-                    ->itemLabel(fn (array $state): ?string => isset($state['name']) && $state['name'] !== ''
-                        ? ($state['name'].': '.($state['value'] ?? ''))
-                        : null),
+                    ->itemLabel(function (array $state): ?string {
+                        $name = $state['name'] ?? null;
+                        $value = $state['value'] ?? '';
+                        if ($name === null || $name === '') {
+                            return null;
+                        }
+
+                        return $name.': '.$value;
+                    }),
             ]);
     }
 

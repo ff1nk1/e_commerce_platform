@@ -7,6 +7,8 @@ namespace App\Services\Catalog;
  */
 class AttributeResolver
 {
+    private const MIN_FUZZY_MATCH_PERCENT = 80;
+
     public function __construct(
         private readonly AttributeNameNormalizer $names = new AttributeNameNormalizer,
     ) {}
@@ -117,7 +119,8 @@ class AttributeResolver
                 $aliasKey = $this->normalizeKey($alias);
                 if ($aliasKey === $needle || str_contains($needle, $aliasKey) || str_contains($aliasKey, $needle)) {
                     // Avoid tiny aliases matching everything; require length >= 3 or exact.
-                    if (mb_strlen($aliasKey) < 3 && $aliasKey !== $needle) {
+                    $aliasTooShortForFuzzy = mb_strlen($aliasKey) < 3 && $aliasKey !== $needle;
+                    if ($aliasTooShortForFuzzy) {
                         continue;
                     }
                     $matchedGroup = $aliases;
@@ -180,7 +183,7 @@ class AttributeResolver
             }
         }
 
-        return $bestPct >= 80.0 ? $best : null;
+        return $bestPct >= self::MIN_FUZZY_MATCH_PERCENT ? $best : null;
     }
 
     private function normalizeKey(string $value): string

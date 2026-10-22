@@ -24,9 +24,10 @@ class StockItemNormalizer
             $storeId = filter_var($item['store_id'] ?? null, FILTER_VALIDATE_INT);
             $quantity = filter_var($item['quantity'] ?? null, FILTER_VALIDATE_INT);
 
-            if ($productId === false || $productId < 1
-                || $storeId === false || $storeId < 1
-                || $quantity === false || $quantity < 1) {
+            $hasValidProductId = $productId !== false && $productId >= 1;
+            $hasValidStoreId = $storeId !== false && $storeId >= 1;
+            $hasValidQuantity = $quantity !== false && $quantity >= 1;
+            if (! $hasValidProductId || ! $hasValidStoreId || ! $hasValidQuantity) {
                 return null;
             }
 

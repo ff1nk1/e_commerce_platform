@@ -4,6 +4,16 @@ namespace App\Search;
 
 class ProductSearchQueryBuilder
 {
+    private const CATEGORY_AGG_SIZE = 100;
+
+    private const CATEGORY_NAME_AGG_SIZE = 1;
+
+    private const AVAILABILITY_AGG_SIZE = 2;
+
+    private const ATTR_NAME_AGG_SIZE = 50;
+
+    private const ATTR_VALUE_AGG_SIZE = 50;
+
     /** @var list<array{key: string, from: float|null, to: float|null, label: string}> */
     public const PRICE_RANGES = [
         ['key' => '0-500', 'from' => 0.0, 'to' => 500.0, 'label' => '0–500'],
@@ -63,7 +73,8 @@ class ProductSearchQueryBuilder
      */
     public function buildTextQuery(?string $q): array
     {
-        if ($q === null || $q === '') {
+        $hasQuery = $q !== null && $q !== '';
+        if (! $hasQuery) {
             return ['match_all' => (object) []];
         }
 
@@ -132,13 +143,14 @@ class ProductSearchQueryBuilder
      */
     public function buildSort(string $sort, ?string $q): array
     {
+        $relevanceSort = [['_score' => ['order' => 'desc']], ['id' => ['order' => 'desc']]];
+        $idDescSort = [['id' => ['order' => 'desc']]];
+
         return match ($sort) {
             'price_asc' => [['price' => ['order' => 'asc']], ['id' => ['order' => 'desc']]],
             'price_desc' => [['price' => ['order' => 'desc']], ['id' => ['order' => 'desc']]],
-            'new' => [['id' => ['order' => 'desc']]],
-            default => $q
-                ? [['_score' => ['order' => 'desc']], ['id' => ['order' => 'desc']]]
-                : [['id' => ['order' => 'desc']]],
+            'new' => $idDescSort,
+            default => $q ? $relevanceSort : $idDescSort,
         };
     }
 
@@ -164,10 +176,10 @@ class ProductSearchQueryBuilder
                 'global' => (object) [],
                 'aggs' => [
                     'categories' => [
-                        'terms' => ['field' => 'category_id', 'size' => 100],
+                        'terms' => ['field' => 'category_id', 'size' => self::CATEGORY_AGG_SIZE],
                         'aggs' => [
                             'name' => [
-                                'terms' => ['field' => 'category_name.keyword', 'size' => 1],
+                                'terms' => ['field' => 'category_name.keyword', 'size' => self::CATEGORY_NAME_AGG_SIZE],
                             ],
                         ],
                     ],
@@ -177,16 +189,16 @@ class ProductSearchQueryBuilder
                         ],
                     ],
                     'availability' => [
-                        'terms' => ['field' => 'in_stock', 'size' => 2],
+                        'terms' => ['field' => 'in_stock', 'size' => self::AVAILABILITY_AGG_SIZE],
                     ],
                     'attributes' => [
                         'nested' => ['path' => 'attributes'],
                         'aggs' => [
                             'names' => [
-                                'terms' => ['field' => 'attributes.name', 'size' => 50],
+                                'terms' => ['field' => 'attributes.name', 'size' => self::ATTR_NAME_AGG_SIZE],
                                 'aggs' => [
                                     'values' => [
-                                        'terms' => ['field' => 'attributes.value', 'size' => 50],
+                                        'terms' => ['field' => 'attributes.value', 'size' => self::ATTR_VALUE_AGG_SIZE],
                                     ],
                                 ],
                             ],

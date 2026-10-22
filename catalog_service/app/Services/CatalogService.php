@@ -10,12 +10,14 @@ use Illuminate\Support\Facades\Cache;
 
 class CatalogService
 {
+    private const ALL_CATEGORIES_CACHE_TTL_SECONDS = 3600;
+
     /**
      * Получение всех категорий из кэша.
      */
     public function getAllCategories(): array
     {
-        return Cache::tags(['categories'])->remember('all_categories', 3600, function () {
+        return Cache::tags(['categories'])->remember('all_categories', self::ALL_CATEGORIES_CACHE_TTL_SECONDS, function () {
             return Category::all()->toArray();
         });
     }

@@ -26,12 +26,15 @@ class ProductIndexer
             throw new \InvalidArgumentException('product event missing id');
         }
 
-        $storeId = (int) ($data['store_id'] ?? data_get($data, 'store.id') ?? 0);
-        $storeName = data_get($data, 'store.name')
+        $resolvedStoreId = (int) ($data['store_id'] ?? data_get($data, 'store.id') ?? 0);
+        $rawStoreName = data_get($data, 'store.name')
             ?? ($data['store_name'] ?? null);
-        $categoryId = $data['category_id'] ?? data_get($data, 'category.id');
-        $categoryName = data_get($data, 'category.name')
+        $resolvedStoreName = $rawStoreName !== null ? (string) $rawStoreName : null;
+        $rawCategoryId = $data['category_id'] ?? data_get($data, 'category.id');
+        $resolvedCategoryId = $rawCategoryId !== null ? (int) $rawCategoryId : null;
+        $rawCategoryName = data_get($data, 'category.name')
             ?? ($data['category_name'] ?? null);
+        $resolvedCategoryName = $rawCategoryName !== null ? (string) $rawCategoryName : null;
 
         $attributes = $data['attributes'] ?? [];
         if (! is_array($attributes)) {
@@ -58,18 +61,23 @@ class ProductIndexer
         // upserts unless the payload explicitly carries stock fields (avoids OOS race).
         $inStock = $this->resolveInStock($productId, $data);
 
+        $normalizedName = (string) ($data['name'] ?? '');
+        $normalizedDescription = isset($data['description']) ? (string) $data['description'] : null;
+        $normalizedImageUrl = isset($data['image_url']) ? (string) $data['image_url'] : null;
+        $normalizedPrice = isset($data['price']) ? (float) $data['price'] : 0;
+
         /** @var ProductCatalog $product */
         $product = ProductCatalog::query()->updateOrCreate(
             ['product_id' => $productId],
             [
-                'store_id' => $storeId,
-                'store_name' => $storeName !== null ? (string) $storeName : null,
-                'name' => (string) ($data['name'] ?? ''),
-                'description' => isset($data['description']) ? (string) $data['description'] : null,
-                'category_id' => $categoryId !== null ? (int) $categoryId : null,
-                'category_name' => $categoryName !== null ? (string) $categoryName : null,
-                'image_url' => isset($data['image_url']) ? (string) $data['image_url'] : null,
-                'price' => isset($data['price']) ? (float) $data['price'] : 0,
+                'store_id' => $resolvedStoreId,
+                'store_name' => $resolvedStoreName,
+                'name' => $normalizedName,
+                'description' => $normalizedDescription,
+                'category_id' => $resolvedCategoryId,
+                'category_name' => $resolvedCategoryName,
+                'image_url' => $normalizedImageUrl,
+                'price' => $normalizedPrice,
                 'attributes' => $normalizedAttributes,
                 'is_published' => $isPublished,
                 'in_stock' => $inStock,

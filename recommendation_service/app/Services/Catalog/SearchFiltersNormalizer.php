@@ -23,11 +23,14 @@ class SearchFiltersNormalizer
             [$priceMin, $priceMax] = [$priceMax, $priceMin];
         }
 
+        $defaultInStockWhenMissing = $this->requireInStock ? true : null;
+        $resolvedInStock = $filters->inStock ?? $defaultInStockWhenMissing;
+
         return new SearchFilters(
             storeId: $filters->storeId,
             storeName: $storeName !== '' ? $storeName : null,
             categoryName: $categoryName !== '' ? $categoryName : null,
-            inStock: $filters->inStock ?? ($this->requireInStock ? true : null),
+            inStock: $resolvedInStock,
             priceMin: $priceMin,
             priceMax: $priceMax,
             query: $query !== '' ? $query : null,

@@ -29,9 +29,11 @@ class ConfirmOrderFromPayment
     public function fromCheckoutSession(array $session): void
     {
         if (($session['payment_status'] ?? null) !== 'paid') {
+            $metadataPaymentId = $session['metadata']['payment_id'] ?? null;
+            $paymentStatus = $session['payment_status'] ?? null;
             Log::info('Stripe checkout completed without paid status; skipping confirm', [
-                'payment_id' => $session['metadata']['payment_id'] ?? null,
-                'payment_status' => $session['payment_status'] ?? null,
+                'payment_id' => $metadataPaymentId,
+                'payment_status' => $paymentStatus,
             ]);
 
             return;
@@ -128,8 +130,9 @@ class ConfirmOrderFromPayment
      */
     private function refundOrphanCharge(Payment $payment, array $session): void
     {
-        $intentId = $payment->stripe_payment_intent_id
-            ?? (is_string($session['payment_intent'] ?? null) ? $session['payment_intent'] : null);
+        $fromPayment = $payment->stripe_payment_intent_id;
+        $fromSession = is_string($session['payment_intent'] ?? null) ? $session['payment_intent'] : null;
+        $intentId = $fromPayment ?? $fromSession;
 
         if (! is_string($intentId) || $intentId === '') {
             Log::error('Orphan Stripe charge without payment_intent; manual refund required', [

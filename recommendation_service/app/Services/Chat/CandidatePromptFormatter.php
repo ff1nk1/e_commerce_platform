@@ -16,12 +16,13 @@ final class CandidatePromptFormatter
         $lines = [];
         foreach ($products as $i => $product) {
             $n = $i + 1;
-            $priceLabel = RubDisplay::format(
-                isset($product['price']) ? (is_scalar($product['price']) ? $product['price'] : null) : null
-            );
-            $store = trim((string) ($product['store_name'] ?? ''));
-            if ($store === '') {
-                $store = isset($product['store_id']) ? 'id '.$product['store_id'] : 'не указан';
+            $scalarPrice = isset($product['price']) && is_scalar($product['price'])
+                ? $product['price']
+                : null;
+            $priceLabel = RubDisplay::format($scalarPrice);
+            $storeDisplayName = trim((string) ($product['store_name'] ?? ''));
+            if ($storeDisplayName === '') {
+                $storeDisplayName = isset($product['store_id']) ? 'id '.$product['store_id'] : 'не указан';
             }
             $attrs = self::formatAttributes(
                 is_array($product['attributes'] ?? null) ? $product['attributes'] : []
@@ -32,7 +33,7 @@ final class CandidatePromptFormatter
                 (string) ($product['product_id'] ?? ''),
                 $product['name'] ?? '',
                 $priceLabel,
-                $store,
+                $storeDisplayName,
             );
             if ($attrs !== '') {
                 $line .= ' | '.$attrs;

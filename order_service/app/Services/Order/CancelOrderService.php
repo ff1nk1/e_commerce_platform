@@ -65,11 +65,11 @@ class CancelOrderService
     {
         $order->loadMissing('payments');
 
-        $payments = $order->payments
+        $openCheckoutPayments = $order->payments
             ->where('status', 'pending')
             ->filter(static fn (Payment $payment): bool => filled($payment->stripe_checkout_session_id));
 
-        foreach ($payments as $payment) {
+        foreach ($openCheckoutPayments as $payment) {
             $sessionId = $payment->stripe_checkout_session_id;
             if (! is_string($sessionId) || $sessionId === '') {
                 continue;

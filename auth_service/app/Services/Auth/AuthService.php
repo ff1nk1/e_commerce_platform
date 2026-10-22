@@ -13,6 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 class AuthService
 {
+    private const REFRESH_TOKEN_BYTES = 64;
+
     public function __construct(
         private JwtService $jwtService,
         private TokenBlacklistService $blacklist
@@ -164,7 +166,7 @@ class AuthService
     {
         $accessToken = $this->jwtService->createAccessToken($user);
 
-        $refreshToken = bin2hex(random_bytes(64));
+        $refreshToken = bin2hex(random_bytes(self::REFRESH_TOKEN_BYTES));
         $refreshHash = RefreshTokenKeys::hash($refreshToken);
         $refreshTtl = (int) config('jwt.refresh_ttl');
 

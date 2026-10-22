@@ -120,7 +120,9 @@ export default function OrderDetail() {
     prevStatus.current = next
 
     const justReserved = previous === 'pending' && next === 'awaiting_payment'
-    if (!justReserved || skipAutoPay.current || busy || autoPayStarted.current) return
+    const shouldSkipAutoCheckout = skipAutoPay.current || busy || autoPayStarted.current
+    const canStartAutoCheckout = justReserved && !shouldSkipAutoCheckout
+    if (!canStartAutoCheckout) return
 
     autoPayStarted.current = true
     setReserveTimedOut(false)

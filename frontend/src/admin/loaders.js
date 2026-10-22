@@ -10,6 +10,14 @@ import { getNotification } from '../api/notifications'
 import { requireAdmin, requireAnalyst } from '../auth/requireAuth'
 import { defaultAnalyticsRange } from './analyticsDates'
 
+/** Unwrap Laravel `{ data: [...] }` or a bare array from an axios response body. */
+function unwrapList(payload) {
+  const nested = payload?.data
+  if (Array.isArray(nested)) return nested
+  if (Array.isArray(payload)) return payload
+  return []
+}
+
 export async function adminLayoutLoader() {
   return requireAnalyst()
 }
@@ -22,7 +30,7 @@ export async function adminUsersLoader() {
   ])
   return {
     users: usersRes.data,
-    roles: rolesRes.data?.data || rolesRes.data || [],
+    roles: unwrapList(rolesRes.data),
   }
 }
 
@@ -40,7 +48,9 @@ export async function adminNotificationsLoader() {
 export async function adminNotificationDetailLoader({ params }) {
   await requireAnalyst()
   const response = await getNotification(params.id)
-  return response.data?.data || response.data
+  const nested = response.data?.data
+  const unwrapped = nested ?? response.data
+  return unwrapped
 }
 
 function analyticsRangeParams(request) {

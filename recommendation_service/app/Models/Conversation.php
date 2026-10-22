@@ -52,8 +52,9 @@ class Conversation extends Model
     {
         $hardCap = (new Carbon($createdAt))->addHours(self::HARD_TTL_HOURS);
         $idleCap = (new Carbon($lastActivityAt))->addMinutes(self::IDLE_TTL_MINUTES);
+        $earliestExpiry = $hardCap->lt($idleCap) ? $hardCap : $idleCap;
 
-        return $hardCap->lt($idleCap) ? $hardCap : $idleCap;
+        return $earliestExpiry;
     }
 
     public function touchActivity(?CarbonInterface $at = null): void

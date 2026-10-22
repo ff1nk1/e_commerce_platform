@@ -41,7 +41,9 @@ class StockReservationService
                     ->lockForUpdate()
                     ->first();
 
-                if (! $stock || $stock->available < $item['quantity']) {
+                $stockMissing = ! $stock;
+                $hasEnoughStock = $stock && $stock->available >= $item['quantity'];
+                if ($stockMissing || ! $hasEnoughStock) {
                     $this->emitReservationFailed($orderId, $sagaId, 'Not enough stock');
 
                     return ['outcome' => 'reservation_failed', 'order_id' => $orderId];
@@ -106,7 +108,8 @@ class StockReservationService
                     continue;
                 }
 
-                $stock->reserved = max(0, $stock->reserved - $item['quantity']);
+                $remainingReserved = max(0, $stock->reserved - $item['quantity']);
+                $stock->reserved = $remainingReserved;
                 $stock->save();
 
                 $stockChangedEvents[] = $this->stockChangedPayload($stock);

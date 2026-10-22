@@ -14,8 +14,10 @@ class AuthenticateFromGatewayHeaders
     {
         $userId = $request->header('X-User-Id');
         $role = $request->header('X-User-Role');
+        $hasValidUserId = is_numeric($userId) && (int) $userId >= 1;
+        $isAdminRole = $role === 'admin';
 
-        if (! is_numeric($userId) || (int) $userId < 1 || $role !== 'admin') {
+        if (! $hasValidUserId || ! $isAdminRole) {
             abort(403, 'Admin gateway headers required.');
         }
 

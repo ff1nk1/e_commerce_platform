@@ -51,19 +51,24 @@ export default function AnalyticsLineChart({
             }}
           />
           {series.length > 1 && <Legend wrapperStyle={{ fontSize: 13 }} />}
-          {series.map((s, i) => (
-            <Line
-              key={s.dataKey}
-              type="monotone"
-              dataKey={s.dataKey}
-              name={s.name || s.dataKey}
-              stroke={s.stroke || DEFAULT_COLORS[i % DEFAULT_COLORS.length]}
-              strokeWidth={s.strokeWidth ?? (i === 0 ? 2.5 : 1.5)}
-              strokeDasharray={s.strokeDasharray}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-          ))}
+          {series.map((s, i) => {
+            const primaryStrokeWidth = 2.5
+            const secondaryStrokeWidth = 1.5
+            const strokeWidth = s.strokeWidth ?? (i === 0 ? primaryStrokeWidth : secondaryStrokeWidth)
+            return (
+              <Line
+                key={s.dataKey}
+                type="monotone"
+                dataKey={s.dataKey}
+                name={s.name || s.dataKey}
+                stroke={s.stroke || DEFAULT_COLORS[i % DEFAULT_COLORS.length]}
+                strokeWidth={strokeWidth}
+                strokeDasharray={s.strokeDasharray}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            )
+          })}
         </LineChart>
       </ResponsiveContainer>
     </div>

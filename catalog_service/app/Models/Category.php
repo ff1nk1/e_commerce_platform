@@ -12,6 +12,8 @@ class Category extends Model
 {
     use HasFactory;
 
+    private const TREE_IDS_CACHE_TTL_SECONDS = 7200;
+
     /**
      * Атрибуты, доступные для массового заполнения.
      *
@@ -66,7 +68,7 @@ class Category extends Model
     public function getTreeIds(): array
     {
         // Кэшируем массив ID для каждой отдельной категории
-        return Cache::tags(['categories'])->remember("category_tree_ids_{$this->id}", 7200, function () {
+        return Cache::tags(['categories'])->remember("category_tree_ids_{$this->id}", self::TREE_IDS_CACHE_TTL_SECONDS, function () {
 
             // Начинаем с ID самой категории (например, "Компьютеры")
             $ids = [$this->id];

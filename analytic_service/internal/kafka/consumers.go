@@ -89,12 +89,14 @@ func (c *Consumers) Run(ctx context.Context) error {
 
 type handlerFunc func(ctx context.Context, msg kafka.Message) error
 
+const maxKafkaMessageBytes = 10e6 // 10 MiB
+
 func (c *Consumers) runReader(ctx context.Context, groupID string, topics []string, handle handlerFunc) error {
 	cfg := kafka.ReaderConfig{
 		Brokers:        c.brokers,
 		GroupID:        groupID,
 		MinBytes:       1,
-		MaxBytes:       10e6,
+		MaxBytes:       maxKafkaMessageBytes,
 		MaxWait:        time.Second,
 		StartOffset:    kafka.FirstOffset,
 		CommitInterval: 0, // manual commit after successful insert
@@ -157,12 +159,12 @@ func (c *Consumers) handleUser(ctx context.Context, msg kafka.Message) error {
 		return nil
 	}
 
-	ts := parseTime(asString(body["registered_at"]), messageTime(msg))
+	registeredAt := parseTime(asString(body["registered_at"]), messageTime(msg))
 	row := store.UserRegistration{
 		UserID:       asUint64(body["user_id"]),
 		Email:        asString(body["email"]),
 		Name:         asString(body["name"]),
-		RegisteredAt: ts,
+		RegisteredAt: registeredAt,
 		KafkaProvenance: store.KafkaProvenance{
 			KafkaTopic:     msg.Topic,
 			KafkaPartition: int32(msg.Partition),
@@ -257,11 +259,11 @@ func (c *Consumers) handleOrder(ctx context.Context, msg kafka.Message) error {
 		return nil
 	}
 
-	tsRaw := asString(body["occurred_at"])
-	if tsRaw == "" {
-		tsRaw = asString(body["created_at"])
+	occurredAtRaw := asString(body["occurred_at"])
+	if occurredAtRaw == "" {
+		occurredAtRaw = asString(body["created_at"])
 	}
-	ts := parseTime(tsRaw, messageTime(msg))
+	occurredAt := parseTime(occurredAtRaw, messageTime(msg))
 
 	row := store.OrderFunnelEvent{
 		OrderID:     asUint64(body["order_id"]),
@@ -269,7 +271,7 @@ func (c *Consumers) handleOrder(ctx context.Context, msg kafka.Message) error {
 		EventType:   short,
 		TotalAmount: asString(body["total_amount"]),
 		Reason:      asString(body["reason"]),
-		OccurredAt:  ts,
+		OccurredAt:  occurredAt,
 		KafkaProvenance: store.KafkaProvenance{
 			KafkaTopic:     msg.Topic,
 			KafkaPartition: int32(msg.Partition),
@@ -289,7 +291,7 @@ func (c *Consumers) handleOrder(ctx context.Context, msg kafka.Message) error {
 	if short != "created" {
 		return nil
 	}
-	return c.insertOrderLineItems(ctx, msg, body, row.OrderID, ts)
+	return c.insertOrderLineItems(ctx, msg, body, row.OrderID, occurredAt)
 }
 
 func (c *Consumers) insertOrderLineItems(ctx context.Context, msg kafka.Message, body map[string]any, orderID uint64, ts time.Time) error {
@@ -318,7 +320,10 @@ func (c *Consumers) insertOrderLineItems(ctx context.Context, msg kafka.Message,
 		categoryName := asString(item["category_name"])
 		categorySlug := asString(item["category_slug"])
 
-		needDim := categoryID == 0 || storeName == "" || (categoryID != 0 && (categoryName == "" || categorySlug == ""))
+		missingCategoryID := categoryID == 0
+		missingStoreName := storeName == ""
+		missingCategoryLabels := categoryID != 0 && (categoryName == "" || categorySlug == "")
+		needDim := missingCategoryID || missingStoreName || missingCategoryLabels
 		if needDim {
 			dim, found, err := c.orders.LookupProductDim(ctx, productID)
 			if err != nil {
@@ -396,14 +401,14 @@ func (c *Consumers) handleSearch(ctx context.Context, msg kafka.Message) error {
 		query = strings.TrimSpace(asString(body["query"]))
 	}
 
-	ts := parseTime(asString(body["timestamp"]), messageTime(msg))
+	searchOccurredAt := parseTime(asString(body["timestamp"]), messageTime(msg))
 
 	row := store.SearchQuery{
 		Query:        query,
 		ResultsCount: asUint32(data["results_count"]),
 		Filters:      filtersRaw,
 		Sort:         asString(data["sort"]),
-		OccurredAt:   ts,
+		OccurredAt:   searchOccurredAt,
 		KafkaProvenance: store.KafkaProvenance{
 			KafkaTopic:     msg.Topic,
 			KafkaPartition: int32(msg.Partition),

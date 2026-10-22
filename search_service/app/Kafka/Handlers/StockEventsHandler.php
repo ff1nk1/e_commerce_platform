@@ -36,12 +36,14 @@ class StockEventsHandler
             return;
         }
 
-        $this->index->updateProductStock((int) $productId, (int) $quantity);
+        $quantityInt = (int) $quantity;
+        $inStock = $quantityInt > 0;
+        $this->index->updateProductStock((int) $productId, $quantityInt);
 
         Log::info('Kafka: product stock updated in OpenSearch', [
             'product_id' => (int) $productId,
-            'quantity' => (int) $quantity,
-            'in_stock' => ((int) $quantity) > 0,
+            'quantity' => $quantityInt,
+            'in_stock' => $inStock,
         ]);
     }
 }

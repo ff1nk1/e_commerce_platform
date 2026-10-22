@@ -15,6 +15,8 @@ use Illuminate\Support\Collection;
 
 class ProductSearchService
 {
+    private const DEFAULT_EMBED_QUERY = 'recommended products';
+
     private const SOFT_ATTR_POOL = 80;
 
     private const HARD_ATTR_POOL = 200;
@@ -52,51 +54,25 @@ class ProductSearchService
     public function searchDetailed(SearchFilters $filters, int $limit = 5, ?array $precomputedVector = null): SearchResult
     {
         $limit = max(1, min($limit, 20));
-        $vector = $precomputedVector ?? $this->llm->embed(
-            $filters->query ?: 'recommended products',
-            'RETRIEVAL_QUERY'
-        );
+        $embedText = $filters->query ?: self::DEFAULT_EMBED_QUERY;
+        $vector = $precomputedVector ?? $this->llm->embed($embedText, 'RETRIEVAL_QUERY');
         $literal = PgVectorLiteral::from($vector);
 
-        $softAttrs = $filters->attributes;
-        $hardAttrs = $filters->requiredAttributes;
         $preferredAttrs = $filters->preferredAttributes;
 
         // Preferred (color/brand/material): try as hard first, fall back to soft re-rank.
         if ($preferredAttrs !== []) {
-            $hardAttempt = new SearchFilters(
-                storeId: $filters->storeId,
-                storeName: $filters->storeName,
-                categoryName: $filters->categoryName,
-                inStock: $filters->inStock,
-                priceMin: $filters->priceMin,
-                priceMax: $filters->priceMax,
-                query: $filters->query,
-                attributes: $softAttrs,
-                requiredAttributes: array_merge($hardAttrs, $preferredAttrs),
-                preferredAttributes: [],
-            );
-            $hits = $this->searchWithHardAndSoft($hardAttempt, $literal, $limit);
+            $filtersWithPreferredAsHard = $filters->withPreferredAsHard();
+            $hits = $this->searchWithHardAndSoft($filtersWithPreferredAsHard, $literal, $limit);
             if ($hits !== []) {
                 return new SearchResult(hits: $hits, preferredRelaxed: false);
             }
 
             // Fallback: preferred become soft so we still return near matches.
-            $filters = new SearchFilters(
-                storeId: $filters->storeId,
-                storeName: $filters->storeName,
-                categoryName: $filters->categoryName,
-                inStock: $filters->inStock,
-                priceMin: $filters->priceMin,
-                priceMax: $filters->priceMax,
-                query: $filters->query,
-                attributes: array_merge($preferredAttrs, $softAttrs),
-                requiredAttributes: $hardAttrs,
-                preferredAttributes: [],
-            );
+            $filtersWithPreferredAsSoft = $filters->withPreferredAsSoft();
 
             return new SearchResult(
-                hits: $this->searchWithHardAndSoft($filters, $literal, $limit),
+                hits: $this->searchWithHardAndSoft($filtersWithPreferredAsSoft, $literal, $limit),
                 preferredRelaxed: true,
             );
         }
@@ -115,14 +91,14 @@ class ProductSearchService
         $hasSoft = $filters->attributes !== [];
         $hasHard = $filters->requiredAttributes !== [];
 
-        $fetchLimit = $limit;
+        $vectorRecallLimit = $limit;
         if ($hasHard) {
-            $fetchLimit = max($fetchLimit, self::HARD_ATTR_POOL);
+            $vectorRecallLimit = max($vectorRecallLimit, self::HARD_ATTR_POOL);
         } elseif ($hasSoft) {
-            $fetchLimit = max($fetchLimit, self::SOFT_ATTR_POOL);
+            $vectorRecallLimit = max($vectorRecallLimit, self::SOFT_ATTR_POOL);
         }
 
-        $hits = $this->vectorSearch($filters, $literal, $fetchLimit);
+        $hits = $this->vectorSearch($filters, $literal, $vectorRecallLimit);
 
         // Widen recall when several soft attrs are unlikely to co-occur in the vector top-k.
         if (! $hasHard && count($filters->attributes) >= 2) {
@@ -308,9 +284,10 @@ class ProductSearchService
             }
 
             // Align with PHP matcher: lower + ё→е on JSON text; token already stemmed/stripped.
+            $likeNeedle = '%'.SqlLike::escape($token).'%';
             $builder->whereRaw(
                 "replace(lower(attributes::text), 'ё', 'е') LIKE ?",
-                ['%'.SqlLike::escape($token).'%']
+                [$likeNeedle]
             );
         }
     }
@@ -344,10 +321,10 @@ class ProductSearchService
     private function softRerankByAttributes(array $hits, array $attributes): array
     {
         usort($hits, function (SearchHit $a, SearchHit $b) use ($attributes): int {
-            $scoreA = $this->attributeMatchScore($a->product, $attributes);
-            $scoreB = $this->attributeMatchScore($b->product, $attributes);
-            if ($scoreA !== $scoreB) {
-                return $scoreB <=> $scoreA;
+            $matchScoreA = $this->attributeMatchScore($a->product, $attributes);
+            $matchScoreB = $this->attributeMatchScore($b->product, $attributes);
+            if ($matchScoreA !== $matchScoreB) {
+                return $matchScoreB <=> $matchScoreA;
             }
 
             return $a->distance <=> $b->distance;
@@ -422,9 +399,10 @@ class ProductSearchService
             return;
         }
 
+        $likeNeedle = '%'.SqlLike::escape($needle).'%';
         $builder->whereRaw(
             "replace(lower({$column}), 'ё', 'е') LIKE ?",
-            ['%'.SqlLike::escape($needle).'%']
+            [$likeNeedle]
         );
     }
 

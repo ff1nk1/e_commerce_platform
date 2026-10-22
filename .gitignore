@@ -25,3 +25,5 @@ Thumbs.db
 .phpunit.result.cache
 .phpunit.cache/
 .phpstan.cache.local/
+
+startup

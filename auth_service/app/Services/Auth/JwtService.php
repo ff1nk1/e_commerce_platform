@@ -22,7 +22,8 @@ class JwtService
     ) {
         $this->secret = (string) config('jwt.secret');
         $this->algorithm = (string) config('jwt.algorithm', 'HS256');
-        $this->ttl = (int) config('jwt.ttl', 15) * 60;
+        $ttlMinutes = (int) config('jwt.ttl', 15);
+        $this->ttl = $ttlMinutes * 60;
 
         if ($this->secret === '') {
             throw new \RuntimeException('JWT_SECRET is not configured.');

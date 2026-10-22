@@ -50,7 +50,9 @@ class ProductEventsHandler
             return;
         }
 
-        if (($data['name'] ?? null) === null || ($data['store_id'] ?? null) === null) {
+        $hasName = ($data['name'] ?? null) !== null;
+        $hasStoreId = ($data['store_id'] ?? null) !== null;
+        if (! $hasName || ! $hasStoreId) {
             Log::warning('Kafka: product event с неполными полями', [
                 'event' => $eventType,
                 'product_id' => (int) $id,

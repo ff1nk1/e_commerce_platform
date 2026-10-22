@@ -10,9 +10,13 @@ function formatRate(rate) {
   return `${(Number(rate) * 100).toFixed(1)}%`
 }
 
+function isPlaceholderName(name) {
+  return typeof name === 'string' && /^#\d+$/.test(name)
+}
+
 function displayName(row) {
   const name = row?.name
-  if (name && !/^#\d+$/.test(name)) return name
+  if (name && !isPlaceholderName(name)) return name
   if (name) return name
   return row?.id != null ? `#${row.id}` : '—'
 }
@@ -102,7 +106,7 @@ export default function AdminAnalyticsStores() {
   }
 
   const title = isDetail ? (data?.name || displayName({ id: storeId })) : null
-  const showIdHint = isDetail && data?.name && !/^#\d+$/.test(data.name)
+  const showIdHint = isDetail && data?.name && !isPlaceholderName(data.name)
 
   return (
     <div>
@@ -239,7 +243,7 @@ export default function AdminAnalyticsStores() {
                         >
                           {displayName(row)}
                         </button>
-                        {row.name && !/^#\d+$/.test(row.name) ? (
+                        {row.name && !isPlaceholderName(row.name) ? (
                           <span className="analytics-id-hint"> #{row.id}</span>
                         ) : null}
                       </td>

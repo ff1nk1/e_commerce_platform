@@ -34,7 +34,9 @@ class KafkaMailPipeline
             return;
         }
 
-        $eventType = $headers['event-type'] ?? ($body['event_type'] ?? null);
+        $headerEventType = $headers['event-type'] ?? null;
+        $bodyEventType = $body['event_type'] ?? null;
+        $eventType = $headerEventType ?? $bodyEventType;
         if (! is_string($eventType) || $eventType === '') {
             Log::debug("Игнорируем событие {$sourceTopic}: отсутствует event-type");
 

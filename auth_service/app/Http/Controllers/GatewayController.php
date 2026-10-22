@@ -10,6 +10,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 class GatewayController extends Controller
 {
+    private const RECOMMENDATION_TIMEOUT = 120;
+
+    private const DEFAULT_TIMEOUT = 30;
+
     public function __construct(
         private ProxyService $proxy,
         private AuthService $authService,
@@ -43,15 +47,15 @@ class GatewayController extends Controller
         // Filament POST /admin-catalog/logout — revoke JWT so the panel cannot be re-entered
         // with the same cookies after the catalog clears its session.
         $normalizedPath = rtrim(ltrim((string) $path, '/'), '/');
-        $isFilamentLogout = strtoupper($request->method()) === 'POST'
+        $isLogoutPath = strtoupper($request->method()) === 'POST'
             && (
                 $request->is('admin-catalog/logout')
                 || $normalizedPath === 'logout'
                 || str_ends_with($normalizedPath, '/logout')
-            )
-            && $response->getStatusCode() < 400;
+            );
+        $upstreamSucceeded = $response->getStatusCode() < 400;
 
-        if ($isFilamentLogout) {
+        if ($isLogoutPath && $upstreamSucceeded) {
             $accessToken = $request->bearerToken() ?: $request->cookie('access_token');
             $refreshToken = $request->cookie('refresh_token');
 
@@ -119,7 +123,7 @@ class GatewayController extends Controller
     public function recommendationsHealth(Request $request): Response
     {
         return $this->forwardService($request, 'recommendation', 'health', '', [
-            'timeout' => 120,
+            'timeout' => self::RECOMMENDATION_TIMEOUT,
         ]);
     }
 
@@ -133,14 +137,14 @@ class GatewayController extends Controller
                 'email' => $user->email,
                 'name' => $user->name,
             ],
-            'timeout' => 120,
+            'timeout' => self::RECOMMENDATION_TIMEOUT,
         ]);
     }
 
     public function recommendationsReindex(Request $request): Response
     {
         return $this->forwardService($request, 'recommendation', 'reindex', '', [
-            'timeout' => 120,
+            'timeout' => self::RECOMMENDATION_TIMEOUT,
         ]);
     }
 
@@ -183,7 +187,7 @@ class GatewayController extends Controller
             $baseUrl,
             $fullPath,
             $options['injectUser'] ?? null,
-            (int) ($options['timeout'] ?? 30),
+            (int) ($options['timeout'] ?? self::DEFAULT_TIMEOUT),
         );
     }
 }

@@ -23,15 +23,23 @@ var (
 )
 
 func (d Dimension) optionsSlugExpr() string {
+	categorySlugAgg := "anyLast(nullIf(category_slug, ''))"
+	emptySlugExpr := "cast('' AS String)"
 	if d.HasSlug {
-		return "anyLast(nullIf(category_slug, ''))"
+		return categorySlugAgg
 	}
-	return "cast('' AS String)"
+	return emptySlugExpr
 }
 
 func (d Dimension) nameExprs() (dimJoin, nameExpr, slugExpr string) {
+	// Prefer non-empty name/slug from the line item; fall back to product_dim.
+	categoryNameExpr := `ifNull(nullIf(anyLast(nullIf(li.category_name, '')), ''), ifNull(any(dim.dim_name), ''))`
+	categorySlugExpr := `ifNull(nullIf(anyLast(nullIf(li.category_slug, '')), ''), ifNull(any(dim.dim_slug), ''))`
+	storeNameExpr := `ifNull(nullIf(anyLast(nullIf(li.store_name, '')), ''), ifNull(any(dim.dim_name), ''))`
+	emptySlugExpr := `cast('' AS String)`
+
 	if d.HasSlug {
-		dimJoin = `
+		categoryDimJoin := `
 		LEFT JOIN (
 			SELECT
 				category_id AS join_id,
@@ -41,12 +49,10 @@ func (d Dimension) nameExprs() (dimJoin, nameExpr, slugExpr string) {
 			WHERE category_id != 0
 			GROUP BY category_id
 		) AS dim ON dim.join_id = li.category_id`
-		nameExpr = `ifNull(nullIf(anyLast(nullIf(li.category_name, '')), ''), ifNull(any(dim.dim_name), ''))`
-		slugExpr = `ifNull(nullIf(anyLast(nullIf(li.category_slug, '')), ''), ifNull(any(dim.dim_slug), ''))`
-		return dimJoin, nameExpr, slugExpr
+		return categoryDimJoin, categoryNameExpr, categorySlugExpr
 	}
 
-	dimJoin = `
+	storeDimJoin := `
 		LEFT JOIN (
 			SELECT
 				store_id AS join_id,
@@ -55,9 +61,7 @@ func (d Dimension) nameExprs() (dimJoin, nameExpr, slugExpr string) {
 			WHERE store_id != 0
 			GROUP BY store_id
 		) AS dim ON dim.join_id = li.store_id`
-	nameExpr = `ifNull(nullIf(anyLast(nullIf(li.store_name, '')), ''), ifNull(any(dim.dim_name), ''))`
-	slugExpr = `cast('' AS String)`
-	return dimJoin, nameExpr, slugExpr
+	return storeDimJoin, storeNameExpr, emptySlugExpr
 }
 
 func displayDimName(name string, id uint64) string {

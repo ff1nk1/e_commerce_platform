@@ -14,7 +14,9 @@ class TokenBlacklistService
 
     public function blacklistJwt(string $jti, int $ttl): void
     {
-        $ttl = $this->normalizeTtl($ttl, (int) config('jwt.ttl', 15) * 60);
+        $ttlMinutes = (int) config('jwt.ttl', 15);
+        $ttlSeconds = $ttlMinutes * 60;
+        $ttl = $this->normalizeTtl($ttl, $ttlSeconds);
         if ($ttl <= 0) {
             return;
         }

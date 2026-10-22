@@ -17,6 +17,8 @@ class PublishUserRegisteredToKafka
         $user = $event->user;
 
         try {
+            $registeredAt = $user->created_at?->toIso8601String() ?? now()->toIso8601String();
+
             $this->kafka->publish(
                 'user.events',
                 (string) $user->id,
@@ -28,7 +30,7 @@ class PublishUserRegisteredToKafka
                     'user_id' => $user->id,
                     'email' => $user->email,
                     'name' => $user->name,
-                    'registered_at' => $user->created_at?->toIso8601String() ?? now()->toIso8601String(),
+                    'registered_at' => $registeredAt,
                     'event_type' => 'user.registered',
                 ],
             );

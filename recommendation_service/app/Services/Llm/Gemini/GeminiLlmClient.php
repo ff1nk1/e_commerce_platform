@@ -13,6 +13,10 @@ use Illuminate\Support\Facades\Http;
 
 class GeminiLlmClient implements LlmClient
 {
+    private const MIN_BUDGET = 0.05;
+
+    private const MAX_CONNECT_TIMEOUT = 5;
+
     private const FILTER_SYSTEM_PROMPT = <<<'PROMPT'
 You extract e-commerce search filters from a user message (and optional prior conversation / structured filters).
 Merge rules:
@@ -105,11 +109,12 @@ PROMPT;
 
     public function embed(string $text, string $taskType = 'RETRIEVAL_DOCUMENT'): array
     {
+        $embeddingInputText = $text;
         $payload = [
             'model' => 'models/'.$this->embeddingModel,
             'content' => [
                 'parts' => [
-                    ['text' => $text],
+                    ['text' => $embeddingInputText],
                 ],
             ],
             'taskType' => $taskType,
@@ -127,10 +132,11 @@ PROMPT;
     public function chat(array $messages, ?string $systemPrompt = null): string
     {
         [$contents, $inlineSystem] = $this->toGeminiContents($messages);
-        $system = trim(implode("\n\n", array_filter([
+        $systemParts = array_filter([
             $systemPrompt,
             $inlineSystem !== '' ? $inlineSystem : null,
-        ], static fn (?string $part): bool => $part !== null && trim($part) !== '')));
+        ], static fn (?string $part): bool => $part !== null && trim($part) !== '');
+        $system = trim(implode("\n\n", $systemParts));
 
         $payload = [
             'contents' => $contents,
@@ -212,9 +218,9 @@ PROMPT;
     ): array {
         // Embed after extract so the vector uses cleaned query text, not the raw utterance.
         $filters = $this->extractFilters($userMessage, $catalogAttributeNames);
-        $text = $filters->query ?: ($embedText ?? $userMessage);
+        $embeddingInputText = $filters->query ?: ($embedText ?? $userMessage);
 
-        return [$filters, $this->embed($text, $embedTaskType)];
+        return [$filters, $this->embed($embeddingInputText, $embedTaskType)];
     }
 
     /**
@@ -249,7 +255,7 @@ PROMPT;
             return $this->timeout;
         }
 
-        if ($this->budgetRemaining <= 0.05) {
+        if ($this->budgetRemaining <= self::MIN_BUDGET) {
             throw LlmException::connection('Gemini request budget exceeded', 504);
         }
 
@@ -266,7 +272,7 @@ PROMPT;
             ->withHeaders([
                 'x-goog-api-key' => $this->apiKey,
             ])
-            ->connectTimeout(min(5, $timeout))
+            ->connectTimeout(min(self::MAX_CONNECT_TIMEOUT, $timeout))
             ->timeout($timeout);
     }
 

@@ -108,9 +108,8 @@ PROMPT;
 
         try {
             $previousFilters = is_array($conversation->active_filters) ? $conversation->active_filters : null;
-            $clientCategory = isset($input['category_name']) && trim((string) $input['category_name']) !== ''
-                ? trim((string) $input['category_name'])
-                : null;
+            $trimmedCategoryName = isset($input['category_name']) ? trim((string) $input['category_name']) : '';
+            $clientCategory = $trimmedCategoryName !== '' ? $trimmedCategoryName : null;
             $typeHint = $this->productTypeHint->resolve($messageText, $previousFilters, $clientCategory);
             $catalogAttrNames = $this->attributeVocabulary->namesForScope($typeHint);
 
@@ -122,7 +121,7 @@ PROMPT;
             );
             $merged = $this->mergeFilters($extracted, $input, $history, $catalogAttrNames);
             $filters = $this->filtersNormalizer->normalize($merged);
-            $limit = max(1, min((int) ($input['limit'] ?? 5), 20));
+            $resultLimit = max(1, min((int) ($input['limit'] ?? 5), 20));
 
             if (! $filters->hasSearchIntent()) {
                 $chatMessages = [];
@@ -137,7 +136,7 @@ PROMPT;
                     'conversation_id' => (string) $conversation->id,
                 ]);
             } else {
-                $searchResult = $this->search->searchDetailed($filters, $limit, $queryVector);
+                $searchResult = $this->search->searchDetailed($filters, $resultLimit, $queryVector);
                 $hits = $searchResult->hits;
                 $preferredSoftPath = $searchResult->preferredRelaxed;
                 $preferredForLabel = $filters->preferredAttributes;
@@ -151,7 +150,7 @@ PROMPT;
                     }
                     $filters = $this->filtersNormalizer->normalize($step['filters']);
                     $relaxedLabels[] = $step['relaxed'];
-                    $searchResult = $this->search->searchDetailed($filters, $limit, $queryVector);
+                    $searchResult = $this->search->searchDetailed($filters, $resultLimit, $queryVector);
                     $hits = $searchResult->hits;
                     $steps++;
                 }
@@ -168,8 +167,11 @@ PROMPT;
                 if ($preferredSoftPath && $preferredForLabel !== []) {
                     foreach ($preferredForLabel as $attr) {
                         if (! $this->anyHitSatisfiesAttribute($hits, $attr)) {
-                            $relaxedLabels[] = $attr['name'].'='.$attr['value']
-                                .' (точный '.$attr['name'].' не обязателен)';
+                            $preferredAttrName = (string) $attr['name'];
+                            $preferredAttrValue = (string) $attr['value'];
+                            $preferredSoftLabel = $preferredAttrName.'='.$preferredAttrValue
+                                .' (точный '.$preferredAttrName.' не обязателен)';
+                            $relaxedLabels[] = $preferredSoftLabel;
                         }
                     }
                 }
@@ -181,7 +183,8 @@ PROMPT;
 
                 $this->logSearchTurn($conversation, $filters, $relaxedLabels, count($preGateHits), count($hits));
 
-                $userContent = $messageText."\n\nCandidates:\n".CandidatePromptFormatter::lines($productCards);
+                $candidatesBlock = CandidatePromptFormatter::lines($productCards);
+                $userContent = $messageText."\n\nCandidates:\n".$candidatesBlock;
                 if ($relaxedLabels !== []) {
                     $userContent .= "\n\nОслабленные условия: ".implode('; ', $relaxedLabels);
                 }
@@ -316,6 +319,9 @@ PROMPT;
         $clientStoreName = isset($input['store_name']) && trim((string) $input['store_name']) !== ''
             ? trim((string) $input['store_name'])
             : null;
+        $clientCategoryName = isset($input['category_name']) && trim((string) $input['category_name']) !== ''
+            ? trim((string) $input['category_name'])
+            : null;
 
         // Client store_id wins; drop conflicting extracted store_name (and vice versa).
         $storeId = $clientStoreId ?? $extracted->storeId;
@@ -326,15 +332,16 @@ PROMPT;
             $storeId = null;
         }
 
+        $resolvedCategoryName = $clientCategoryName ?? $extracted->categoryName;
+        $resolvedInStock = array_key_exists('in_stock', $input) && $input['in_stock'] !== null
+            ? (bool) $input['in_stock']
+            : $extracted->inStock;
+
         return new SearchFilters(
             storeId: $storeId,
             storeName: $storeName,
-            categoryName: isset($input['category_name']) && trim((string) $input['category_name']) !== ''
-                ? trim((string) $input['category_name'])
-                : $extracted->categoryName,
-            inStock: array_key_exists('in_stock', $input) && $input['in_stock'] !== null
-                ? (bool) $input['in_stock']
-                : $extracted->inStock,
+            categoryName: $resolvedCategoryName,
+            inStock: $resolvedInStock,
             priceMin: isset($input['price_min']) ? (float) $input['price_min'] : $extracted->priceMin,
             priceMax: isset($input['price_max']) ? (float) $input['price_max'] : $extracted->priceMax,
             // Keep extracted query as-is (null for chitchat); do not force raw message into query.

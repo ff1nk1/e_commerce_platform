@@ -36,15 +36,7 @@ class EnsureValidAccessToken
             return $next($request);
         }
 
-        $refreshToken = $request->cookie('refresh_token')
-            ?? $request->cookies->get('refresh_token');
-
-        if (! $refreshToken) {
-            $raw = $request->headers->get('Cookie');
-            if (is_string($raw) && preg_match('/(?:^|;\s*)refresh_token=([^;]+)/', $raw, $m)) {
-                $refreshToken = urldecode($m[1]);
-            }
-        }
+        $refreshToken = $this->refreshTokenFromRequest($request);
 
         if (! $refreshToken) {
             return $next($request);
@@ -72,5 +64,29 @@ class EnsureValidAccessToken
     private function setApiUser(User $user): void
     {
         Auth::guard('api')->setUser($user);
+    }
+
+    private function refreshTokenFromRequest(Request $request): ?string
+    {
+        $fromCookie = $request->cookie('refresh_token')
+            ?? $request->cookies->get('refresh_token');
+
+        if (is_string($fromCookie) && $fromCookie !== '') {
+            return $fromCookie;
+        }
+
+        return $this->refreshTokenFromCookieHeader($request);
+    }
+
+    private function refreshTokenFromCookieHeader(Request $request): ?string
+    {
+        $raw = $request->headers->get('Cookie');
+        if (! is_string($raw) || ! preg_match('/(?:^|;\s*)refresh_token=([^;]+)/', $raw, $m)) {
+            return null;
+        }
+
+        $fromHeader = urldecode($m[1]);
+
+        return $fromHeader !== '' ? $fromHeader : null;
     }
 }

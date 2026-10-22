@@ -30,8 +30,10 @@ class CatalogController extends Controller
     public function show_products_by_cat_id(CatalogFilterRequest $request, string $cat_slug): JsonResponse
     {
         $cacheKey = CatalogCacheKeys::categoryProducts($cat_slug, $request->validated());
+        $categoryProductsTtl = now()->addHours(2);
+        $perPage = 20;
 
-        $data = Cache::tags(['products', 'categories'])->remember($cacheKey, now()->addHours(2), function () use ($request, $cat_slug) {
+        $data = Cache::tags(['products', 'categories'])->remember($cacheKey, $categoryProductsTtl, function () use ($request, $cat_slug, $perPage) {
             // Поиск категории тоже прячем в кэш, чтобы сэкономить 1 запрос к БД
             $category = Category::where('slug', $cat_slug)->firstOrFail();
 
@@ -41,7 +43,7 @@ class CatalogController extends Controller
             $query = Product::with(['store', 'category'])
                 ->whereIn('category_id', $allIds);
 
-            $products = $this->applyFilters($query, $request)->paginate(20);
+            $products = $this->applyFilters($query, $request)->paginate($perPage);
 
             // Возвращаем массив с готовыми данными
             return [
@@ -62,7 +64,8 @@ class CatalogController extends Controller
         $query = Product::with(['store', 'category'])
             ->where('store_id', $store_id);
 
-        $products = $this->applyFilters($query, $request, $store_id)->paginate(20);
+        $perPage = 20;
+        $products = $this->applyFilters($query, $request, $store_id)->paginate($perPage);
 
         return response()->json([
             'store' => $store,
@@ -90,11 +93,13 @@ class CatalogController extends Controller
         });
 
         if (($filters['status'] ?? null) === 'in_stock') {
-            $query->whereExists(function ($sub) use ($storeId) {
+            // Sellable qty: physical quantity minus reserved holds.
+            $availableStockSql = '(stocks.quantity - stocks.reserved) > 0';
+            $query->whereExists(function ($sub) use ($storeId, $availableStockSql) {
                 $sub->selectRaw('1')
                     ->from('stocks')
                     ->whereColumn('stocks.product_id', 'products.id')
-                    ->whereRaw('(stocks.quantity - stocks.reserved) > 0');
+                    ->whereRaw($availableStockSql);
 
                 if ($storeId !== null) {
                     $sub->where('stocks.store_id', $storeId);

@@ -24,16 +24,17 @@ final class StripeLineItems
         $lineItems = [];
 
         foreach ($order->items as $item) {
-            $name = ($item->productSnapshot !== null ? $item->productSnapshot->name : null)
-                ?? ('Product #'.$item->product_id);
+            $snapshotName = $item->productSnapshot !== null ? $item->productSnapshot->name : null;
+            $displayName = $snapshotName ?? ('Product #'.$item->product_id);
+            $unitAmountMinor = Money::of((string) $item->unit_price)->toMinorUnits();
 
             $lineItems[] = [
                 'quantity' => (int) $item->quantity,
                 'price_data' => [
                     'currency' => self::CURRENCY,
-                    'unit_amount' => Money::of((string) $item->unit_price)->toMinorUnits(),
+                    'unit_amount' => $unitAmountMinor,
                     'product_data' => [
-                        'name' => $name,
+                        'name' => $displayName,
                     ],
                 ],
             ];

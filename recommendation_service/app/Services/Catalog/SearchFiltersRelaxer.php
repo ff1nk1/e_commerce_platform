@@ -22,14 +22,7 @@ class SearchFiltersRelaxer
             $fromPreferred = $this->dropNamedAttribute($filters->preferredAttributes, $canonical);
             if ($fromPreferred !== null) {
                 return [
-                    'filters' => new SearchFilters(
-                        storeId: $filters->storeId,
-                        storeName: $filters->storeName,
-                        categoryName: $filters->categoryName,
-                        inStock: $filters->inStock,
-                        priceMin: $filters->priceMin,
-                        priceMax: $filters->priceMax,
-                        query: $filters->query,
+                    'filters' => $filters->withAttributeBuckets(
                         attributes: $filters->attributes,
                         requiredAttributes: $filters->requiredAttributes,
                         preferredAttributes: $fromPreferred['kept'],
@@ -41,14 +34,7 @@ class SearchFiltersRelaxer
             $fromRequired = $this->dropNamedAttribute($filters->requiredAttributes, $canonical);
             if ($fromRequired !== null) {
                 return [
-                    'filters' => new SearchFilters(
-                        storeId: $filters->storeId,
-                        storeName: $filters->storeName,
-                        categoryName: $filters->categoryName,
-                        inStock: $filters->inStock,
-                        priceMin: $filters->priceMin,
-                        priceMax: $filters->priceMax,
-                        query: $filters->query,
+                    'filters' => $filters->withAttributeBuckets(
                         attributes: $filters->attributes,
                         requiredAttributes: $fromRequired['kept'],
                         preferredAttributes: $filters->preferredAttributes,
@@ -60,45 +46,23 @@ class SearchFiltersRelaxer
 
         if ($filters->storeName !== null) {
             return [
-                'filters' => new SearchFilters(
-                    storeId: $filters->storeId,
-                    storeName: null,
-                    categoryName: $filters->categoryName,
-                    inStock: $filters->inStock,
-                    priceMin: $filters->priceMin,
-                    priceMax: $filters->priceMax,
-                    query: $filters->query,
-                    attributes: $filters->attributes,
-                    requiredAttributes: $filters->requiredAttributes,
-                    preferredAttributes: $filters->preferredAttributes,
-                ),
+                'filters' => $filters->withoutStoreName(),
                 'relaxed' => 'store_name='.$filters->storeName,
             ];
         }
 
         if ($filters->priceMin !== null || $filters->priceMax !== null) {
-            $label = 'price';
+            $relaxedPriceLabel = 'price';
             if ($filters->priceMin !== null) {
-                $label .= ' min='.$filters->priceMin;
+                $relaxedPriceLabel .= ' min='.$filters->priceMin;
             }
             if ($filters->priceMax !== null) {
-                $label .= ' max='.$filters->priceMax;
+                $relaxedPriceLabel .= ' max='.$filters->priceMax;
             }
 
             return [
-                'filters' => new SearchFilters(
-                    storeId: $filters->storeId,
-                    storeName: $filters->storeName,
-                    categoryName: $filters->categoryName,
-                    inStock: $filters->inStock,
-                    priceMin: null,
-                    priceMax: null,
-                    query: $filters->query,
-                    attributes: $filters->attributes,
-                    requiredAttributes: $filters->requiredAttributes,
-                    preferredAttributes: $filters->preferredAttributes,
-                ),
-                'relaxed' => trim($label),
+                'filters' => $filters->withoutPriceRange(),
+                'relaxed' => trim($relaxedPriceLabel),
             ];
         }
 

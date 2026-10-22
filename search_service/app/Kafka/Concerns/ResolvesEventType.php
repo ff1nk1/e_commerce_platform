@@ -13,7 +13,13 @@ trait ResolvesEventType
     {
         $headers = $message->getHeaders();
         $body = $message->getBody();
-        $eventType = $headers['event-type'] ?? ($body['event'] ?? null);
+        $headerEventType = $headers['event-type'] ?? null;
+        $bodyEventType = null;
+        $eventType = $headerEventType;
+        if ($eventType === null) {
+            $bodyEventType = $body['event'] ?? null;
+            $eventType = $bodyEventType;
+        }
 
         return [$eventType, $body];
     }

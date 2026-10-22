@@ -11,7 +11,11 @@ export function formatImageUrl(url) {
     // Legacy internal Docker hostnames accidentally stored in DB
     if (url.includes('minio:9000') || url.includes('catalog_service_minio:9000')) {
         const path = url.replace(/^https?:\/\/[^/]+/, '')
-        return path.startsWith('/storage') ? path : `/storage${path.startsWith('/') ? path : `/${path}`}`
+        if (path.startsWith('/storage')) {
+            return path
+        }
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`
+        return `/storage${normalizedPath}`
     }
 
     if (url.startsWith('http://') || url.startsWith('https://')) {

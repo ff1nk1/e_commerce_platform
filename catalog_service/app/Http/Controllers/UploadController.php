@@ -19,17 +19,19 @@ class UploadController extends Controller
 
         /** @var AwsS3V3Adapter $s3Disk */
         $s3Disk = Storage::disk('s3');
-        $internalUrl = $s3Disk->temporaryUploadUrl(
+        $presignExpiresAt = now()->addMinutes(5);
+        $presignResult = $s3Disk->temporaryUploadUrl(
             $path,
-            now()->addMinutes(5),
+            $presignExpiresAt,
             ['ContentType' => $contentType]
         );
 
-        $internalUrl = (string) ($internalUrl['url'] ?? $internalUrl[0] ?? json_encode($internalUrl));
+        // temporaryUploadUrl may return ['url' => ...] or a list; fall back to JSON string.
+        $uploadUrl = (string) ($presignResult['url'] ?? $presignResult[0] ?? json_encode($presignResult));
 
         return response()->json([
             // Internal MinIO URL for server-side PUT (admin Docker network)
-            'upload_url' => $internalUrl,
+            'upload_url' => $uploadUrl,
             'file_path' => $path,
             'public_url' => MediaPublicUrl::forPath($path),
         ]);

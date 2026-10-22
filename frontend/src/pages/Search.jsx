@@ -170,9 +170,10 @@ export default function Search() {
             const current = next.getAll('category_id');
             next.delete('category_id');
             const exists = current.includes(idStr);
-            (exists ? current.filter((v) => v !== idStr) : [...current, idStr]).forEach((v) =>
-                next.append('category_id', v)
-            );
+            const nextCategoryIds = exists
+                ? current.filter((v) => v !== idStr)
+                : [...current, idStr];
+            nextCategoryIds.forEach((v) => next.append('category_id', v));
         });
     };
 
@@ -195,8 +196,12 @@ export default function Search() {
             next.set('price_range', range.key);
             if (range.from !== null && range.from !== undefined) next.set('min_price', String(range.from));
             else next.delete('min_price');
-            if (range.to !== null && range.to !== undefined) next.set('max_price', String(range.to - 0.01));
-            else next.delete('max_price');
+            if (range.to !== null && range.to !== undefined) {
+                const exclusiveMaxPrice = range.to - 0.01;
+                next.set('max_price', String(exclusiveMaxPrice));
+            } else {
+                next.delete('max_price');
+            }
             // for 5000+ keep only min
             if (range.to === null || range.to === undefined) {
                 next.delete('max_price');
@@ -210,9 +215,10 @@ export default function Search() {
             const current = next.getAll(key);
             next.delete(key);
             const exists = current.includes(value);
-            (exists ? current.filter((v) => v !== value) : [...current, value]).forEach((v) =>
-                next.append(key, v)
-            );
+            const nextAttrValues = exists
+                ? current.filter((v) => v !== value)
+                : [...current, value];
+            nextAttrValues.forEach((v) => next.append(key, v));
         });
     };
 

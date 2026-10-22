@@ -82,8 +82,12 @@ export default function Assistant() {
     getStores()
       .then((response) => {
         if (cancelled) return
-        const list = response.data?.data || response.data || []
-        setStores(Array.isArray(list) ? list : [])
+        const nestedList = response.data?.data
+        const bareList = response.data
+        const list = Array.isArray(nestedList)
+          ? nestedList
+          : (Array.isArray(bareList) ? bareList : [])
+        setStores(list)
       })
       .catch((err) => {
         console.error(err)

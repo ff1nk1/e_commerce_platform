@@ -31,9 +31,10 @@ class MailDeliveryService
             );
         }
 
-        $email = $notification->email;
+        $logEmail = $notification->email;
         $payload = is_array($notification->payload) ? $notification->payload : [];
-        $payload['email'] = $email;
+        $payloadEmail = $logEmail;
+        $payload['email'] = $payloadEmail;
         $payload['event_type'] = $eventType;
         if ($notification->name !== null && $notification->name !== '') {
             $payload['name'] = $notification->name;
@@ -50,7 +51,7 @@ class MailDeliveryService
 
         $result = $this->attemptSendWithRetry(
             $notification,
-            (string) $email,
+            (string) $logEmail,
             fn () => $this->mailableRegistry->make($eventType, $payload),
         );
 
@@ -69,17 +70,22 @@ class MailDeliveryService
      */
     public function resolveEventTypeForResend(EmailLog $notification): ?string
     {
-        if (is_string($notification->event_type) && $notification->event_type !== '') {
-            return $notification->event_type;
+        $storedEventType = $notification->event_type;
+        $hasStoredEventType = is_string($storedEventType) && $storedEventType !== '';
+        if ($hasStoredEventType) {
+            return $storedEventType;
         }
 
         $payload = is_array($notification->payload) ? $notification->payload : [];
-        $fromPayload = $payload['event_type'] ?? null;
-        if (is_string($fromPayload) && $fromPayload !== '') {
-            return $fromPayload;
+        $eventTypeFromPayload = $payload['event_type'] ?? null;
+        $hasPayloadEventType = is_string($eventTypeFromPayload) && $eventTypeFromPayload !== '';
+        if ($hasPayloadEventType) {
+            return $eventTypeFromPayload;
         }
 
-        if (isset($payload['order_id'])) {
+        $looksLikeOrderMail = isset($payload['order_id']);
+        if ($looksLikeOrderMail) {
+            // order.paid vs order.confirmed cannot be told apart from payload alone.
             return null;
         }
 
@@ -136,7 +142,9 @@ class MailDeliveryService
      */
     public function deliverExisting(EmailLog $emailLog, array $payload, string $eventType): array
     {
-        $emailAddress = (string) ($emailLog->email ?: ($payload['email'] ?? ''));
+        $logEmail = (string) ($emailLog->email ?? '');
+        $payloadEmail = (string) ($payload['email'] ?? '');
+        $emailAddress = $logEmail !== '' ? $logEmail : $payloadEmail;
 
         $payload['event_type'] = $eventType;
 

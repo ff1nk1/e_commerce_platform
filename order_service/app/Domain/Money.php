@@ -6,22 +6,31 @@ use InvalidArgumentException;
 
 final class Money
 {
+    private const MINOR_UNITS_PER_MAJOR = '100';
+
     private function __construct(
         private readonly string $amount,
     ) {}
 
     public static function of(string|int|float $amount): self
     {
-        $raw = is_string($amount) ? trim($amount) : number_format((float) $amount, 2, '.', '');
+        if (is_string($amount)) {
+            $raw = trim($amount);
+        } else {
+            $raw = number_format((float) $amount, 2, '.', '');
+        }
+
         if ($raw === '' || ! is_numeric($raw)) {
             throw new InvalidArgumentException('Invalid money amount: '.$raw);
         }
 
         if (function_exists('bcadd')) {
-            return new self(bcadd($raw, '0', 2));
+            $normalized = bcadd($raw, '0', 2);
+        } else {
+            $normalized = number_format((float) $raw, 2, '.', '');
         }
 
-        return new self(number_format((float) $raw, 2, '.', ''));
+        return new self($normalized);
     }
 
     public static function zero(): self
@@ -55,7 +64,7 @@ final class Money
     public function toMinorUnits(): int
     {
         if (function_exists('bcmul')) {
-            return (int) bcmul($this->amount, '100', 0);
+            return (int) bcmul($this->amount, self::MINOR_UNITS_PER_MAJOR, 0);
         }
 
         $normalized = number_format((float) $this->amount, 2, '.', '');

@@ -38,7 +38,9 @@ class OrderCreatedHandler
 
             $orderId = $payload['order_id'] ?? null;
             $items = $payload['items'] ?? [];
-            if (! $orderId || ! is_array($items) || $items === []) {
+            $hasOrderId = (bool) $orderId;
+            $hasItems = is_array($items) && $items !== [];
+            if (! $hasOrderId || ! $hasItems) {
                 Log::warning('Получено пустое или невалидное событие order.created', ['payload' => $payload]);
 
                 return;

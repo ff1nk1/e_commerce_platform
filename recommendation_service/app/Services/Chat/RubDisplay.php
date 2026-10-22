@@ -10,6 +10,8 @@ final class RubDisplay
             return 'цена не указана';
         }
 
-        return rtrim(rtrim(number_format((float) $price, 2, '.', ''), '0'), '.').' ₽';
+        $formattedAmount = rtrim(rtrim(number_format((float) $price, 2, '.', ''), '0'), '.');
+
+        return $formattedAmount.' ₽';
     }
 }

@@ -13,8 +13,10 @@ class ProductSearchResponseMapper
         $products = [];
         foreach ($response['hits']['hits'] ?? [] as $hit) {
             $source = $hit['_source'] ?? [];
+            $productId = $source['id'] ?? (int) ($hit['_id'] ?? 0);
+            $inStockValue = (bool) ($source['in_stock'] ?? false);
             $products[] = [
-                'id' => $source['id'] ?? (int) ($hit['_id'] ?? 0),
+                'id' => $productId,
                 'name' => $source['name'] ?? '',
                 'description' => $source['description'] ?? null,
                 'price' => $source['price'] ?? null,
@@ -23,7 +25,7 @@ class ProductSearchResponseMapper
                 'category_name' => $source['category_name'] ?? null,
                 'store_id' => $source['store_id'] ?? null,
                 'store_name' => $source['store_name'] ?? null,
-                'in_stock' => (bool) ($source['in_stock'] ?? false),
+                'in_stock' => $inStockValue,
                 'quantity' => (int) ($source['quantity'] ?? 0),
                 'attributes' => $source['attributes'] ?? [],
             ];
@@ -42,10 +44,13 @@ class ProductSearchResponseMapper
 
         $categories = [];
         foreach ($root['categories']['buckets'] ?? [] as $bucket) {
-            $nameBucket = $bucket['name']['buckets'][0]['key'] ?? null;
+            $categoryFacetName = $bucket['name']['buckets'][0]['key'] ?? null;
+            $categoryName = $categoryFacetName !== null
+                ? (string) $categoryFacetName
+                : (string) $bucket['key'];
             $categories[] = [
                 'id' => (int) $bucket['key'],
-                'name' => $nameBucket !== null ? (string) $nameBucket : (string) $bucket['key'],
+                'name' => $categoryName,
                 'count' => (int) ($bucket['doc_count'] ?? 0),
             ];
         }
@@ -66,8 +71,9 @@ class ProductSearchResponseMapper
         $availability = [];
         foreach ($root['availability']['buckets'] ?? [] as $bucket) {
             $key = $bucket['key'];
+            $inStockValue = $this->normalizeBool($key);
             $availability[] = [
-                'value' => is_bool($key) ? $key : ((int) $key === 1 || $key === 'true'),
+                'value' => $inStockValue,
                 'count' => (int) ($bucket['doc_count'] ?? 0),
             ];
         }
@@ -91,5 +97,14 @@ class ProductSearchResponseMapper
             'availability' => $availability,
             'attributes' => $attributes,
         ];
+    }
+
+    private function normalizeBool(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return (int) $value === 1 || $value === 'true';
     }
 }
