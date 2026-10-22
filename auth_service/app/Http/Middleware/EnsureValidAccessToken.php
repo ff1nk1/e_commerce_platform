@@ -85,8 +85,6 @@ class EnsureValidAccessToken
             return null;
         }
 
-        $fromHeader = urldecode($m[1]);
-
-        return $fromHeader !== '' ? $fromHeader : null;
+        return urldecode($m[1]);
     }
 }

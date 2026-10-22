@@ -3,6 +3,31 @@ import { useLoaderData, useNavigate } from 'react-router-dom'
 import { logout as apiLogout, updatePassword, updateProfile } from '../api/auth'
 import '../styles/profile.css'
 
+const E164_PHONE_RE = /^\+[1-9]\d{9,14}$/
+
+function normalizePhone(value) {
+  return String(value ?? '').replace(/[\s\-()]/g, '')
+}
+
+function validatePhone(value) {
+  const normalized = normalizePhone(value)
+  if (!normalized) {
+    return 'Укажите номер телефона.'
+  }
+  if (normalized.length > 16 || !E164_PHONE_RE.test(normalized)) {
+    return 'Номер телефона должен быть в формате E.164 (например +48123456789).'
+  }
+  return null
+}
+
+function fieldErrorMessage(error, field) {
+  const fieldErrors = error.response?.data?.errors?.[field]
+  if (Array.isArray(fieldErrors) && fieldErrors[0]) {
+    return fieldErrors[0]
+  }
+  return error.response?.data?.message || 'Ошибка при изменении данных'
+}
+
 export default function Profile() {
   const user = useLoaderData()
   const navigate = useNavigate()
@@ -21,19 +46,35 @@ export default function Profile() {
   const [status, setStatus] = useState({ message: '', type: '' });
 
   const handleUpdate = async (field, value) => {
-    setLoadingField(field);
     setStatus({ message: '', type: '' });
+
+    if (field === 'number') {
+      const phoneError = validatePhone(value)
+      if (phoneError) {
+        setStatus({ message: phoneError, type: 'error' });
+        return
+      }
+      value = normalizePhone(value)
+      setNumber(value)
+    }
+
+    setLoadingField(field);
 
     try {
       // Используем твой api, он сам подставит baseURL, куки и токены (withCredentials: true)
       // Если бэкенд вернет 401, твой интерсептор сам обновит сессию и повторит этот запрос!
-      await updateProfile(field, value)
+      const response = await updateProfile(field, value)
+      const saved = response?.data?.user?.[field]
+      if (field === 'number' && typeof saved === 'string') {
+        setNumber(saved)
+      }
+      if (field === 'name' && typeof saved === 'string') {
+        setName(saved)
+      }
 
       setStatus({ message: 'Данные успешно обновлены!', type: 'success' });
     } catch (error) {
-      // Axios кладет ответ сервера в error.response
-      const errorMessage = error.response?.data?.message || 'Ошибка при изменении данных';
-      setStatus({ message: errorMessage, type: 'error' });
+      setStatus({ message: fieldErrorMessage(error, field), type: 'error' });
     } finally {
       setLoadingField(null);
     }

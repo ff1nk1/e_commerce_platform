@@ -34,7 +34,7 @@ class FailPaymentAndReleaseStock
                 return;
             }
 
-            $this->applyFail($order, $releaseOrder);
+            $releaseOrder = $this->applyFail($order);
         });
 
         if ($releaseOrder !== null) {
@@ -42,12 +42,13 @@ class FailPaymentAndReleaseStock
         }
     }
 
-    private function applyFail(Order $order, ?Order &$releaseOrder): void
+    private function applyFail(Order $order): Order
     {
         $order->failPayment();
         $order->save();
 
         $this->stockRelease->dispatch($order);
-        $releaseOrder = $order;
+
+        return $order;
     }
 }

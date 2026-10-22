@@ -84,7 +84,9 @@ class StockEventsHandlerUnitTest extends TestCase
             'reason' => 'Not enough stock',
         ]));
 
-        $this->assertSame('cancelled', $order->fresh()->status->value);
+        $fresh = $order->fresh();
+        $this->assertSame('cancelled', $fresh->status->value);
+        $this->assertSame('insufficient_stock', $fresh->cancel_reason);
 
         $event = OutboxEvent::query()->where('event_type', 'order.cancelled')->first();
         $this->assertNotNull($event);

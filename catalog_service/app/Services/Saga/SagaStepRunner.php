@@ -15,7 +15,7 @@ class SagaStepRunner
     /**
      * Claim a saga step, run work, persist outcome. On busy throws so the message is retried.
      *
-     * @param  callable(): array{status?: string, result?: array<string, mixed>}|null  $work
+     * @param  callable(): array{status?: string, result?: array<string, mixed>}  $work
      */
     public function run(?string $sagaId, string $step, callable $work): void
     {
@@ -41,7 +41,7 @@ class SagaStepRunner
 
         try {
             $outcome = $work();
-            if (is_array($outcome) && isset($outcome['status'])) {
+            if (isset($outcome['status'])) {
                 $this->saga->put(
                     $sagaId,
                     $step,

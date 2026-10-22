@@ -2,6 +2,8 @@
 
 namespace App\Services\Catalog;
 
+use App\Support\RuText;
+
 /**
  * Decides which extracted attributes are hard, preferred (semi-hard), or soft.
  */
@@ -54,7 +56,7 @@ class AttributeConstraintDetector
 
     public function messageImpliesExclusive(string $message): bool
     {
-        $normalized = \App\Support\RuText::fold($message);
+        $normalized = RuText::fold($message);
 
         return preg_match(
             '/(^|[^\p{L}\p{N}])(только|исключительно|именно|строго|ровно|точно)($|[^\p{L}\p{N}])/u',
@@ -86,7 +88,7 @@ class AttributeConstraintDetector
     public function isPreferredAttributeName(string $name): bool
     {
         $canonical = $this->names->canonicalize($name);
-        $key = \App\Support\RuText::fold($canonical);
+        $key = RuText::fold($canonical);
 
         return in_array($key, ['цвет', 'бренд', 'материал'], true);
     }

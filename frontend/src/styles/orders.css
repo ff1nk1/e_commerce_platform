@@ -82,8 +82,32 @@
 }
 
 .order-status.pending { background: var(--color-warning-bg); }
+.order-status.awaiting_payment { background: var(--color-warning-bg); }
+.order-status.confirmed { background: var(--color-success-bg); }
+.order-status.shipped { background: var(--color-success-bg); }
 .order-status.cancelled { background: var(--color-danger-bg); }
+.order-status.payment_failed { background: var(--color-danger-bg); }
 .order-status.paid { background: var(--color-success-bg); }
+
+.order-item-lines {
+  list-style: none;
+  padding: 8px 0 0;
+  margin: 8px 0 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.order-item-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+
+.order-item-line:last-child {
+  margin-bottom: 0;
+}
 
 .order-actions {
   display: flex;

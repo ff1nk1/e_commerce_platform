@@ -2,6 +2,8 @@
 
 namespace App\Services\Catalog;
 
+use App\Support\RuText;
+
 /**
  * Maps attribute names to value-match strategy ids via config synonym groups.
  */
@@ -62,6 +64,6 @@ class ValueMatchStrategyResolver
 
     private function normalizeKey(string $value): string
     {
-        return \App\Support\RuText::fold($value);
+        return RuText::fold($value);
     }
 }

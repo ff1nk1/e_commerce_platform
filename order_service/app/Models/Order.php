@@ -20,6 +20,7 @@ class Order extends Model
         'customer_email',
         'customer_name',
         'status',
+        'cancel_reason',
         'total_amount',
     ];
 

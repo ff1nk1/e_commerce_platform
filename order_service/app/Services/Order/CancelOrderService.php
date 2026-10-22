@@ -39,6 +39,7 @@ class CancelOrderService
 
             $previousStatus = $order->statusEnum();
             $order->cancel();
+            $order->cancel_reason = 'user_cancelled';
             $order->save();
 
             event(new OrderCancelled(

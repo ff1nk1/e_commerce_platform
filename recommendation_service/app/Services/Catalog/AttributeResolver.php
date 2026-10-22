@@ -2,6 +2,8 @@
 
 namespace App\Services\Catalog;
 
+use App\Support\RuText;
+
 /**
  * Resolve extracted attribute names against a scoped catalog vocabulary.
  */
@@ -188,6 +190,6 @@ class AttributeResolver
 
     private function normalizeKey(string $value): string
     {
-        return \App\Support\RuText::fold($value);
+        return RuText::fold($value);
     }
 }

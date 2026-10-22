@@ -16,12 +16,9 @@ final class KafkaOutboxHeaders
             'source' => $source,
         ];
 
-        $payload = $event->payload;
-        if (is_array($payload)) {
-            $sagaId = KafkaPayload::sagaId($payload);
-            if ($sagaId !== null) {
-                $headers['saga-id'] = $sagaId;
-            }
+        $sagaId = KafkaPayload::sagaId($event->payload);
+        if ($sagaId !== null) {
+            $headers['saga-id'] = $sagaId;
         }
 
         return $headers;

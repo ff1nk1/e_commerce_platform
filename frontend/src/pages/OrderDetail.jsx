@@ -104,15 +104,23 @@ export default function OrderDetail() {
   useEffect(() => {
     if (order?.status === 'cancelled') {
       setReserveTimedOut(false)
-      setMessage('')
-      setError('Не удалось зарезервировать товар. Заказ отменён.')
+      if (order.cancel_reason === 'user_cancelled') {
+        setError('')
+        setMessage('Этот заказ был отменён вами')
+      } else if (order.cancel_reason === 'insufficient_stock') {
+        setMessage('')
+        setError('Не удалось зарезервировать товар. Заказ отменён.')
+      } else {
+        setError('')
+        setMessage('Заказ отменён.')
+      }
       return
     }
     if (order?.status === 'payment_failed') {
       setMessage('')
       setError('Оплата не прошла. Резерв будет снят.')
     }
-  }, [order?.status])
+  }, [order?.status, order?.cancel_reason])
 
   useEffect(() => {
     const previous = prevStatus.current
@@ -175,7 +183,6 @@ export default function OrderDetail() {
       const { data } = await cancelOrder(order.id)
       setOrder(data)
       setReserveTimedOut(false)
-      setMessage('Заказ отменён.')
       revalidator.revalidate()
     } catch (err) {
       setError(err.response?.data?.message || 'Не удалось отменить заказ.')

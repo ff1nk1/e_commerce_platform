@@ -268,4 +268,54 @@ class AuthHttpTest extends TestCase
         $request->headers->set('Authorization', 'Bearer '.$tokens['access_token']);
         $this->assertNull($jwt->userFromRequest($request));
     }
+
+    public function test_profile_update_normalizes_phone_with_spaces(): void
+    {
+        $role = Role::where('slug', 'customer')->first();
+        $user = User::factory()->create([
+            'email' => 'profile-phone@example.com',
+            'password' => Hash::make('password123'),
+            'role_id' => $role->id,
+            'number' => '+10000000000',
+        ]);
+
+        $tokens = app(AuthService::class)->login([
+            'email' => 'profile-phone@example.com',
+            'password' => 'password123',
+        ]);
+
+        $this->withToken($tokens['access_token'])
+            ->patchJson('/api/profile', [
+                'number' => '+48 123 456 789',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.number', '+48123456789');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'number' => '+48123456789',
+        ]);
+    }
+
+    #[DataProvider('invalidRegistrationPhoneProvider')]
+    public function test_profile_update_rejects_invalid_phone(string $number): void
+    {
+        $role = Role::where('slug', 'customer')->first();
+        User::factory()->create([
+            'email' => 'profile-invalid-phone@example.com',
+            'password' => Hash::make('password123'),
+            'role_id' => $role->id,
+            'number' => '+10000000000',
+        ]);
+
+        $tokens = app(AuthService::class)->login([
+            'email' => 'profile-invalid-phone@example.com',
+            'password' => 'password123',
+        ]);
+
+        $this->withToken($tokens['access_token'])
+            ->patchJson('/api/profile', ['number' => $number])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['number']);
+    }
 }

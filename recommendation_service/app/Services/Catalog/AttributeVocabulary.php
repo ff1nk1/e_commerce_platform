@@ -2,6 +2,7 @@
 
 namespace App\Services\Catalog;
 
+use App\Support\SqlLike;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -87,6 +88,6 @@ class AttributeVocabulary
 
     private function escapeLike(string $value): string
     {
-        return \App\Support\SqlLike::escape($value);
+        return SqlLike::escape($value);
     }
 }

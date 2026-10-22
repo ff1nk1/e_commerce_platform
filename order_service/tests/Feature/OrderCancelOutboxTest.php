@@ -47,7 +47,13 @@ class OrderCancelOutboxTest extends TestCase
 
         $this->postJson('/api/orders/'.$order->id.'/cancel', ['user_id' => 2])
             ->assertOk()
-            ->assertJsonPath('status', 'cancelled');
+            ->assertJsonPath('status', 'cancelled')
+            ->assertJsonPath('cancel_reason', 'user_cancelled');
+
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'cancel_reason' => 'user_cancelled',
+        ]);
 
         $cancelled = OutboxEvent::query()->where('event_type', 'order.cancelled')->first();
         $release = OutboxEvent::query()->where('event_type', 'stock.release_requested')->first();
@@ -90,7 +96,8 @@ class OrderCancelOutboxTest extends TestCase
 
         $this->postJson('/api/orders/'.$order->id.'/cancel', ['user_id' => 2])
             ->assertOk()
-            ->assertJsonPath('status', 'cancelled');
+            ->assertJsonPath('status', 'cancelled')
+            ->assertJsonPath('cancel_reason', 'user_cancelled');
 
         $this->assertNotNull(OutboxEvent::query()->where('event_type', 'order.cancelled')->first());
         $this->assertSame(

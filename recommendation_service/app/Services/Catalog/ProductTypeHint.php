@@ -2,6 +2,8 @@
 
 namespace App\Services\Catalog;
 
+use App\Support\RuText;
+
 /**
  * Cheap product-type hint before LLM extract (keywords + sticky filters).
  */
@@ -53,7 +55,7 @@ class ProductTypeHint
      */
     private function matchKeywords(string $text): ?array
     {
-        $normalized = \App\Support\RuText::fold($text);
+        $normalized = RuText::fold($text);
         if ($normalized === '') {
             return null;
         }

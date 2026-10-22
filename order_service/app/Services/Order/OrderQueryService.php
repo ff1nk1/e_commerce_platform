@@ -15,7 +15,7 @@ class OrderQueryService
     public function listForUser(int $userId, int $perPage = 15): LengthAwarePaginator
     {
         return Order::query()
-            ->with('items')
+            ->with(['items.productSnapshot'])
             ->where('user_id', $userId)
             ->orderByDesc('id')
             ->paginate($perPage);
@@ -24,7 +24,7 @@ class OrderQueryService
     public function listAll(int $perPage = 15): LengthAwarePaginator
     {
         return Order::query()
-            ->with('items')
+            ->with(['items.productSnapshot'])
             ->orderByDesc('id')
             ->paginate($perPage);
     }

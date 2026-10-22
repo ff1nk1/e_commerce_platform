@@ -191,6 +191,7 @@ class StockEventsHandler
         }
 
         $order->cancel();
+        $order->cancel_reason = 'insufficient_stock';
         $order->save();
 
         event(new OrderCancelled(

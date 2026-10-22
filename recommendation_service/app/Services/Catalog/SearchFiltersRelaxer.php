@@ -3,6 +3,7 @@
 namespace App\Services\Catalog;
 
 use App\Services\Llm\DTOs\SearchFilters;
+use App\Support\RuText;
 
 /**
  * Progressive filter relaxation when a hard search returns no hits.
@@ -77,10 +78,10 @@ class SearchFiltersRelaxer
     {
         $kept = [];
         $dropped = null;
-        $key = \App\Support\RuText::fold($canonical);
+        $key = RuText::fold($canonical);
 
         foreach ($attributes as $row) {
-            $nameKey = \App\Support\RuText::fold((string) $row['name']);
+            $nameKey = RuText::fold((string) $row['name']);
             if ($dropped === null && $nameKey === $key) {
                 $dropped = $row;
 

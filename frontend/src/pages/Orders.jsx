@@ -60,6 +60,20 @@ export default function Orders() {
                       <span>{order.total_amount} ₽</span>
                       <span>{order.created_at ? new Date(order.created_at).toLocaleString() : ''}</span>
                     </div>
+                    {(order.items || []).length > 0 && (
+                      <ul className="order-item-lines">
+                        {(order.items || []).map((item) => (
+                          <li key={item.id} className="order-item-line">
+                            <span>
+                              {item.product_snapshot?.name || `Товар #${item.product_id}`}
+                            </span>
+                            <span>
+                              {item.quantity} × {item.unit_price} ₽
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </Link>
                 </li>
               ))}
