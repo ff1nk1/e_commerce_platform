@@ -4,9 +4,10 @@ namespace App\Services\Payment;
 
 use App\Contracts\IdempotencyStore;
 use App\Contracts\PaymentGateway;
-use App\Domain\Money;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Services\Stripe\StripeCheckoutSessionParams;
+use App\Services\Stripe\StripeLineItems;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -109,53 +110,16 @@ class CreateCheckoutService
             'status' => 'pending',
         ]);
 
-        $lineItems = [];
-        foreach ($order->items as $item) {
-            $name = ($item->productSnapshot !== null ? $item->productSnapshot->name : null)
-                ?? ('Product #'.$item->product_id);
-            $unitAmount = Money::of((string) $item->unit_price)->toMinorUnits();
-
-            $lineItems[] = [
-                'quantity' => (int) $item->quantity,
-                'price_data' => [
-                    'currency' => 'rub',
-                    'unit_amount' => $unitAmount,
-                    'product_data' => [
-                        'name' => $name,
-                    ],
-                ],
-            ];
-        }
-
+        $lineItems = StripeLineItems::fromOrder($order);
         if ($lineItems === []) {
             throw ValidationException::withMessages([
                 'items' => ['Order has no items to pay for.'],
             ]);
         }
 
-        $successUrl = str_replace(
-            '{ORDER_ID}',
-            (string) $order->id,
-            (string) config('services.stripe.success_url')
+        $session = $this->stripe->createCheckoutSession(
+            StripeCheckoutSessionParams::forPayment($order, $payment, $lineItems)
         );
-        $cancelUrl = str_replace(
-            '{ORDER_ID}',
-            (string) $order->id,
-            (string) config('services.stripe.cancel_url')
-        );
-
-        $session = $this->stripe->createCheckoutSession([
-            'mode' => 'payment',
-            'success_url' => $successUrl,
-            'cancel_url' => $cancelUrl,
-            'client_reference_id' => (string) $order->id,
-            'metadata' => [
-                'order_id' => (string) $order->id,
-                'payment_id' => (string) $payment->id,
-            ],
-            'expires_at' => time() + 30 * 60,
-            'line_items' => $lineItems,
-        ]);
 
         $payment->stripe_checkout_session_id = $session['id'] ?? null;
         $payment->stripe_payment_intent_id = is_string($session['payment_intent'] ?? null)

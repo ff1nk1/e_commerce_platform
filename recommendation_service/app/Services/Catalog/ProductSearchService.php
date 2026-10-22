@@ -7,6 +7,9 @@ use App\Services\Catalog\DTOs\SearchHit;
 use App\Services\Catalog\DTOs\SearchResult;
 use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\DTOs\SearchFilters;
+use App\Support\PgVectorLiteral;
+use App\Support\RuText;
+use App\Support\SqlLike;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -53,7 +56,7 @@ class ProductSearchService
             $filters->query ?: 'recommended products',
             'RETRIEVAL_QUERY'
         );
-        $literal = $this->toVectorLiteral($vector);
+        $literal = PgVectorLiteral::from($vector);
 
         $softAttrs = $filters->attributes;
         $hardAttrs = $filters->requiredAttributes;
@@ -307,7 +310,7 @@ class ProductSearchService
             // Align with PHP matcher: lower + ё→е on JSON text; token already stemmed/stripped.
             $builder->whereRaw(
                 "replace(lower(attributes::text), 'ё', 'е') LIKE ?",
-                ['%'.$this->escapeLike($token).'%']
+                ['%'.SqlLike::escape($token).'%']
             );
         }
     }
@@ -421,28 +424,12 @@ class ProductSearchService
 
         $builder->whereRaw(
             "replace(lower({$column}), 'ё', 'е') LIKE ?",
-            ['%'.$this->escapeLike($needle).'%']
+            ['%'.SqlLike::escape($needle).'%']
         );
     }
 
     private function normalizeCaseYo(string $value): string
     {
-        return str_replace('ё', 'е', mb_strtolower(trim($value)));
-    }
-
-    private function escapeLike(string $value): string
-    {
-        return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
-    }
-
-    /**
-     * @param  list<float>  $vector
-     */
-    private function toVectorLiteral(array $vector): string
-    {
-        return '['.implode(',', array_map(
-            static fn (float $v): string => sprintf('%.8F', $v),
-            $vector
-        )).']';
+        return RuText::fold($value);
     }
 }

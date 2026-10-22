@@ -87,6 +87,6 @@ class AttributeVocabulary
 
     private function escapeLike(string $value): string
     {
-        return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
+        return \App\Support\SqlLike::escape($value);
     }
 }

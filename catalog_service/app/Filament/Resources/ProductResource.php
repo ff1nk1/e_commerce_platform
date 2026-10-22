@@ -7,6 +7,8 @@ use App\Models\Product;
 use App\Models\ProductAttribute;
 use App\Models\Store;
 use App\Services\ProductService;
+use App\Support\MediaPublicUrl;
+use App\Support\MediaUploadPath;
 use BackedEnum;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -27,7 +29,6 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ProductResource extends Resource
@@ -202,31 +203,17 @@ class ProductResource extends Resource
     protected static function uploadImage(TemporaryUploadedFile $file): string
     {
         $extension = $file->getClientOriginalExtension() ?: 'jpg';
-        $path = 'uploads/'.Str::uuid().'.'.$extension;
+        $path = MediaUploadPath::new($extension);
 
         Storage::disk('s3')->put($path, file_get_contents($file->getRealPath()) ?: '', [
             'ContentType' => $file->getMimeType() ?: 'application/octet-stream',
         ]);
 
-        $bucket = (string) config('filesystems.disks.s3.bucket', 'media');
-        $publicBase = rtrim((string) config('filesystems.media_public_base', '/storage'), '/');
-
-        return "{$publicBase}/{$bucket}/{$path}";
+        return MediaPublicUrl::forPath($path);
     }
 
     public static function publicImageUrl(?string $url): ?string
     {
-        if (! $url) {
-            return null;
-        }
-
-        if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
-            return $url;
-        }
-
-        $base = rtrim((string) config('app.url'), '/');
-        $path = str_starts_with($url, '/') ? $url : '/'.$url;
-
-        return $base.$path;
+        return MediaPublicUrl::absolute($url);
     }
 }

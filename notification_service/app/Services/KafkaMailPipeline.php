@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Events\KafkaEventMovedToDlq;
 use App\Models\EmailLog;
+use App\Support\KafkaMailMessageId;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
@@ -55,7 +56,7 @@ class KafkaMailPipeline
             return;
         }
 
-        $messageId = $this->resolveMessageId($message, $sourceTopic, $eventType, $body);
+        $messageId = KafkaMailMessageId::resolve($message, $sourceTopic, $eventType, $body);
 
         $existing = EmailLog::query()->where('message_id', $messageId)->first();
         if ($existing !== null && $existing->status === 'sent') {
@@ -79,33 +80,6 @@ class KafkaMailPipeline
         if (! $result['isSent']) {
             $this->sendToDlq($message, $result['emailLog'], $result['lastError'], $dlqTopic);
         }
-    }
-
-    /**
-     * @param  array<string, mixed>  $body
-     */
-    public function resolveMessageId(
-        ConsumerMessage $message,
-        string $sourceTopic,
-        string $eventType,
-        array $body,
-    ): string {
-        $headerKey = (string) config('kafka.message_id_key', 'laravel-kafka::message-id');
-        $headers = $message->getHeaders() ?? [];
-        $fromHeader = $headers[$headerKey] ?? null;
-        if (is_string($fromHeader) && $fromHeader !== '') {
-            return $fromHeader;
-        }
-
-        $kafkaKey = $message->getKey();
-        if ($kafkaKey !== null && $kafkaKey !== '') {
-            return "{$sourceTopic}:{$kafkaKey}:{$eventType}";
-        }
-
-        $email = (string) ($body['email'] ?? '');
-        $hash = hash('sha256', json_encode($body, JSON_THROW_ON_ERROR));
-
-        return "{$sourceTopic}:{$eventType}:{$email}:{$hash}";
     }
 
     private function sendToDlq(

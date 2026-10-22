@@ -3,7 +3,6 @@
 namespace App\Services\Payment;
 
 use App\Contracts\PaymentGateway;
-use App\Domain\Money;
 use App\Domain\OrderStatus;
 use App\Events\OrderConfirmed;
 use App\Events\OrderPaid;
@@ -11,6 +10,8 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Order\OrderPayloadFactory;
 use App\Services\Order\RequestStockCommit;
+use App\Services\Stripe\StripePaymentResolver;
+use App\Services\Stripe\StripeSessionMoney;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -39,21 +40,15 @@ class ConfirmOrderFromPayment
         $commitOrder = null;
 
         DB::transaction(function () use ($session, &$commitOrder) {
-            $payment = $this->lockPaymentForSession($session);
+            $payment = StripePaymentResolver::lockForSession($session);
             if ($payment === null || $payment->status === 'succeeded') {
                 return;
             }
 
-            $expectedMinor = Money::of((string) $payment->amount)->toMinorUnits();
-            $actualMinor = isset($session['amount_total']) ? (int) $session['amount_total'] : null;
-            $currency = strtolower((string) ($session['currency'] ?? ''));
-
-            if ($actualMinor === null || $actualMinor !== $expectedMinor || $currency !== 'rub') {
+            if (! StripeSessionMoney::matchesExpected($payment, $session)) {
                 Log::error('Stripe checkout amount/currency mismatch; skipping confirm', [
                     'payment_id' => $payment->id,
-                    'expected_minor' => $expectedMinor,
-                    'actual_minor' => $actualMinor,
-                    'currency' => $currency,
+                    ...StripeSessionMoney::compareDetails($payment, $session),
                 ]);
 
                 return;
@@ -162,30 +157,4 @@ class ConfirmOrderFromPayment
         }
     }
 
-    /**
-     * Single locked Payment load for this checkout session (no prior unlocked find).
-     *
-     * @param  array<string, mixed>  $session
-     */
-    private function lockPaymentForSession(array $session): ?Payment
-    {
-        $sessionId = $session['id'] ?? null;
-        $paymentId = $session['metadata']['payment_id'] ?? null;
-
-        if (is_numeric($paymentId)) {
-            $payment = Payment::query()->lockForUpdate()->find((int) $paymentId);
-            if ($payment !== null) {
-                return $payment;
-            }
-        }
-
-        if (is_string($sessionId) && $sessionId !== '') {
-            return Payment::query()
-                ->where('stripe_checkout_session_id', $sessionId)
-                ->lockForUpdate()
-                ->first();
-        }
-
-        return null;
-    }
 }

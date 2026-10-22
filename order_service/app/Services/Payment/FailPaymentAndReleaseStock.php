@@ -3,8 +3,8 @@
 namespace App\Services\Payment;
 
 use App\Models\Order;
-use App\Models\Payment;
 use App\Services\Order\RequestStockRelease;
+use App\Services\Stripe\StripePaymentResolver;
 use Illuminate\Support\Facades\DB;
 
 class FailPaymentAndReleaseStock
@@ -21,7 +21,7 @@ class FailPaymentAndReleaseStock
         $releaseOrder = null;
 
         DB::transaction(function () use ($session, &$releaseOrder) {
-            $payment = $this->lockPaymentForSession($session);
+            $payment = StripePaymentResolver::lockForSession($session);
             if ($payment === null || $payment->status !== 'pending') {
                 return;
             }
@@ -49,32 +49,5 @@ class FailPaymentAndReleaseStock
 
         $this->stockRelease->dispatch($order);
         $releaseOrder = $order;
-    }
-
-    /**
-     * Single locked Payment load for this checkout session (no prior unlocked find).
-     *
-     * @param  array<string, mixed>  $session
-     */
-    private function lockPaymentForSession(array $session): ?Payment
-    {
-        $sessionId = $session['id'] ?? null;
-        $paymentId = $session['metadata']['payment_id'] ?? null;
-
-        if (is_numeric($paymentId)) {
-            $payment = Payment::query()->lockForUpdate()->find((int) $paymentId);
-            if ($payment !== null) {
-                return $payment;
-            }
-        }
-
-        if (is_string($sessionId) && $sessionId !== '') {
-            return Payment::query()
-                ->where('stripe_checkout_session_id', $sessionId)
-                ->lockForUpdate()
-                ->first();
-        }
-
-        return null;
     }
 }

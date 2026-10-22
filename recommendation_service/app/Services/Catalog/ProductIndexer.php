@@ -4,6 +4,7 @@ namespace App\Services\Catalog;
 
 use App\Models\ProductCatalog;
 use App\Services\Llm\Contracts\LlmClient;
+use App\Support\PgVectorLiteral;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -132,7 +133,7 @@ class ProductIndexer
     {
         $text = $this->textBuilder->fromModel($product);
         $vector = $this->llm->embed($text, 'RETRIEVAL_DOCUMENT');
-        $literal = $this->toVectorLiteral($vector);
+        $literal = PgVectorLiteral::from($vector);
 
         DB::statement(
             'UPDATE product_catalog SET embedding = ?::vector, updated_at = ? WHERE id = ?',
@@ -159,16 +160,5 @@ class ProductIndexer
         }
 
         return true;
-    }
-
-    /**
-     * @param  list<float>  $vector
-     */
-    private function toVectorLiteral(array $vector): string
-    {
-        return '['.implode(',', array_map(
-            static fn (float $v): string => sprintf('%.8F', $v),
-            $vector
-        )).']';
     }
 }

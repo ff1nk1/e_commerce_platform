@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\Store;
 use App\Services\CatalogService;
+use App\Support\CatalogCacheKeys;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
@@ -28,18 +29,8 @@ class CatalogController extends Controller
     // GET /api/catalog/categories/{cat_slug}/products
     public function show_products_by_cat_id(CatalogFilterRequest $request, string $cat_slug): JsonResponse
     {
-        // 1. Собираем и сортируем параметры запроса (фильтры, страница и т.д.)
-        $queryParams = $request->validated();
-        ksort($queryParams);
+        $cacheKey = CatalogCacheKeys::categoryProducts($cat_slug, $request->validated());
 
-        // 2. Создаем хэш параметров для уникальности ключа
-        $queryString = md5(json_encode($queryParams));
-
-        // 3. Формируем ключ кэша, включающий slug категории и хэш фильтров
-        $cacheKey = "category_products_{$cat_slug}_{$queryString}";
-
-        // 4. Пытаемся получить данные из кэша, либо выполняем замыкание
-        // Используем теги 'products' и 'categories' для удобного сброса кэша
         $data = Cache::tags(['products', 'categories'])->remember($cacheKey, now()->addHours(2), function () use ($request, $cat_slug) {
             // Поиск категории тоже прячем в кэш, чтобы сэкономить 1 запрос к БД
             $category = Category::where('slug', $cat_slug)->firstOrFail();

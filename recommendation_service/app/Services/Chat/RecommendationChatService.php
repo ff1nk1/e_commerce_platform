@@ -181,7 +181,7 @@ PROMPT;
 
                 $this->logSearchTurn($conversation, $filters, $relaxedLabels, count($preGateHits), count($hits));
 
-                $userContent = $messageText."\n\nCandidates:\n".$this->formatCandidates($productCards);
+                $userContent = $messageText."\n\nCandidates:\n".CandidatePromptFormatter::lines($productCards);
                 if ($relaxedLabels !== []) {
                     $userContent .= "\n\nОслабленные условия: ".implode('; ', $relaxedLabels);
                 }
@@ -250,7 +250,7 @@ PROMPT;
         ?array $previousFilters,
         array $catalogAttributeNames = [],
     ): array {
-        $extractInput = $this->buildExtractInput($messageText, $history, $previousFilters);
+        $extractInput = FilterExtractPrompt::build($messageText, $history, $previousFilters);
 
         return $this->llm->extractFiltersAndEmbed(
             $extractInput,
@@ -259,42 +259,6 @@ PROMPT;
             $messageText,
             $catalogAttributeNames,
         );
-    }
-
-    /**
-     * @param  Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
-     * @param  array<string, mixed>|null  $previousFilters
-     */
-    private function buildExtractInput(string $messageText, $history, ?array $previousFilters): string
-    {
-        $parts = [];
-
-        if ($previousFilters !== null && $previousFilters !== []) {
-            $compact = $previousFilters;
-            unset($compact['relaxed']);
-            $parts[] = 'Previous structured filters (JSON): '.json_encode(
-                $compact,
-                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-            );
-        }
-
-        if (! $history->isEmpty()) {
-            $lines = [];
-            foreach ($history as $row) {
-                // Prefer user turns for sticky context; skip long assistant product pitches.
-                if ($row->role !== Message::ROLE_USER) {
-                    continue;
-                }
-                $lines[] = 'user: '.(string) $row->content;
-            }
-            if ($lines !== []) {
-                $parts[] = "Conversation so far (user turns):\n".implode("\n", $lines);
-            }
-        }
-
-        $parts[] = "Current user message:\n".$messageText;
-
-        return implode("\n\n", $parts);
     }
 
     private function resolveConversation(string $userId, ?string $conversationId): Conversation
@@ -485,66 +449,5 @@ PROMPT;
         }
 
         return false;
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $products
-     */
-    private function formatCandidates(array $products): string
-    {
-        if ($products === []) {
-            return '(none)';
-        }
-
-        $lines = [];
-        foreach ($products as $i => $product) {
-            $n = $i + 1;
-            $price = $product['price'] ?? null;
-            $priceLabel = $price !== null && $price !== ''
-                ? rtrim(rtrim(number_format((float) $price, 2, '.', ''), '0'), '.').' ₽'
-                : 'цена не указана';
-            $store = trim((string) ($product['store_name'] ?? ''));
-            if ($store === '') {
-                $store = isset($product['store_id']) ? 'id '.$product['store_id'] : 'не указан';
-            }
-            $attrs = $this->formatCandidateAttributes(
-                is_array($product['attributes'] ?? null) ? $product['attributes'] : []
-            );
-            $line = sprintf(
-                '%d. id:%s | %s | %s | магазин: %s',
-                $n,
-                (string) ($product['product_id'] ?? ''),
-                $product['name'] ?? '',
-                $priceLabel,
-                $store,
-            );
-            if ($attrs !== '') {
-                $line .= ' | '.$attrs;
-            }
-            $lines[] = $line;
-        }
-
-        return implode("\n", $lines);
-    }
-
-    /**
-     * @param  list<array{name?: string, value?: string}|mixed>  $attributes
-     */
-    private function formatCandidateAttributes(array $attributes): string
-    {
-        $parts = [];
-        foreach ($attributes as $row) {
-            if (! is_array($row)) {
-                continue;
-            }
-            $name = trim((string) ($row['name'] ?? ''));
-            $value = trim((string) ($row['value'] ?? ''));
-            if ($name === '' || $value === '') {
-                continue;
-            }
-            $parts[] = $name.': '.$value;
-        }
-
-        return $parts === [] ? '' : implode('; ', $parts);
     }
 }

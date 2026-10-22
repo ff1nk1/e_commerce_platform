@@ -54,7 +54,7 @@ class AttributeConstraintDetector
 
     public function messageImpliesExclusive(string $message): bool
     {
-        $normalized = str_replace('ё', 'е', mb_strtolower(trim($message)));
+        $normalized = \App\Support\RuText::fold($message);
 
         return preg_match(
             '/(^|[^\p{L}\p{N}])(только|исключительно|именно|строго|ровно|точно)($|[^\p{L}\p{N}])/u',
@@ -86,7 +86,7 @@ class AttributeConstraintDetector
     public function isPreferredAttributeName(string $name): bool
     {
         $canonical = $this->names->canonicalize($name);
-        $key = str_replace('ё', 'е', mb_strtolower($canonical));
+        $key = \App\Support\RuText::fold($canonical);
 
         return in_array($key, ['цвет', 'бренд', 'материал'], true);
     }

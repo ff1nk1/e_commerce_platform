@@ -62,6 +62,6 @@ class ValueMatchStrategyResolver
 
     private function normalizeKey(string $value): string
     {
-        return str_replace('ё', 'е', mb_strtolower(trim($value)));
+        return \App\Support\RuText::fold($value);
     }
 }

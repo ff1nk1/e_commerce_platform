@@ -5,6 +5,7 @@ namespace App\Kafka\Handlers;
 use App\Services\Saga\SagaStepRunner;
 use App\Services\SagaStepGuard;
 use App\Services\StockReservationService;
+use App\Support\StockSagaMessage;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
@@ -18,30 +19,33 @@ class StockReleaseHandler
 
     public function __invoke(ConsumerMessage $message): void
     {
-        $payload = $message->getBody();
-        if (! is_array($payload)) {
-            Log::warning('Получено невалидное событие stock.release_requested', ['payload' => $payload]);
+        $parsed = StockSagaMessage::tryFrom($message);
+        if ($parsed === null) {
+            $payload = $message->getBody();
+            if (! is_array($payload)) {
+                Log::warning('Получено невалидное событие stock.release_requested', ['payload' => $payload]);
 
-            return;
-        }
+                return;
+            }
 
-        $orderId = $payload['order_id'] ?? null;
-        $items = $payload['items'] ?? [];
-        $sagaId = $this->sagaIdFrom($payload);
+            $orderId = $payload['order_id'] ?? null;
+            $items = $payload['items'] ?? [];
+            if (! $orderId || ! is_array($items) || $items === []) {
+                Log::warning('Получено невалидное событие stock.release_requested', ['payload' => $payload]);
 
-        if (! $orderId || ! is_array($items) || $items === []) {
-            Log::warning('Получено невалидное событие stock.release_requested', ['payload' => $payload]);
+                return;
+            }
 
-            return;
-        }
-
-        if ($sagaId === null) {
             Log::warning('stock.release_requested missing saga_id; ignoring', [
                 'order_id' => $orderId,
             ]);
 
             return;
         }
+
+        $orderId = $parsed->orderId;
+        $items = $parsed->items;
+        $sagaId = $parsed->sagaId;
 
         $this->sagaRunner->run($sagaId, 'stock.release', function () use ($orderId, $items, $sagaId) {
             if ($this->saga->isCompleted($sagaId, 'stock.commit')) {
@@ -67,15 +71,5 @@ class StockReleaseHandler
                 'result' => ['order_id' => $orderId],
             ];
         });
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function sagaIdFrom(array $payload): ?string
-    {
-        $sagaId = $payload['saga_id'] ?? null;
-
-        return is_string($sagaId) && $sagaId !== '' ? $sagaId : null;
     }
 }

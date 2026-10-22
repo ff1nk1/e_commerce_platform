@@ -3,6 +3,7 @@
 namespace App\Services\Catalog\ValueMatchers;
 
 use App\Services\Catalog\AttributeValueNormalizer;
+use App\Support\RuText;
 
 class SizeRangeMatcher
 {
@@ -35,7 +36,7 @@ class SizeRangeMatcher
      */
     private function parseConstraint(string $value): ?array
     {
-        $normalized = str_replace('ё', 'е', mb_strtolower(trim($value)));
+        $normalized = RuText::fold($value);
 
         /** @var array{from?: string, exact?: string} $patterns */
         $patterns = config('attributes.value_match.size_range_patterns', []);

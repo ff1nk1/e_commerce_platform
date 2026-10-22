@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Services\Order\OrderPayloadFactory;
 use App\Services\Order\RequestStockRelease;
 use App\Services\Saga\SagaStepRunner;
+use App\Support\KafkaPayload;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
@@ -51,7 +52,7 @@ class StockEventsHandler
             return;
         }
 
-        $sagaId = $this->sagaIdFrom($payload);
+        $sagaId = KafkaPayload::sagaId($payload);
         if ($sagaId === null) {
             Log::warning('Kafka stock.reserved missing saga_id; ignoring', [
                 'order_id' => $orderId,
@@ -134,7 +135,7 @@ class StockEventsHandler
             return;
         }
 
-        $sagaId = $this->sagaIdFrom($payload);
+        $sagaId = KafkaPayload::sagaId($payload);
         if ($sagaId === null) {
             Log::warning('Kafka stock.reservation_failed missing saga_id; ignoring', [
                 'order_id' => $orderId,
@@ -185,13 +186,4 @@ class StockEventsHandler
         });
     }
 
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function sagaIdFrom(array $payload): ?string
-    {
-        $sagaId = $payload['saga_id'] ?? null;
-
-        return is_string($sagaId) && $sagaId !== '' ? $sagaId : null;
-    }
 }

@@ -113,10 +113,10 @@ class SearchFiltersRelaxer
     {
         $kept = [];
         $dropped = null;
-        $key = str_replace('ё', 'е', mb_strtolower($canonical));
+        $key = \App\Support\RuText::fold($canonical);
 
         foreach ($attributes as $row) {
-            $nameKey = str_replace('ё', 'е', mb_strtolower(trim($row['name'])));
+            $nameKey = \App\Support\RuText::fold((string) $row['name']);
             if ($dropped === null && $nameKey === $key) {
                 $dropped = $row;
 

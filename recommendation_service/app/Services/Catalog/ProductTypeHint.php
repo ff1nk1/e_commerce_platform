@@ -53,7 +53,7 @@ class ProductTypeHint
      */
     private function matchKeywords(string $text): ?array
     {
-        $normalized = str_replace('ё', 'е', mb_strtolower(trim($text)));
+        $normalized = \App\Support\RuText::fold($text);
         if ($normalized === '') {
             return null;
         }

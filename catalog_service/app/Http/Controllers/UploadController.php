@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\GetUploadUrlRequest;
+use App\Support\MediaPublicUrl;
+use App\Support\MediaUploadPath;
 use Illuminate\Filesystem\AwsS3V3Adapter;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class UploadController extends Controller
 {
@@ -14,8 +15,7 @@ class UploadController extends Controller
         $validated = $request->validated();
         $contentType = $validated['content_type'];
         $extension = GetUploadUrlRequest::CONTENT_TYPE_EXTENSIONS[$contentType];
-        $fileName = Str::uuid().'.'.$extension;
-        $path = 'uploads/'.$fileName;
+        $path = MediaUploadPath::new($extension);
 
         /** @var AwsS3V3Adapter $s3Disk */
         $s3Disk = Storage::disk('s3');
@@ -27,14 +27,11 @@ class UploadController extends Controller
 
         $internalUrl = (string) ($internalUrl['url'] ?? $internalUrl[0] ?? json_encode($internalUrl));
 
-        $bucket = (string) config('filesystems.disks.s3.bucket', 'media');
-        $publicBase = rtrim((string) config('filesystems.media_public_base', '/storage'), '/');
-
         return response()->json([
             // Internal MinIO URL for server-side PUT (admin Docker network)
             'upload_url' => $internalUrl,
             'file_path' => $path,
-            'public_url' => "{$publicBase}/{$bucket}/{$path}",
+            'public_url' => MediaPublicUrl::forPath($path),
         ]);
     }
 }

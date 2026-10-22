@@ -2,6 +2,8 @@
 
 namespace App\Services\Catalog;
 
+use App\Support\RuText;
+
 /**
  * Config-driven value normalization helpers (strip patterns / stems live in attributes.php).
  */
@@ -9,7 +11,7 @@ class AttributeValueNormalizer
 {
     public function normalizeForCompare(string $value, bool $applyStem = true): string
     {
-        $normalized = str_replace('ё', 'е', mb_strtolower(trim($value)));
+        $normalized = RuText::fold($value);
         $normalized = $this->applyStripPatterns($normalized);
         $normalized = trim(preg_replace('/\s+/u', ' ', $normalized) ?? $normalized);
 

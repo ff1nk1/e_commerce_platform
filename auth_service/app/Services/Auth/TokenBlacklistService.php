@@ -2,13 +2,14 @@
 
 namespace App\Services\Auth;
 
+use App\Support\TokenBlacklistKeys;
 use Illuminate\Support\Facades\Cache;
 
 class TokenBlacklistService
 {
     public function isJwtBlacklisted(string $jti): bool
     {
-        return Cache::has("jwt:blacklist:{$jti}");
+        return Cache::has(TokenBlacklistKeys::jwt($jti));
     }
 
     public function blacklistJwt(string $jti, int $ttl): void
@@ -18,12 +19,12 @@ class TokenBlacklistService
             return;
         }
 
-        Cache::put("jwt:blacklist:{$jti}", '1', $ttl);
+        Cache::put(TokenBlacklistKeys::jwt($jti), '1', $ttl);
     }
 
     public function isRefreshTokenBlacklisted(string $hash): bool
     {
-        return Cache::has("refresh_token:blacklist:{$hash}");
+        return Cache::has(TokenBlacklistKeys::refresh($hash));
     }
 
     public function blacklistRefreshToken(string $hash, int $ttl): void
@@ -34,7 +35,7 @@ class TokenBlacklistService
             return;
         }
 
-        Cache::put("refresh_token:blacklist:{$hash}", '1', $ttl);
+        Cache::put(TokenBlacklistKeys::refresh($hash), '1', $ttl);
     }
 
     private function normalizeTtl(int $ttl, int $fallback): int

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\OutboxEvent;
+use App\Support\KafkaOutboxHeaders;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -55,14 +56,7 @@ class KafkaOutboxWorker extends Command
 
         foreach ($events as $event) {
             try {
-                $headers = [
-                    'event-type' => $event->event_type,
-                    'source' => 'catalog-service',
-                ];
-                $payload = $event->payload;
-                if (is_string($payload['saga_id'] ?? null) && $payload['saga_id'] !== '') {
-                    $headers['saga-id'] = $payload['saga_id'];
-                }
+                $headers = KafkaOutboxHeaders::forEvent($event, 'catalog-service');
 
                 Kafka::publish(config('kafka.brokers', 'kafka:29092'))
                     ->onTopic($event->topic)

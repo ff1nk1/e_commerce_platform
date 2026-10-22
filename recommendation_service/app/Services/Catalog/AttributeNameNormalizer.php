@@ -2,6 +2,8 @@
 
 namespace App\Services\Catalog;
 
+use App\Support\RuText;
+
 /**
  * Maps LLM / user attribute names to catalog-canonical labels.
  */
@@ -65,6 +67,6 @@ class AttributeNameNormalizer
 
     private function normalizeKey(string $value): string
     {
-        return str_replace('ё', 'е', mb_strtolower(trim($value)));
+        return RuText::fold($value);
     }
 }

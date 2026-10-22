@@ -5,6 +5,7 @@ namespace App\Services\Auth;
 use App\Events\UserRegistered;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\RefreshTokenKeys;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Str;
@@ -57,8 +58,8 @@ class AuthService
             return null;
         }
 
-        $oldHash = hash('sha256', $oldRefreshToken);
-        $oldKey = "refresh_token:{$oldHash}";
+        $oldHash = RefreshTokenKeys::hash($oldRefreshToken);
+        $oldKey = RefreshTokenKeys::redisKey($oldHash);
 
         if ($this->blacklist->isRefreshTokenBlacklisted($oldHash)) {
             return null;
@@ -98,8 +99,8 @@ class AuthService
         }
 
         if ($refreshToken) {
-            $hash = hash('sha256', $refreshToken);
-            $key = "refresh_token:{$hash}";
+            $hash = RefreshTokenKeys::hash($refreshToken);
+            $key = RefreshTokenKeys::redisKey($hash);
 
             $userId = Redis::get($key);
             $ttl = Redis::ttl($key);
@@ -121,11 +122,11 @@ class AuthService
             $this->jwtService->revokeToken($accessToken);
         }
 
-        $indexKey = $this->userRefreshIndexKey((int) $user->id);
+        $indexKey = RefreshTokenKeys::userIndexKey((int) $user->id);
         $hashes = Redis::smembers($indexKey) ?: [];
 
         foreach ($hashes as $hash) {
-            $key = "refresh_token:{$hash}";
+            $key = RefreshTokenKeys::redisKey((string) $hash);
             $ttl = Redis::ttl($key);
             $this->blacklist->blacklistRefreshToken((string) $hash, $ttl);
             Redis::del($key);
@@ -164,12 +165,12 @@ class AuthService
         $accessToken = $this->jwtService->createAccessToken($user);
 
         $refreshToken = bin2hex(random_bytes(64));
-        $refreshHash = hash('sha256', $refreshToken);
+        $refreshHash = RefreshTokenKeys::hash($refreshToken);
         $refreshTtl = (int) config('jwt.refresh_ttl');
 
-        Redis::setex("refresh_token:{$refreshHash}", $refreshTtl, $user->id);
+        Redis::setex(RefreshTokenKeys::redisKey($refreshHash), $refreshTtl, $user->id);
 
-        $indexKey = $this->userRefreshIndexKey((int) $user->id);
+        $indexKey = RefreshTokenKeys::userIndexKey((int) $user->id);
         Redis::sadd($indexKey, $refreshHash);
         Redis::expire($indexKey, $refreshTtl);
 
@@ -179,13 +180,8 @@ class AuthService
         ];
     }
 
-    private function userRefreshIndexKey(int $userId): string
-    {
-        return "user_refresh_tokens:{$userId}";
-    }
-
     private function forgetUserRefreshHash(int $userId, string $hash): void
     {
-        Redis::srem($this->userRefreshIndexKey($userId), $hash);
+        Redis::srem(RefreshTokenKeys::userIndexKey($userId), $hash);
     }
 }

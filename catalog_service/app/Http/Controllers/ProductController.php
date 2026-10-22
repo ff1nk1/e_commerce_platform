@@ -6,6 +6,7 @@ use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Product;
 use App\Services\ProductService;
+use App\Support\CatalogCacheKeys;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -41,7 +42,7 @@ class ProductController extends Controller
 
     public function show($id)
     {   // Когда память редиса заполнится, он будет убирать самые редко вызываемые
-        $product = Cache::tags(['products'])->remember("product_{$id}", 86400, function () use ($id) {
+        $product = Cache::tags(['products'])->remember(CatalogCacheKeys::product($id), 86400, function () use ($id) {
             return Product::with(['category', 'store', 'attributes'])->findOrFail($id)->toArray();
         });
 
