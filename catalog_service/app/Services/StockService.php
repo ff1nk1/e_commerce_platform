@@ -32,7 +32,7 @@ class StockService
 
             $this->queueStockChanged($stock);
 
-            return $stock->fresh(['product', 'store']);
+            return $stock->load(['product', 'store']);
         });
     }
 

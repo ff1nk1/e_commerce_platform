@@ -27,30 +27,10 @@ class ConfirmOrderFromPayment
      */
     public function fromCheckoutSession(array $session): void
     {
-        $payment = $this->findPaymentForSession($session);
-        if ($payment === null) {
-            return;
-        }
-
         if (($session['payment_status'] ?? null) !== 'paid') {
             Log::info('Stripe checkout completed without paid status; skipping confirm', [
-                'payment_id' => $payment->id,
+                'payment_id' => $session['metadata']['payment_id'] ?? null,
                 'payment_status' => $session['payment_status'] ?? null,
-            ]);
-
-            return;
-        }
-
-        $expectedMinor = Money::of((string) $payment->amount)->toMinorUnits();
-        $actualMinor = isset($session['amount_total']) ? (int) $session['amount_total'] : null;
-        $currency = strtolower((string) ($session['currency'] ?? ''));
-
-        if ($actualMinor === null || $actualMinor !== $expectedMinor || $currency !== 'rub') {
-            Log::error('Stripe checkout amount/currency mismatch; skipping confirm', [
-                'payment_id' => $payment->id,
-                'expected_minor' => $expectedMinor,
-                'actual_minor' => $actualMinor,
-                'currency' => $currency,
             ]);
 
             return;
@@ -58,9 +38,24 @@ class ConfirmOrderFromPayment
 
         $commitOrder = null;
 
-        DB::transaction(function () use ($payment, $session, &$commitOrder) {
-            $payment = Payment::query()->lockForUpdate()->find($payment->id);
+        DB::transaction(function () use ($session, &$commitOrder) {
+            $payment = $this->lockPaymentForSession($session);
             if ($payment === null || $payment->status === 'succeeded') {
+                return;
+            }
+
+            $expectedMinor = Money::of((string) $payment->amount)->toMinorUnits();
+            $actualMinor = isset($session['amount_total']) ? (int) $session['amount_total'] : null;
+            $currency = strtolower((string) ($session['currency'] ?? ''));
+
+            if ($actualMinor === null || $actualMinor !== $expectedMinor || $currency !== 'rub') {
+                Log::error('Stripe checkout amount/currency mismatch; skipping confirm', [
+                    'payment_id' => $payment->id,
+                    'expected_minor' => $expectedMinor,
+                    'actual_minor' => $actualMinor,
+                    'currency' => $currency,
+                ]);
+
                 return;
             }
 
@@ -69,60 +64,68 @@ class ConfirmOrderFromPayment
                 return;
             }
 
-            $status = $order->statusEnum();
+            $this->applyConfirm($payment, $order, $session, $commitOrder);
+        });
 
-            if ($status === OrderStatus::Confirmed) {
-                $payment->status = 'succeeded';
-                if (is_string($session['payment_intent'] ?? null)) {
-                    $payment->stripe_payment_intent_id = $session['payment_intent'];
-                }
-                $payment->save();
+        if ($commitOrder !== null) {
+            $this->stockCommit->recordSagaStep($commitOrder);
+        }
+    }
 
-                return;
-            }
+    /**
+     * @param  array<string, mixed>  $session
+     */
+    private function applyConfirm(Payment $payment, Order $order, array $session, ?Order &$commitOrder): void
+    {
+        $status = $order->statusEnum();
 
-            if (in_array($status, [OrderStatus::Cancelled, OrderStatus::PaymentFailed], true)) {
-                $payment->status = 'succeeded';
-                if (is_string($session['payment_intent'] ?? null)) {
-                    $payment->stripe_payment_intent_id = $session['payment_intent'];
-                }
-                $payment->save();
-
-                $this->refundOrphanCharge($payment, $session);
-
-                return;
-            }
-
-            if (! $status->canConfirmFromPayment()) {
-                Log::warning('Stripe checkout paid but order not awaiting_payment; skipping confirm', [
-                    'payment_id' => $payment->id,
-                    'order_id' => $order->id,
-                    'status' => $status->value,
-                ]);
-
-                return;
-            }
-
+        if ($status === OrderStatus::Confirmed) {
             $payment->status = 'succeeded';
             if (is_string($session['payment_intent'] ?? null)) {
                 $payment->stripe_payment_intent_id = $session['payment_intent'];
             }
             $payment->save();
 
-            $order->confirm();
-            $order->save();
-
-            $payload = $this->payloads->notificationPayload($order);
-            event(new OrderPaid($payload));
-            event(new OrderConfirmed($payload));
-
-            $this->stockCommit->dispatch($order);
-            $commitOrder = $order;
-        });
-
-        if ($commitOrder !== null) {
-            $this->stockCommit->recordSagaStep($commitOrder);
+            return;
         }
+
+        if (in_array($status, [OrderStatus::Cancelled, OrderStatus::PaymentFailed], true)) {
+            $payment->status = 'succeeded';
+            if (is_string($session['payment_intent'] ?? null)) {
+                $payment->stripe_payment_intent_id = $session['payment_intent'];
+            }
+            $payment->save();
+
+            $this->refundOrphanCharge($payment, $session);
+
+            return;
+        }
+
+        if (! $status->canConfirmFromPayment()) {
+            Log::warning('Stripe checkout paid but order not awaiting_payment; skipping confirm', [
+                'payment_id' => $payment->id,
+                'order_id' => $order->id,
+                'status' => $status->value,
+            ]);
+
+            return;
+        }
+
+        $payment->status = 'succeeded';
+        if (is_string($session['payment_intent'] ?? null)) {
+            $payment->stripe_payment_intent_id = $session['payment_intent'];
+        }
+        $payment->save();
+
+        $order->confirm();
+        $order->save();
+
+        $payload = $this->payloads->notificationPayload($order);
+        event(new OrderPaid($payload));
+        event(new OrderConfirmed($payload));
+
+        $this->stockCommit->dispatch($order);
+        $commitOrder = $order;
     }
 
     /**
@@ -160,15 +163,17 @@ class ConfirmOrderFromPayment
     }
 
     /**
+     * Single locked Payment load for this checkout session (no prior unlocked find).
+     *
      * @param  array<string, mixed>  $session
      */
-    private function findPaymentForSession(array $session): ?Payment
+    private function lockPaymentForSession(array $session): ?Payment
     {
         $sessionId = $session['id'] ?? null;
         $paymentId = $session['metadata']['payment_id'] ?? null;
 
         if (is_numeric($paymentId)) {
-            $payment = Payment::query()->find((int) $paymentId);
+            $payment = Payment::query()->lockForUpdate()->find((int) $paymentId);
             if ($payment !== null) {
                 return $payment;
             }
@@ -177,6 +182,7 @@ class ConfirmOrderFromPayment
         if (is_string($sessionId) && $sessionId !== '') {
             return Payment::query()
                 ->where('stripe_checkout_session_id', $sessionId)
+                ->lockForUpdate()
                 ->first();
         }
 

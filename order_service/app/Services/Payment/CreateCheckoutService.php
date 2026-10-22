@@ -5,8 +5,8 @@ namespace App\Services\Payment;
 use App\Contracts\IdempotencyStore;
 use App\Contracts\PaymentGateway;
 use App\Domain\Money;
+use App\Models\Order;
 use App\Models\Payment;
-use App\Services\Order\OrderQueryService;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -14,7 +14,6 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 class CreateCheckoutService
 {
     public function __construct(
-        private OrderQueryService $orders,
         private PaymentGateway $stripe,
         private IdempotencyStore $idempotency,
     ) {}
@@ -22,9 +21,14 @@ class CreateCheckoutService
     /**
      * @return array{checkout_url: string, payment_id: int}
      */
-    public function forUser(int $orderId, int $userId, string $idempotencyKey): array
+    public function forOrder(Order $order, string $idempotencyKey): array
     {
-        $scopeKey = $this->idempotency->scopeKey('pay', $userId, $idempotencyKey, $orderId);
+        $scopeKey = $this->idempotency->scopeKey(
+            'pay',
+            (int) $order->user_id,
+            $idempotencyKey,
+            (int) $order->id
+        );
 
         $cached = $this->idempotency->get($scopeKey);
         if ($cached !== null) {
@@ -58,7 +62,15 @@ class CreateCheckoutService
                 return $body;
             }
 
-            $result = $this->createCheckout($orderId, $userId);
+            $order->loadMissing(['items.productSnapshot', 'payments']);
+
+            $existing = $order->payments
+                ->where('status', 'pending')
+                ->filter(static fn (Payment $payment): bool => filled($payment->stripe_checkout_session_id))
+                ->sortByDesc('id')
+                ->first();
+
+            $result = $this->createCheckout($order, $existing);
             $this->idempotency->put($scopeKey, 200, $result);
 
             return $result;
@@ -70,18 +82,9 @@ class CreateCheckoutService
     /**
      * @return array{checkout_url: string, payment_id: int}
      */
-    private function createCheckout(int $orderId, int $userId): array
+    private function createCheckout(Order $order, ?Payment $existing): array
     {
-        $order = $this->orders->findForUser($orderId, $userId);
-        $order->loadMissing(['items.productSnapshot']);
         $order->assertPayable();
-
-        $existing = Payment::query()
-            ->where('order_id', $order->id)
-            ->where('status', 'pending')
-            ->whereNotNull('stripe_checkout_session_id')
-            ->latest('id')
-            ->first();
 
         if ($existing !== null) {
             try {

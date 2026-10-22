@@ -90,8 +90,8 @@ class AuthController extends Controller
         $accessToken = $this->accessTokenFromRequest($request);
 
         try {
-            $user = DB::transaction(function () use ($data) {
-                $user = $this->authService->verifyPassword(auth()->id(), $data['current_password']);
+            $user = DB::transaction(function () use ($request, $data) {
+                $user = $this->authService->verifyPassword($request->user(), $data['current_password']);
                 $this->authService->archivePassword($user);
                 $this->authService->setNewPassword($user, $data['new_password']);
 

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Order;
 use App\Services\Payment\ConfirmOrderFromPayment;
 use App\Services\Payment\CreateCheckoutService;
 use App\Services\Payment\FailPaymentAndReleaseStock;
@@ -20,9 +21,9 @@ class PaymentService
     /**
      * @return array{checkout_url: string, payment_id: int}
      */
-    public function createCheckoutForUser(int $orderId, int $userId, string $idempotencyKey): array
+    public function createCheckout(Order $order, string $idempotencyKey): array
     {
-        return $this->checkout->forUser($orderId, $userId, $idempotencyKey);
+        return $this->checkout->forOrder($order, $idempotencyKey);
     }
 
     public function handleWebhookEvent(array $event): void

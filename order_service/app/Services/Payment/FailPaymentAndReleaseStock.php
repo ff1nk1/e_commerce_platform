@@ -18,15 +18,10 @@ class FailPaymentAndReleaseStock
      */
     public function fromCheckoutSession(array $session): void
     {
-        $payment = $this->findPaymentForSession($session);
-        if ($payment === null || $payment->status !== 'pending') {
-            return;
-        }
-
         $releaseOrder = null;
 
-        DB::transaction(function () use ($payment, &$releaseOrder) {
-            $payment = Payment::query()->lockForUpdate()->find($payment->id);
+        DB::transaction(function () use ($session, &$releaseOrder) {
+            $payment = $this->lockPaymentForSession($session);
             if ($payment === null || $payment->status !== 'pending') {
                 return;
             }
@@ -39,11 +34,7 @@ class FailPaymentAndReleaseStock
                 return;
             }
 
-            $order->failPayment();
-            $order->save();
-
-            $this->stockRelease->dispatch($order);
-            $releaseOrder = $order;
+            $this->applyFail($order, $releaseOrder);
         });
 
         if ($releaseOrder !== null) {
@@ -51,16 +42,27 @@ class FailPaymentAndReleaseStock
         }
     }
 
+    private function applyFail(Order $order, ?Order &$releaseOrder): void
+    {
+        $order->failPayment();
+        $order->save();
+
+        $this->stockRelease->dispatch($order);
+        $releaseOrder = $order;
+    }
+
     /**
+     * Single locked Payment load for this checkout session (no prior unlocked find).
+     *
      * @param  array<string, mixed>  $session
      */
-    private function findPaymentForSession(array $session): ?Payment
+    private function lockPaymentForSession(array $session): ?Payment
     {
         $sessionId = $session['id'] ?? null;
         $paymentId = $session['metadata']['payment_id'] ?? null;
 
         if (is_numeric($paymentId)) {
-            $payment = Payment::query()->find((int) $paymentId);
+            $payment = Payment::query()->lockForUpdate()->find((int) $paymentId);
             if ($payment !== null) {
                 return $payment;
             }
@@ -69,6 +71,7 @@ class FailPaymentAndReleaseStock
         if (is_string($sessionId) && $sessionId !== '') {
             return Payment::query()
                 ->where('stripe_checkout_session_id', $sessionId)
+                ->lockForUpdate()
                 ->first();
         }
 

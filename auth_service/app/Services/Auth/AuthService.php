@@ -134,9 +134,8 @@ class AuthService
         Redis::del($indexKey);
     }
 
-    public function verifyPassword(int|string $userId, string $password): User
+    public function verifyPassword(User $user, string $password): User
     {
-        $user = User::findOrFail($userId);
         if (! Hash::check($password, $user->password)) {
             throw new \Exception('Неверный пароль');
         }

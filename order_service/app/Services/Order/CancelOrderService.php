@@ -63,11 +63,11 @@ class CancelOrderService
 
     private function expireOpenCheckoutSessions(Order $order): void
     {
-        $payments = Payment::query()
-            ->where('order_id', $order->id)
+        $order->loadMissing('payments');
+
+        $payments = $order->payments
             ->where('status', 'pending')
-            ->whereNotNull('stripe_checkout_session_id')
-            ->get();
+            ->filter(static fn (Payment $payment): bool => filled($payment->stripe_checkout_session_id));
 
         foreach ($payments as $payment) {
             $sessionId = $payment->stripe_checkout_session_id;

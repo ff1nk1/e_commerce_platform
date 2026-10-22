@@ -60,11 +60,8 @@ class OrderController extends Controller
 
     public function pay(PayOrderRequest $request, int $id): JsonResponse
     {
-        $result = $this->payments->createCheckoutForUser(
-            $id,
-            (int) $request->validated()['user_id'],
-            $request->idempotencyKey()
-        );
+        $order = $this->orders->findForUser($id, (int) $request->validated()['user_id']);
+        $result = $this->payments->createCheckout($order, $request->idempotencyKey());
 
         return response()->json($result);
     }

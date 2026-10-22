@@ -23,7 +23,7 @@ class ProductService
             $product = Product::create($data);
             $this->syncAttributes($product, $attributes ?? []);
 
-            return $product->fresh(['store', 'category', 'attributes']) ?? $product;
+            return $product->load(['store', 'category', 'attributes']);
         });
 
         $this->clearProductCache();
@@ -45,7 +45,7 @@ class ProductService
                 $this->syncAttributes($product, $attributes);
             }
 
-            return $product->fresh(['store', 'category', 'attributes']) ?? $product;
+            return $product->load(['store', 'category', 'attributes']);
         });
 
         $this->clearProductCache();
@@ -71,7 +71,7 @@ class ProductService
         $product->is_published = ! (bool) $product->is_published;
         $product->save();
 
-        $product = $product->fresh(['store', 'category', 'attributes']) ?? $product;
+        $product = $product->load(['store', 'category', 'attributes']);
 
         $this->clearProductCache();
         event(new ProductPublishStateChanged(
