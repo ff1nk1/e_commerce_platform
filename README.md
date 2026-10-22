@@ -52,7 +52,6 @@ docker compose up -d --build
 # тесты / линт (контейнеры уже должны быть up)
 ./scripts/test-all.sh              # все сервисы
 ./scripts/test-all.sh order auth   # фильтр по имени
-./scripts/lint-all.sh
 
 # сиды / демо-данные (нужен GEMINI_API_KEY для recommendation)
 ./scripts/demo-prep.sh

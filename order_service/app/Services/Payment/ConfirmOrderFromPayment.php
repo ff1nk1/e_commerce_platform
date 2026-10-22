@@ -10,6 +10,7 @@ use App\Events\OrderPaid;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Order\OrderPayloadFactory;
+use App\Services\Order\RequestStockCommit;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -18,6 +19,7 @@ class ConfirmOrderFromPayment
     public function __construct(
         private OrderPayloadFactory $payloads,
         private PaymentGateway $stripe,
+        private RequestStockCommit $stockCommit,
     ) {}
 
     /**
@@ -54,7 +56,9 @@ class ConfirmOrderFromPayment
             return;
         }
 
-        DB::transaction(function () use ($payment, $session) {
+        $commitOrder = null;
+
+        DB::transaction(function () use ($payment, $session, &$commitOrder) {
             $payment = Payment::query()->lockForUpdate()->find($payment->id);
             if ($payment === null || $payment->status === 'succeeded') {
                 return;
@@ -111,7 +115,14 @@ class ConfirmOrderFromPayment
             $payload = $this->payloads->notificationPayload($order);
             event(new OrderPaid($payload));
             event(new OrderConfirmed($payload));
+
+            $this->stockCommit->dispatch($order);
+            $commitOrder = $order;
         });
+
+        if ($commitOrder !== null) {
+            $this->stockCommit->recordSagaStep($commitOrder);
+        }
     }
 
     /**

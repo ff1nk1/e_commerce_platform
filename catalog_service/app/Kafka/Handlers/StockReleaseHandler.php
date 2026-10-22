@@ -2,6 +2,7 @@
 
 namespace App\Kafka\Handlers;
 
+use App\Services\Saga\SagaStepRunner;
 use App\Services\SagaStepGuard;
 use App\Services\StockReservationService;
 use Illuminate\Support\Facades\Log;
@@ -10,6 +11,7 @@ use Junges\Kafka\Contracts\ConsumerMessage;
 class StockReleaseHandler
 {
     public function __construct(
+        private SagaStepRunner $sagaRunner,
         private SagaStepGuard $saga,
         private StockReservationService $reservations,
     ) {}
@@ -33,40 +35,38 @@ class StockReleaseHandler
             return;
         }
 
-        if ($sagaId !== null) {
-            $decision = $this->saga->tryBegin($sagaId, 'stock.release');
-            if ($decision !== 'run') {
-                Log::info('Saga step stock.release skipped', [
+        if ($sagaId === null) {
+            Log::warning('stock.release_requested missing saga_id; ignoring', [
+                'order_id' => $orderId,
+            ]);
+
+            return;
+        }
+
+        $this->sagaRunner->run($sagaId, 'stock.release', function () use ($orderId, $items, $sagaId) {
+            if ($this->saga->isCompleted($sagaId, 'stock.commit')) {
+                Log::info('stock.release skipped: stock.commit already completed', [
+                    'order_id' => $orderId,
                     'saga_id' => $sagaId,
-                    'decision' => $decision,
                 ]);
 
-                return;
+                return [
+                    'status' => SagaStepGuard::STATUS_DONE,
+                    'result' => ['order_id' => $orderId, 'outcome' => 'skipped_after_commit'],
+                ];
             }
-        }
 
-        try {
             $released = $this->reservations->release($orderId, $items, $sagaId);
 
-            if ($sagaId !== null && $released) {
-                $this->saga->put(
-                    $sagaId,
-                    'stock.release',
-                    SagaStepGuard::STATUS_DONE,
-                    ['order_id' => $orderId]
-                );
+            if (! $released) {
+                return null;
             }
-        } catch (\Throwable $e) {
-            Log::error("Ошибка при освобождении остатка для заказа #{$orderId}:", [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-            ]);
-        } finally {
-            if ($sagaId !== null) {
-                $this->saga->release($sagaId, 'stock.release');
-            }
-        }
+
+            return [
+                'status' => SagaStepGuard::STATUS_DONE,
+                'result' => ['order_id' => $orderId],
+            ];
+        });
     }
 
     /**

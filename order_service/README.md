@@ -99,12 +99,20 @@ sequenceDiagram
     O->>S: Checkout Session
     S->>O: checkout.session.completed
     O->>O: confirmed + order.paid/confirmed
-  else failed / cancel / expired
+    O->>C: stock.commit_requested
+  else failed / cancel awaiting_payment / expired
     O->>O: cancelled or payment_failed
     O->>C: stock.release_requested
   end
+  Note over O: late stock.reserved on cancelled → release
   Note over O: admin ship: confirmed → shipped
 ```
+
+Сток:
+
+- успех оплаты → `stock.commit_requested` (`quantity-=`, `reserved-=` на catalog);
+- cancel при `awaiting_payment` / Stripe `checkout.session.expired` → `stock.release_requested` (`reserved-=`);
+- cancel из `pending` release **не** шлёт; если позже придёт `stock.reserved` на уже `cancelled`/`payment_failed` — order запросит release (late-reserve compensation).
 
 ---
 
@@ -118,7 +126,7 @@ sequenceDiagram
 | `stock.events` (`stock.reserved`, `stock.reservation_failed`) | статус заказа; `saga_id` должен совпасть с `order.saga_id` |
 
 **Produce** (topic `order.events` через outbox):  
-`order.created`, `order.cancelled`, `order.paid`, `order.confirmed`, `order.shipped`, `stock.release_requested`.
+`order.created`, `order.cancelled`, `order.paid`, `order.confirmed`, `order.shipped`, `stock.release_requested`, `stock.commit_requested`.
 
 Паттерн: domain event в той же DB TX → listener пишет `outbox_events` → `kafka:outbox:work` публикует и удаляет строку.
 
@@ -127,8 +135,8 @@ sequenceDiagram
 ## Stripe
 
 - `POST /pay` создаёт (или переиспользует open) Checkout Session; сумма из order items.
-- Webhook `checkout.session.completed`: только при `payment_status=paid`, совпадении amount, статусе заказа `awaiting_payment`.
-- `checkout.session.expired` → `payment_failed` + stock release.
+- Webhook `checkout.session.completed`: только при `payment_status=paid`, совпадении amount, статусе заказа `awaiting_payment` → confirm + `stock.commit_requested`.
+- `checkout.session.expired` → `payment_failed` + stock release (без изменений).
 - Cancel при `awaiting_payment` expire’ит open sessions и запрашивает stock release.
 
 ---
@@ -142,7 +150,7 @@ sequenceDiagram
 
 Паттерн: get cached → acquire lock → work → put response → release. Ключ клиента ограничен по длине; create/pay требуют заголовок `Idempotency-Key`.
 
-**SagaStepGuard** (Redis): `tryBegin` / `put` / `release` для шагов `order.created`, `stock.reserved`, `stock.reservation_failed`, `stock.release_requested` (дедуп Kafka-обработки).
+**SagaStepGuard** + **SagaStepRunner** (Redis): `tryBegin` / `put` / `release`; `busy` → exception (retry). Шаги: `order.created`, `stock.reserved`, `stock.reservation_failed`, `stock.release_requested`, `stock.commit_requested`.
 
 ---
 

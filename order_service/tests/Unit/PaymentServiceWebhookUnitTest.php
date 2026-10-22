@@ -75,12 +75,19 @@ class PaymentServiceWebhookUnitTest extends TestCase
 
         $paid = OutboxEvent::query()->where('event_type', 'order.paid')->first();
         $confirmed = OutboxEvent::query()->where('event_type', 'order.confirmed')->first();
+        $commit = OutboxEvent::query()->where('event_type', 'stock.commit_requested')->first();
         $this->assertNotNull($paid);
         $this->assertNotNull($confirmed);
+        $this->assertNotNull($commit);
         $this->assertSame('paid@example.com', $paid->payload['email'] ?? null);
         $this->assertSame('confirmed', $paid->payload['status'] ?? null);
         $this->assertSame('order.paid', $paid->payload['event_type'] ?? null);
         $this->assertSame('order.confirmed', $confirmed->payload['event_type'] ?? null);
+        $this->assertSame($order->saga_id, $commit->payload['saga_id'] ?? null);
+        $this->assertSame(
+            SagaStepGuard::STATUS_DONE,
+            app(SagaStepGuard::class)->get($order->saga_id, 'stock.commit_requested')['status'] ?? null
+        );
     }
 
     public function test_checkout_expired_requests_stock_release(): void

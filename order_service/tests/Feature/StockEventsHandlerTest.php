@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\SagaStepBusyException;
 use App\Kafka\Handlers\StockEventsHandler;
 use App\Models\Order;
 use App\Models\OutboxEvent;
@@ -145,7 +146,7 @@ class StockEventsHandlerTest extends TestCase
         );
     }
 
-    public function test_stock_reserved_busy_lock_skips_second_worker(): void
+    public function test_stock_reserved_busy_lock_throws_so_message_is_retried(): void
     {
         $sagaId = (string) Str::uuid();
         $order = Order::query()->create([
@@ -157,16 +158,19 @@ class StockEventsHandlerTest extends TestCase
 
         $this->sagaStepLocks[$sagaId.':stock.reserved'] = true;
 
-        app(StockEventsHandler::class)(
-            $this->message('stock.reserved', [
-                'saga_id' => $sagaId,
-                'order_id' => $order->id,
-                'status' => 'success',
-            ])
-        );
-
-        $this->assertSame('pending', $order->fresh()->status->value);
-        $this->assertArrayNotHasKey($sagaId.':stock.reserved', $this->sagaStepStore);
+        try {
+            app(StockEventsHandler::class)(
+                $this->message('stock.reserved', [
+                    'saga_id' => $sagaId,
+                    'order_id' => $order->id,
+                    'status' => 'success',
+                ])
+            );
+            $this->fail('Expected SagaStepBusyException');
+        } catch (SagaStepBusyException) {
+            $this->assertSame('pending', $order->fresh()->status->value);
+            $this->assertArrayNotHasKey($sagaId.':stock.reserved', $this->sagaStepStore);
+        }
     }
 
     private function message(string $eventType, array $body): ConsumerMessage&MockInterface

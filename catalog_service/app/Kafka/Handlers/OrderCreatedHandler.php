@@ -2,6 +2,7 @@
 
 namespace App\Kafka\Handlers;
 
+use App\Services\Saga\SagaStepRunner;
 use App\Services\SagaStepGuard;
 use App\Services\StockReservationService;
 use Illuminate\Support\Facades\Log;
@@ -10,7 +11,7 @@ use Junges\Kafka\Contracts\ConsumerMessage;
 class OrderCreatedHandler
 {
     public function __construct(
-        private SagaStepGuard $saga,
+        private SagaStepRunner $sagaRunner,
         private StockReservationService $reservations,
     ) {}
 
@@ -42,32 +43,30 @@ class OrderCreatedHandler
             return;
         }
 
-        if ($sagaId !== null) {
-            $decision = $this->saga->tryBegin($sagaId, 'stock.reserve');
-            if ($decision !== 'run') {
-                Log::info('Saga step stock.reserve skipped', [
-                    'saga_id' => $sagaId,
-                    'decision' => $decision,
-                ]);
+        if ($sagaId === null) {
+            Log::warning('order.created missing saga_id; ignoring', [
+                'order_id' => $orderId,
+            ]);
 
-                return;
-            }
+            return;
         }
 
-        $stepStatus = SagaStepGuard::STATUS_DONE;
-        $stepResult = ['order_id' => $orderId, 'outcome' => 'reserved'];
-
         try {
-            $result = $this->reservations->reserve($orderId, $items, $sagaId);
+            $this->sagaRunner->run($sagaId, 'stock.reserve', function () use ($orderId, $items, $sagaId) {
+                $result = $this->reservations->reserve($orderId, $items, $sagaId);
 
-            if ($result['outcome'] === 'reservation_failed') {
-                $stepStatus = SagaStepGuard::STATUS_FAILED;
-                $stepResult = ['order_id' => $orderId, 'outcome' => 'reservation_failed'];
-            }
+                if ($result['outcome'] === 'reservation_failed') {
+                    return [
+                        'status' => SagaStepGuard::STATUS_FAILED,
+                        'result' => ['order_id' => $orderId, 'outcome' => 'reservation_failed'],
+                    ];
+                }
 
-            if ($sagaId !== null) {
-                $this->saga->put($sagaId, 'stock.reserve', $stepStatus, $stepResult);
-            }
+                return [
+                    'status' => SagaStepGuard::STATUS_DONE,
+                    'result' => ['order_id' => $orderId, 'outcome' => 'reserved'],
+                ];
+            });
         } catch (\Throwable $e) {
             Log::error('Фатальная ошибка внутри консьюмера order.created:', [
                 'order_id' => $orderId,
@@ -75,13 +74,8 @@ class OrderCreatedHandler
                 'line' => $e->getLine(),
                 'file' => $e->getFile(),
             ]);
-            // Rethrow so the consumer does not auto-commit a failed message
-            // (otherwise stock.* is never written and the order stays pending).
+            // Rethrow so the consumer does not auto-commit a failed/busy message.
             throw $e;
-        } finally {
-            if ($sagaId !== null) {
-                $this->saga->release($sagaId, 'stock.reserve');
-            }
         }
     }
 

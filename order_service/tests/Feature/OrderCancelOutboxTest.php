@@ -63,4 +63,39 @@ class OrderCancelOutboxTest extends TestCase
         $this->assertSame('stock.release_requested', $release->payload['event_type'] ?? null);
         $this->assertArrayHasKey($sagaId.':stock.release_requested', $this->sagaStepStore);
     }
+
+    public function test_cancel_pending_does_not_request_stock_release(): void
+    {
+        ProductSnapshot::query()->create([
+            'id' => 6,
+            'name' => 'Y',
+            'price' => '1.00',
+            'store_id' => 9,
+        ]);
+
+        $sagaId = (string) Str::uuid();
+        $order = Order::query()->create([
+            'saga_id' => $sagaId,
+            'user_id' => 2,
+            'customer_email' => 'pending-cancel@example.com',
+            'customer_name' => 'Pending Cancel',
+            'status' => 'pending',
+            'total_amount' => '1.00',
+        ]);
+        $order->items()->create([
+            'product_id' => 6,
+            'quantity' => 1,
+            'unit_price' => '1.00',
+        ]);
+
+        $this->postJson('/api/orders/'.$order->id.'/cancel', ['user_id' => 2])
+            ->assertOk()
+            ->assertJsonPath('status', 'cancelled');
+
+        $this->assertNotNull(OutboxEvent::query()->where('event_type', 'order.cancelled')->first());
+        $this->assertSame(
+            0,
+            OutboxEvent::query()->where('event_type', 'stock.release_requested')->count()
+        );
+    }
 }

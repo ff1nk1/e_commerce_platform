@@ -65,6 +65,14 @@ class StripeWebhookTest extends TestCase
         $this->assertSame($order->id, $confirmed->payload['order_id']);
         $this->assertSame('confirmed', $paid->payload['status']);
         $this->assertSame('confirmed', $confirmed->payload['status']);
+
+        $commit = OutboxEvent::query()->where('event_type', 'stock.commit_requested')->first();
+        $this->assertNotNull($commit);
+        $this->assertSame($order->saga_id, $commit->payload['saga_id'] ?? null);
+        $this->assertSame([
+            ['product_id' => 42, 'store_id' => 3, 'quantity' => 1],
+        ], $commit->payload['items'] ?? null);
+        $this->assertArrayHasKey($order->saga_id.':stock.commit_requested', $this->sagaStepStore);
     }
 
     public function test_webhook_expired_marks_payment_failed_and_requests_release(): void

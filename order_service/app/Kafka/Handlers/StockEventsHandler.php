@@ -7,6 +7,8 @@ use App\Domain\OrderStatus;
 use App\Events\OrderCancelled;
 use App\Models\Order;
 use App\Services\Order\OrderPayloadFactory;
+use App\Services\Order\RequestStockRelease;
+use App\Services\Saga\SagaStepRunner;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
@@ -15,7 +17,9 @@ class StockEventsHandler
 {
     public function __construct(
         private SagaStepStore $saga,
+        private SagaStepRunner $sagaRunner,
         private OrderPayloadFactory $payloads,
+        private RequestStockRelease $stockRelease,
     ) {}
 
     public function __invoke(ConsumerMessage $message): void
@@ -56,21 +60,13 @@ class StockEventsHandler
             return;
         }
 
-        $decision = $this->saga->tryBegin($sagaId, 'stock.reserved');
-        if ($decision !== 'run') {
-            Log::info('Saga step stock.reserved skipped', [
-                'saga_id' => $sagaId,
-                'decision' => $decision,
-            ]);
+        $releaseOrder = null;
 
-            return;
-        }
-
-        try {
-            $applied = DB::transaction(function () use ($orderId, $sagaId) {
+        $this->sagaRunner->run($sagaId, 'stock.reserved', function () use ($orderId, $sagaId, &$releaseOrder) {
+            return DB::transaction(function () use ($orderId, $sagaId, &$releaseOrder) {
                 $order = Order::query()->lockForUpdate()->find((int) $orderId);
                 if ($order === null) {
-                    return false;
+                    return null;
                 }
 
                 if ($order->saga_id !== $sagaId) {
@@ -80,29 +76,51 @@ class StockEventsHandler
                         'got' => $sagaId,
                     ]);
 
-                    return false;
+                    return null;
                 }
 
-                if ($order->statusEnum() !== OrderStatus::Pending) {
-                    return false;
+                $status = $order->statusEnum();
+
+                if ($status === OrderStatus::Pending) {
+                    $order->markAwaitingPayment();
+                    $order->save();
+
+                    return [
+                        'status' => SagaStepStore::STATUS_DONE,
+                        'result' => ['order_id' => (int) $orderId, 'outcome' => 'awaiting_payment'],
+                    ];
                 }
 
-                $order->markAwaitingPayment();
-                $order->save();
+                // Late reserve after user cancelled pending (or payment already failed):
+                // stock was reserved after cancel — request release so reserved is not orphaned.
+                if (in_array($status, [OrderStatus::Cancelled, OrderStatus::PaymentFailed], true)) {
+                    if (! $this->saga->isCompleted($sagaId, 'stock.release_requested')) {
+                        $this->stockRelease->dispatch($order);
+                        $releaseOrder = $order;
+                    }
 
-                return true;
+                    return [
+                        'status' => SagaStepStore::STATUS_DONE,
+                        'result' => [
+                            'order_id' => (int) $orderId,
+                            'outcome' => 'compensated_release',
+                        ],
+                    ];
+                }
+
+                return [
+                    'status' => SagaStepStore::STATUS_DONE,
+                    'result' => [
+                        'order_id' => (int) $orderId,
+                        'outcome' => 'ignored_status',
+                        'status' => $status->value,
+                    ],
+                ];
             });
+        });
 
-            if ($applied) {
-                $this->saga->put(
-                    $sagaId,
-                    'stock.reserved',
-                    SagaStepStore::STATUS_DONE,
-                    ['order_id' => (int) $orderId]
-                );
-            }
-        } finally {
-            $this->saga->release($sagaId, 'stock.reserved');
+        if ($releaseOrder !== null) {
+            $this->stockRelease->recordSagaStep($releaseOrder);
         }
     }
 
@@ -125,17 +143,7 @@ class StockEventsHandler
             return;
         }
 
-        $decision = $this->saga->tryBegin($sagaId, 'stock.reservation_failed');
-        if ($decision !== 'run') {
-            Log::info('Saga step stock.reservation_failed skipped', [
-                'saga_id' => $sagaId,
-                'decision' => $decision,
-            ]);
-
-            return;
-        }
-
-        try {
+        $this->sagaRunner->run($sagaId, 'stock.reservation_failed', function () use ($orderId, $sagaId) {
             $applied = DB::transaction(function () use ($orderId, $sagaId) {
                 $order = Order::query()->lockForUpdate()->find((int) $orderId);
                 if ($order === null) {
@@ -166,17 +174,15 @@ class StockEventsHandler
                 return true;
             });
 
-            if ($applied) {
-                $this->saga->put(
-                    $sagaId,
-                    'stock.reservation_failed',
-                    SagaStepStore::STATUS_FAILED,
-                    ['order_id' => (int) $orderId]
-                );
+            if (! $applied) {
+                return null;
             }
-        } finally {
-            $this->saga->release($sagaId, 'stock.reservation_failed');
-        }
+
+            return [
+                'status' => SagaStepStore::STATUS_FAILED,
+                'result' => ['order_id' => (int) $orderId],
+            ];
+        });
     }
 
     /**

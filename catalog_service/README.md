@@ -87,9 +87,14 @@ Seeders (`ShopSeeder` и т.п.) пишут модели напрямую и **�
 
 | Поле | Смысл |
 |------|--------|
-| `quantity` | Физический остаток (меняет только admin / seeders) |
-| `reserved` | Зарезервировано под заказы |
-| `available` | `quantity - reserved` (accessor; storefront `status=in_stock`) |
+| `quantity` | Физический остаток (admin / seeders; списывается на `stock.commit_requested` после оплаты) |
+| `reserved` | Холд под заказы (`+=` на reserve, `-=` на release/commit) |
+| `available` | `quantity - reserved` (accessor, не колонка; storefront `status=in_stock`) |
+
+После reserve (`quantity=10`, `reserved=2`, `available=8`):
+
+- **release** (cancel / Stripe session expired): `reserved -=` → available растёт.
+- **commit** (успешная оплата): `quantity -=` и `reserved -=` → available не падает ещё раз (уже упал на reserve).
 
 ```mermaid
 sequenceDiagram
@@ -107,13 +112,15 @@ sequenceDiagram
   Svc->>Outbox: stock.reserved + stock.changed
   Worker->>Kafka: stock.events / catalog.events
   Note over Order,Kafka: stock.release_requested → reserved -= qty
+  Note over Order,Kafka: stock.commit_requested → quantity -= and reserved -=
 ```
 
-1. Consumer `kafka:consume:order-events` → [`OrderEventsHandler`](app/Kafka/MainHandlers/OrderEventsHandler.php) → `OrderCreatedHandler` / `StockReleaseHandler`.
-2. [`SagaStepGuard`](app/Services/SagaStepGuard.php) (Redis NX) делает шаг идемпотентным по `saga_id`.
+1. Consumer `kafka:consume:order-events` → [`OrderEventsHandler`](app/Kafka/MainHandlers/OrderEventsHandler.php) → `OrderCreatedHandler` / `StockReleaseHandler` / `StockCommitHandler`.
+2. [`SagaStepRunner`](app/Services/Saga/SagaStepRunner.php) + [`SagaStepGuard`](app/Services/SagaStepGuard.php): `busy` бросает исключение (без auto-commit потери сообщения); шаг идемпотентен по `saga_id`.
 3. [`StockReservationService`](app/Services/StockReservationService.php):
-   - reserve: lock rows → проверка `available` → `reserved +=` → events;
+   - reserve: merge duplicate lines → lock rows → проверка `available` → `reserved +=` → events;
    - release: `reserved = max(0, reserved - qty)`;
+   - commit: `quantity -= qty`, `reserved = max(0, reserved - qty)`;
    - items: `product_id`/`store_id` ≥ 1, `quantity` ≥ 1, иначе fail/skip.
 4. В `stock.changed` в payload `quantity` уходит **available** (чтобы recommendation `in_stock = quantity > 0` оставался корректным).
 5. Outbox worker `kafka:outbox:work` публикует строки из `outbox_events`.

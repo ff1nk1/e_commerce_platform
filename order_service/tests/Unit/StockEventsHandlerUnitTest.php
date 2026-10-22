@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Exceptions\SagaStepBusyException;
 use App\Kafka\Handlers\StockEventsHandler;
 use App\Models\Order;
 use App\Models\OutboxEvent;
@@ -122,7 +123,7 @@ class StockEventsHandlerUnitTest extends TestCase
         $this->assertSame('pending', $order->fresh()->status->value);
     }
 
-    public function test_busy_lock_skips_handler_work(): void
+    public function test_busy_lock_throws_so_message_is_retried(): void
     {
         $sagaId = (string) Str::uuid();
         $order = Order::query()->create([
@@ -136,14 +137,65 @@ class StockEventsHandlerUnitTest extends TestCase
 
         app(SagaStepGuard::class)->acquire($sagaId, 'stock.reserved');
 
+        try {
+            app(StockEventsHandler::class)($this->message('stock.reserved', [
+                'saga_id' => $sagaId,
+                'order_id' => $order->id,
+                'status' => 'success',
+            ]));
+            $this->fail('Expected SagaStepBusyException');
+        } catch (SagaStepBusyException) {
+            $this->assertSame('pending', $order->fresh()->status->value);
+        } finally {
+            app(SagaStepGuard::class)->release($sagaId, 'stock.reserved');
+        }
+    }
+
+    public function test_late_stock_reserved_on_cancelled_requests_release(): void
+    {
+        ProductSnapshot::query()->create([
+            'id' => 88,
+            'name' => 'Late',
+            'price' => '10.00',
+            'store_id' => 2,
+        ]);
+
+        $sagaId = (string) Str::uuid();
+        $order = Order::query()->create([
+            'saga_id' => $sagaId,
+            'user_id' => 1,
+            'customer_email' => 'late@example.com',
+            'customer_name' => 'Late',
+            'status' => 'cancelled',
+            'total_amount' => '10.00',
+        ]);
+        $order->items()->create([
+            'product_id' => 88,
+            'quantity' => 2,
+            'unit_price' => '10.00',
+        ]);
+
         app(StockEventsHandler::class)($this->message('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $order->id,
             'status' => 'success',
         ]));
 
-        $this->assertSame('pending', $order->fresh()->status->value);
-        app(SagaStepGuard::class)->release($sagaId, 'stock.reserved');
+        $this->assertSame('cancelled', $order->fresh()->status->value);
+        $release = OutboxEvent::query()->where('event_type', 'stock.release_requested')->first();
+        $this->assertNotNull($release);
+        $this->assertSame($sagaId, $release->payload['saga_id'] ?? null);
+        $this->assertSame([
+            ['product_id' => 88, 'store_id' => 2, 'quantity' => 2],
+        ], $release->payload['items'] ?? null);
+        $this->assertSame(
+            SagaStepGuard::STATUS_DONE,
+            app(SagaStepGuard::class)->get($sagaId, 'stock.reserved')['status'] ?? null
+        );
+        $this->assertSame(
+            SagaStepGuard::STATUS_DONE,
+            app(SagaStepGuard::class)->get($sagaId, 'stock.release_requested')['status'] ?? null
+        );
     }
 
     /**

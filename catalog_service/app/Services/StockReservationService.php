@@ -6,11 +6,16 @@ use App\Events\StockChanged;
 use App\Events\StockReservationFailed;
 use App\Events\StockReserved;
 use App\Models\Stock;
+use App\Services\Stock\StockItemNormalizer;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class StockReservationService
 {
+    public function __construct(
+        private StockItemNormalizer $normalizer,
+    ) {}
+
     /**
      * Reserve stock for an order by increasing `reserved` (physical `quantity` unchanged).
      *
@@ -19,7 +24,7 @@ class StockReservationService
      */
     public function reserve(int|string $orderId, array $items, ?string $sagaId = null): array
     {
-        $normalized = $this->normalizeItems($items);
+        $normalized = $this->normalizer->normalize($items);
         if ($normalized === null) {
             $this->emitReservationFailed($orderId, $sagaId, 'Invalid stock items');
 
@@ -81,7 +86,7 @@ class StockReservationService
      */
     public function release(int|string $orderId, array $items, ?string $sagaId = null): bool
     {
-        $normalized = $this->normalizeItems($items);
+        $normalized = $this->normalizer->normalize($items);
         if ($normalized === null) {
             Log::warning('stock.release skipped: invalid items', ['order_id' => $orderId]);
 
@@ -118,36 +123,65 @@ class StockReservationService
     }
 
     /**
+     * Finalize a paid order: decrease physical quantity and clear the reservation hold.
+     *
      * @param  list<array<string, mixed>>  $items
-     * @return list<array{product_id: int, store_id: int, quantity: int}>|null
+     * @return bool true when items were valid and processed
      */
-    private function normalizeItems(array $items): ?array
+    public function commit(int|string $orderId, array $items, ?string $sagaId = null): bool
     {
-        if ($items === []) {
-            return null;
+        $normalized = $this->normalizer->normalize($items);
+        if ($normalized === null) {
+            Log::warning('stock.commit skipped: invalid items', ['order_id' => $orderId]);
+
+            return false;
         }
 
-        $normalized = [];
+        DB::transaction(function () use ($orderId, $normalized) {
+            $stockChangedEvents = [];
 
-        foreach ($items as $item) {
-            $productId = filter_var($item['product_id'] ?? null, FILTER_VALIDATE_INT);
-            $storeId = filter_var($item['store_id'] ?? null, FILTER_VALIDATE_INT);
-            $quantity = filter_var($item['quantity'] ?? null, FILTER_VALIDATE_INT);
+            foreach ($normalized as $item) {
+                $stock = Stock::where('product_id', $item['product_id'])
+                    ->where('store_id', $item['store_id'])
+                    ->lockForUpdate()
+                    ->first();
 
-            if ($productId === false || $productId < 1
-                || $storeId === false || $storeId < 1
-                || $quantity === false || $quantity < 1) {
-                return null;
+                if (! $stock) {
+                    continue;
+                }
+
+                $qty = $item['quantity'];
+                $debit = min($stock->reserved, $qty);
+                if ($debit < $qty) {
+                    Log::warning('stock.commit under-reserved; debiting only held qty', [
+                        'order_id' => $orderId,
+                        'product_id' => $item['product_id'],
+                        'store_id' => $item['store_id'],
+                        'reserved' => $stock->reserved,
+                        'requested' => $qty,
+                        'debit' => $debit,
+                    ]);
+                }
+
+                if ($debit === 0) {
+                    continue;
+                }
+
+                $stock->quantity -= $debit;
+                $stock->reserved -= $debit;
+                $stock->save();
+
+                $stockChangedEvents[] = $this->stockChangedPayload($stock);
             }
 
-            $normalized[] = [
-                'product_id' => $productId,
-                'store_id' => $storeId,
-                'quantity' => $quantity,
-            ];
-        }
+            foreach ($stockChangedEvents as $changedEvent) {
+                event(new StockChanged($changedEvent));
+            }
 
-        return $normalized;
+            Log::info("Списание после оплаты: заказ #{$orderId}, quantity и reserved обновлены.");
+        });
+
+        return true;
     }
 
     /**
