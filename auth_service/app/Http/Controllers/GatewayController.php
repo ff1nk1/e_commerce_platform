@@ -27,7 +27,9 @@ class GatewayController extends Controller
 
     public function catalogAdmin(Request $request, string $path = ''): Response
     {
-        return $this->forwardService($request, 'catalog', 'admin_api', $path);
+        return $this->forwardService($request, 'catalog', 'admin_api', $path, [
+            'identity' => $this->gatewayIdentity($request),
+        ]);
     }
 
     public function catalogAdminPanel(Request $request, string $path = ''): Response
@@ -72,7 +74,9 @@ class GatewayController extends Controller
 
     public function uploadUrl(Request $request): Response
     {
-        return $this->forwardService($request, 'catalog', 'upload_url');
+        return $this->forwardService($request, 'catalog', 'upload_url', '', [
+            'identity' => $this->gatewayIdentity($request),
+        ]);
     }
 
     public function notifications(Request $request, string $path = ''): Response
@@ -188,6 +192,23 @@ class GatewayController extends Controller
             $fullPath,
             $options['injectUser'] ?? null,
             (int) ($options['timeout'] ?? self::DEFAULT_TIMEOUT),
+            $options['identity'] ?? null,
         );
+    }
+
+    /**
+     * @return array{id: int, role: string, name: string, email: string}
+     */
+    private function gatewayIdentity(Request $request): array
+    {
+        $user = $request->user();
+        $user->loadMissing('role');
+
+        return [
+            'id' => (int) $user->id,
+            'role' => (string) ($user->role->slug ?? ''),
+            'name' => (string) ($user->name ?? ''),
+            'email' => (string) ($user->email ?? ''),
+        ];
     }
 }

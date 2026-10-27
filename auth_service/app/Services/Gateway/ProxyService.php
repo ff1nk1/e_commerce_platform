@@ -69,9 +69,17 @@ class ProxyService
      *
      * @param  array{id: int, email?: string|null, name?: string|null}|null  $injectUser
      *                                                                                    When set, merges user_id (and email/name when present) into query and JSON body.
+     * @param  array{id: int, role: string, name?: string, email?: string}|null  $identity
+     *                                                                                    When set, sends X-User-* from the gateway user. Client headers are not copied.
      */
-    public function forward(Request $request, string $baseUrl, string $path, ?array $injectUser = null, int $timeout = 30): Response
-    {
+    public function forward(
+        Request $request,
+        string $baseUrl,
+        string $path,
+        ?array $injectUser = null,
+        int $timeout = 30,
+        ?array $identity = null,
+    ): Response {
         $url = $this->buildUrl($baseUrl, $path);
         $method = strtolower($request->method());
         $query = $request->query();
@@ -81,7 +89,7 @@ class ProxyService
             [$query, $body] = $this->mergeInjectedUser($query, $body, $injectUser);
         }
 
-        $pending = Http::withHeaders($this->jsonForwardHeaders($request))
+        $pending = Http::withHeaders($this->jsonForwardHeaders($request, $identity))
             ->acceptJson()
             ->asJson()
             ->timeout($timeout);
@@ -172,9 +180,10 @@ class ProxyService
     }
 
     /**
+     * @param  array{id: int, role: string, name?: string, email?: string}|null  $identity
      * @return array<string, string>
      */
-    private function jsonForwardHeaders(Request $request): array
+    private function jsonForwardHeaders(Request $request, ?array $identity = null): array
     {
         $headers = [
             'Accept' => 'application/json',
@@ -185,6 +194,19 @@ class ProxyService
         foreach (self::JSON_FORWARD_HEADERS as $name) {
             if ($request->hasHeader($name)) {
                 $headers[$name] = (string) $request->header($name);
+            }
+        }
+
+        if ($identity !== null) {
+            $headers['X-User-Id'] = (string) $identity['id'];
+            $headers['X-User-Role'] = (string) $identity['role'];
+
+            if (! empty($identity['name'])) {
+                $headers['X-User-Name'] = (string) $identity['name'];
+            }
+
+            if (! empty($identity['email'])) {
+                $headers['X-User-Email'] = (string) $identity['email'];
             }
         }
 

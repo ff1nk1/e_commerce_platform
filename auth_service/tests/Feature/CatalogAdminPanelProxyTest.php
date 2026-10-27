@@ -64,6 +64,38 @@ class CatalogAdminPanelProxyTest extends TestCase
         });
     }
 
+    public function test_admin_catalog_json_proxy_attaches_identity_headers(): void
+    {
+        Http::fake([
+            '*' => Http::response(['data' => []], 200, ['Content-Type' => 'application/json']),
+        ]);
+
+        $adminRole = Role::where('slug', 'admin')->firstOrFail();
+        $user = User::factory()->create([
+            'name' => 'Catalog Admin',
+            'email' => 'admin-json@example.com',
+            'password' => Hash::make('password123'),
+            'role_id' => $adminRole->id,
+        ]);
+
+        $tokens = app(AuthService::class)->login([
+            'email' => 'admin-json@example.com',
+            'password' => 'password123',
+        ]);
+
+        $this->withToken($tokens['access_token'])
+            ->get('/api/admin/products?per_page=20')
+            ->assertOk();
+
+        Http::assertSent(function ($request) use ($user) {
+            return str_contains($request->url(), '/api/admin/products')
+                && $request->header('X-User-Id') === [(string) $user->id]
+                && $request->header('X-User-Role') === ['admin']
+                && $request->header('X-User-Name') === ['Catalog Admin']
+                && $request->header('X-User-Email') === ['admin-json@example.com'];
+        });
+    }
+
     public function test_catalog_admin_panel_requires_authentication(): void
     {
         $this->get('/admin-catalog')->assertUnauthorized();

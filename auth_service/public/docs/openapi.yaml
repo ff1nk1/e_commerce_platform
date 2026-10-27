@@ -1,0 +1,2800 @@
+openapi: 3.1.0
+info:
+  title: php-project API
+  version: "1.0.0"
+  description: |
+    Публичный контракт gateway (`auth_service`). Браузер ходит на `https://app.localhost`,
+    nginx проксирует `/api` сюда. JWT проверяет только gateway.
+
+    Авторизация: HttpOnly cookie `access_token` (и `refresh_token` для `/api/refresh`)
+    либо заголовок `Authorization: Bearer`. В Swagger UI после успешного `POST /api/login`
+    браузер сам сохраняет cookie; запросы дальше уходят с `credentials`.
+
+    Для заказов и чата gateway подставляет `user_id` (у заказов ещё `email` и `name`) из JWT.
+    Клиент эти поля не передаёт.
+
+    Filament (`/admin-catalog`) и Kafka в эту спецификацию не входят.
+servers:
+  - url: /
+    description: app.localhost
+tags:
+  - name: Auth
+  - name: Catalog
+  - name: Orders
+  - name: Search
+  - name: Recommendations
+  - name: Notifications
+  - name: Analytics
+  - name: Stripe
+paths:
+  /api/registration:
+    post:
+      tags: [Auth]
+      summary: Регистрация
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistrationRequest"
+      responses:
+        "201":
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/login:
+    post:
+      tags: [Auth]
+      summary: Вход
+      description: Ставит HttpOnly cookie `access_token` и `refresh_token`. Тело ответа — только сообщение.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Cookie установлены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/refresh:
+    post:
+      tags: [Auth]
+      summary: Обновить access-токен
+      description: Нужна cookie `refresh_token`. Новая пара cookie ставится в ответ.
+      operationId: refresh
+      responses:
+        "200":
+          description: Cookie обновлены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/logout:
+    post:
+      tags: [Auth]
+      summary: Выход
+      operationId: logout
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Сессия сброшена, cookie очищены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/user:
+    get:
+      tags: [Auth]
+      summary: Текущий пользователь
+      operationId: getUser
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Профиль с ролью
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/profile:
+    patch:
+      tags: [Auth]
+      summary: Обновить профиль
+      operationId: updateProfile
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: Профиль обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/profile/password:
+    patch:
+      tags: [Auth]
+      summary: Сменить пароль
+      description: Сбрасывает все сессии и очищает cookie.
+      operationId: changePassword
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password:
+                  type: string
+                new_password:
+                  type: string
+                  minLength: 8
+      responses:
+        "200":
+          description: Пароль изменён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/admin/users:
+    get:
+      tags: [Auth]
+      summary: Список пользователей
+      description: Роль admin.
+      operationId: listUsers
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: email
+          in: query
+          schema:
+            type: string
+          description: Подстрока email
+      responses:
+        "200":
+          description: Страница пользователей
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/roles:
+    get:
+      tags: [Auth]
+      summary: Список ролей
+      description: Роль admin.
+      operationId: listRoles
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Все роли
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/users/{id}/role:
+    patch:
+      tags: [Auth]
+      summary: Сменить роль пользователя
+      description: Роль admin.
+      operationId: changeUserRole
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id]
+              properties:
+                role_id:
+                  type: integer
+                  minimum: 1
+      responses:
+        "200":
+          description: Роль обновлена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/catalog/categories:
+    get:
+      tags: [Catalog]
+      summary: Все категории
+      description: Любая аутентифицированная роль.
+      operationId: listCategories
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Плоский список категорий
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/catalog/categories/{cat_slug}/products:
+    get:
+      tags: [Catalog]
+      summary: Товары категории
+      description: Категория и её потомки. Любая аутентифицированная роль.
+      operationId: categoryProducts
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: cat_slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/CatalogSearch"
+        - $ref: "#/components/parameters/MinPrice"
+        - $ref: "#/components/parameters/MaxPrice"
+        - $ref: "#/components/parameters/CatalogStatus"
+        - $ref: "#/components/parameters/CatalogSort"
+      responses:
+        "200":
+          description: Категория и страница товаров
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  category:
+                    $ref: "#/components/schemas/Category"
+                  products:
+                    allOf:
+                      - $ref: "#/components/schemas/Page"
+                      - type: object
+                        properties:
+                          data:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/catalog/stores:
+    get:
+      tags: [Catalog]
+      summary: Магазины витрины
+      operationId: listStores
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Страница магазинов
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Store"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/catalog/stores/{store}:
+    get:
+      tags: [Catalog]
+      summary: Карточка магазина
+      operationId: showStore
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: store
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Магазин
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  store:
+                    $ref: "#/components/schemas/Store"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/catalog/stores/{store_id}/products:
+    get:
+      tags: [Catalog]
+      summary: Товары магазина
+      operationId: storeProducts
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: store_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/CatalogSearch"
+        - $ref: "#/components/parameters/MinPrice"
+        - $ref: "#/components/parameters/MaxPrice"
+        - $ref: "#/components/parameters/CatalogStatus"
+        - $ref: "#/components/parameters/CatalogSort"
+      responses:
+        "200":
+          description: Магазин и страница товаров
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  store:
+                    $ref: "#/components/schemas/Store"
+                  products:
+                    allOf:
+                      - $ref: "#/components/schemas/Page"
+                      - type: object
+                        properties:
+                          data:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/catalog/products/{id}:
+    get:
+      tags: [Catalog]
+      summary: Карточка товара
+      operationId: showCatalogProduct
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Товар с категорией, магазином и атрибутами
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product:
+                    $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/admin/products:
+    get:
+      tags: [Catalog]
+      summary: Список товаров
+      description: Роль admin.
+      operationId: adminListProducts
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: store_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Страница товаров
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Catalog]
+      summary: Создать товар
+      description: Роль admin.
+      operationId: adminCreateProduct
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductWrite"
+      responses:
+        "201":
+          description: Товар создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  product:
+                    $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/admin/products/{product}:
+    get:
+      tags: [Catalog]
+      summary: Товар для админки
+      description: Роль admin.
+      operationId: adminShowProduct
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: Товар
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product:
+                    $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Catalog]
+      summary: Заменить поля товара
+      description: Роль admin. Поля необязательные (`sometimes`).
+      operationId: adminReplaceProduct
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdate"
+      responses:
+        "200":
+          description: Товар обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  product:
+                    $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    patch:
+      tags: [Catalog]
+      summary: Частично обновить товар
+      description: Роль admin.
+      operationId: adminPatchProduct
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdate"
+      responses:
+        "200":
+          description: Товар обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  product:
+                    $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Catalog]
+      summary: Удалить товар
+      description: Роль admin.
+      operationId: adminDeleteProduct
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: Товар удалён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/admin/categories:
+    get:
+      tags: [Catalog]
+      summary: Список категорий
+      description: Роль admin.
+      operationId: adminListCategories
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Страница категорий
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Catalog]
+      summary: Создать категорию
+      description: Роль admin.
+      operationId: adminCreateCategory
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryWrite"
+      responses:
+        "201":
+          description: Категория создана
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  category:
+                    $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/admin/categories/{category}:
+    get:
+      tags: [Catalog]
+      summary: Категория с родителем и детьми
+      description: Роль admin.
+      operationId: adminShowCategory
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+      responses:
+        "200":
+          description: Категория
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  category:
+                    $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Catalog]
+      summary: Обновить категорию
+      description: Роль admin.
+      operationId: adminReplaceCategory
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryUpdate"
+      responses:
+        "200":
+          description: Категория обновлена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  category:
+                    $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    patch:
+      tags: [Catalog]
+      summary: Частично обновить категорию
+      description: Роль admin.
+      operationId: adminPatchCategory
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryUpdate"
+      responses:
+        "200":
+          description: Категория обновлена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  category:
+                    $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Catalog]
+      summary: Удалить категорию
+      description: Роль admin.
+      operationId: adminDeleteCategory
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CategoryId"
+      responses:
+        "200":
+          description: Категория удалена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/admin/stores:
+    get:
+      tags: [Catalog]
+      summary: Магазины для админки
+      description: Роль admin. Тот же список, что у витрины.
+      operationId: adminListStores
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Страница магазинов
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Store"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/stocks:
+    get:
+      tags: [Catalog]
+      summary: Остатки
+      description: Роль admin.
+      operationId: listStocks
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: store_id
+          in: query
+          schema:
+            type: integer
+        - name: product_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Страница остатков
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Stock"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Catalog]
+      summary: Создать остаток
+      description: Роль admin. Пара product_id + store_id уникальна.
+      operationId: createStock
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id, store_id, quantity]
+              properties:
+                product_id:
+                  type: integer
+                  minimum: 1
+                store_id:
+                  type: integer
+                  minimum: 1
+                quantity:
+                  type: integer
+                  minimum: 0
+      responses:
+        "201":
+          description: Остаток создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  stock:
+                    $ref: "#/components/schemas/Stock"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/admin/stocks/{stock}:
+    get:
+      tags: [Catalog]
+      summary: Карточка остатка
+      description: Роль admin.
+      operationId: showStock
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/StockId"
+      responses:
+        "200":
+          description: Остаток с товаром и магазином
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stock"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Catalog]
+      summary: Изменить quantity
+      description: Роль admin. Меняется физический остаток, не reserved.
+      operationId: updateStock
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/StockId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 0
+      responses:
+        "200":
+          description: Остаток обновлён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  stock:
+                    $ref: "#/components/schemas/Stock"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/get-upload-url:
+    post:
+      tags: [Catalog]
+      summary: Presigned URL для картинки
+      description: Роль admin. MIME jpeg, png, webp или gif. Ссылка живёт 5 минут.
+      operationId: getUploadUrl
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, content_type]
+              properties:
+                filename:
+                  type: string
+                  maxLength: 255
+                  description: Имя должно заканчиваться на .jpg, .jpeg, .png, .webp или .gif
+                content_type:
+                  type: string
+                  enum: [image/jpeg, image/png, image/webp, image/gif]
+      responses:
+        "200":
+          description: URL для PUT и публичный путь
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upload_url:
+                    type: string
+                  file_path:
+                    type: string
+                  public_url:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/orders:
+    get:
+      tags: [Orders]
+      summary: Заказы текущего пользователя
+      description: Gateway подставляет user_id из JWT.
+      operationId: listOrders
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 15
+      responses:
+        "200":
+          description: Страница заказов
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Orders]
+      summary: Создать заказ
+      description: |
+        Нужен заголовок Idempotency-Key (до 128 символов).
+        Цены берутся из снимка каталога. Gateway подставляет user_id, email и name из JWT.
+      operationId: createOrder
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    required: [product_id, quantity]
+                    properties:
+                      product_id:
+                        type: integer
+                        minimum: 1
+                      quantity:
+                        type: integer
+                        minimum: 1
+                        maximum: 1000
+      responses:
+        "201":
+          description: Заказ создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Создание с тем же Idempotency-Key уже идёт
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Заказ пользователя
+      description: Gateway подставляет user_id. Чужой заказ не отдаётся.
+      operationId: showOrder
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Заказ с позициями и платежами
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/orders/{id}/cancel:
+    post:
+      tags: [Orders]
+      summary: Отменить заказ
+      description: Доступно из pending и awaiting_payment. Gateway подставляет user_id.
+      operationId: cancelOrder
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Заказ отменён
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/orders/{id}/pay:
+    post:
+      tags: [Orders]
+      summary: Stripe Checkout
+      description: |
+        Заказ должен быть в awaiting_payment. Нужен Idempotency-Key.
+        Gateway подставляет user_id. Тело запроса пустое.
+      operationId: payOrder
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Сессия Checkout
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [checkout_url, payment_id]
+                properties:
+                  checkout_url:
+                    type: string
+                  payment_id:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/admin/orders:
+    get:
+      tags: [Orders]
+      summary: Все заказы
+      description: Роли admin и analyst.
+      operationId: adminListOrders
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 15
+      responses:
+        "200":
+          description: Страница заказов
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/admin/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Заказ без фильтра по пользователю
+      description: Роли admin и analyst.
+      operationId: adminShowOrder
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Заказ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/admin/orders/{id}/ship:
+    post:
+      tags: [Orders]
+      summary: Отметить заказ отправленным
+      description: Роли admin и analyst. Только из статуса confirmed.
+      operationId: shipOrder
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Заказ отправлен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/search:
+    get:
+      tags: [Search]
+      summary: Поиск товаров
+      description: Без JWT. Фильтры режут выдачу, facets считаются по всему каталогу.
+      operationId: searchProducts
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 255
+        - name: category_id
+          in: query
+          description: Один id или массив, не больше 50
+          schema:
+            oneOf:
+              - type: integer
+              - type: array
+                maxItems: 50
+                items:
+                  type: integer
+        - $ref: "#/components/parameters/MinPrice"
+        - $ref: "#/components/parameters/MaxPrice"
+        - name: in_stock
+          in: query
+          schema:
+            type: boolean
+        - name: attr
+          in: query
+          description: "attr[Имя]=значение. До 20 имён, 20 значений на имя, 64 символа."
+          style: deepObject
+          explode: true
+          schema:
+            type: object
+            additionalProperties:
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
+        - $ref: "#/components/parameters/Page"
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [relevance, price_asc, price_desc, new]
+      responses:
+        "200":
+          description: Выдача, facets и применённые фильтры
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          description: Превышен лимит запросов
+
+  /api/search/autocomplete:
+    get:
+      tags: [Search]
+      summary: Подсказки по названию
+      description: Без JWT. Короче 2 символов ответ пустой.
+      operationId: searchAutocomplete
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 255
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 8
+        - name: fuzziness
+          in: query
+          schema:
+            type: string
+            enum: [AUTO, "0", "1", "2"]
+            default: AUTO
+      responses:
+        "200":
+          description: Подсказки
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        name:
+                          type: string
+                        price:
+                          type: [number, "null"]
+                        image_url:
+                          type: [string, "null"]
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/recommendations/health:
+    get:
+      tags: [Recommendations]
+      summary: Проверка ассистента
+      description: Без JWT.
+      operationId: recommendationsHealth
+      responses:
+        "200":
+          description: База и pgvector доступны
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationHealth"
+        "503":
+          description: База или pgvector недоступны
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationHealth"
+
+  /api/recommendations/chat:
+    post:
+      tags: [Recommendations]
+      summary: Сообщение ассистенту
+      description: |
+        Любая аутентифицированная роль. Gateway подставляет user_id.
+        Ответ может идти до 120 секунд.
+      operationId: recommendationChat
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Ответ и карточки товаров
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/recommendations/conversations/{id}:
+    get:
+      tags: [Recommendations]
+      summary: История диалога
+      description: Gateway подставляет user_id. Чужой или истёкший диалог — 404.
+      operationId: showConversation
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Диалог
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Recommendations]
+      summary: Удалить диалог
+      description: Gateway подставляет user_id.
+      operationId: deleteConversation
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Диалог удалён
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/recommendations/reindex:
+    post:
+      tags: [Recommendations]
+      summary: Пересчитать эмбеддинги
+      description: Роль admin. Не тянет каталог заново, только уже проиндексированные строки.
+      operationId: reindexRecommendations
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Число переиндексированных товаров
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  indexed:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/notifications:
+    get:
+      tags: [Notifications]
+      summary: Журнал писем
+      description: Роли admin и analyst.
+      operationId: listNotifications
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, sent, failed]
+        - name: email
+          in: query
+          schema:
+            type: string
+            format: email
+        - name: event_type
+          in: query
+          schema:
+            type: string
+            enum: [order.paid, order.confirmed, order.cancelled, user.registered]
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Страница писем
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/EmailLog"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/notifications/{id}:
+    get:
+      tags: [Notifications]
+      summary: Карточка письма
+      description: Роли admin и analyst. id — MongoDB ObjectId.
+      operationId: showNotification
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Запись журнала
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailLog"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/notifications/{id}/resend:
+    post:
+      tags: [Notifications]
+      summary: Отправить письмо ещё раз
+      description: Роли admin и analyst. Только статус failed и известный event_type.
+      operationId: resendNotification
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Письмо отправлено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  data:
+                    $ref: "#/components/schemas/EmailLog"
+        "400":
+          description: SMTP не принял письмо
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/analytics/users:
+    get:
+      tags: [Analytics]
+      summary: Регистрации
+      description: Роли admin и analyst. Даты YYYY-MM-DD (UTC) или RFC3339. Для date-only `to` конец дня не включается.
+      operationId: analyticsUsers
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: Всего пользователей и рост по дням
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_users:
+                    type: integer
+                  growth:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DayCount"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/analytics/orders:
+    get:
+      tags: [Analytics]
+      summary: Воронка заказов
+      description: Роли admin и analyst.
+      operationId: analyticsOrders
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: Воронка, конверсии, выручка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrdersMetrics"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/analytics/orders/stores:
+    get:
+      tags: [Analytics]
+      summary: Заказы по магазинам
+      description: Роли admin и analyst. Без store_id — рейтинг, с store_id — детализация.
+      operationId: analyticsOrdersByStore
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/AnalyticsLimit"
+        - name: store_id
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Разрез по магазинам
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DimensionMetrics"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/analytics/orders/categories:
+    get:
+      tags: [Analytics]
+      summary: Заказы по категориям
+      description: Роли admin и analyst.
+      operationId: analyticsOrdersByCategory
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/AnalyticsLimit"
+        - name: category_id
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Разрез по категориям
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DimensionMetrics"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/analytics/search:
+    get:
+      tags: [Analytics]
+      summary: Поисковые запросы
+      description: Роли admin и analyst.
+      operationId: analyticsSearch
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/AnalyticsLimit"
+      responses:
+        "200":
+          description: Объём, zero-result и топ запросов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchMetrics"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/webhooks/stripe:
+    post:
+      tags: [Stripe]
+      summary: Stripe webhook
+      description: |
+        Без JWT. Тело — сырой JSON события Stripe, подпись в заголовке Stripe-Signature.
+        Обрабатываются checkout.session.completed и checkout.session.expired.
+      operationId: stripeWebhook
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Сырое событие Stripe. Схема события не фиксируется.
+              additionalProperties: true
+      responses:
+        "200":
+          description: Событие принято
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+        "400":
+          description: Подпись не сошлась
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: HttpOnly cookie, которую ставит POST /api/login
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    ProductId:
+      name: product
+      in: path
+      required: true
+      schema:
+        type: integer
+    CategoryId:
+      name: category
+      in: path
+      required: true
+      schema:
+        type: integer
+    StockId:
+      name: stock
+      in: path
+      required: true
+      schema:
+        type: integer
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    CatalogSearch:
+      name: search
+      in: query
+      schema:
+        type: string
+        maxLength: 100
+    MinPrice:
+      name: min_price
+      in: query
+      schema:
+        type: number
+        minimum: 0
+    MaxPrice:
+      name: max_price
+      in: query
+      schema:
+        type: number
+        minimum: 0
+    CatalogStatus:
+      name: status
+      in: query
+      schema:
+        type: string
+        enum: [in_stock]
+    CatalogSort:
+      name: sort
+      in: query
+      schema:
+        type: string
+        enum: [new, price_asc, price_desc]
+        default: new
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    From:
+      name: from
+      in: query
+      schema:
+        type: string
+      description: YYYY-MM-DD или RFC3339
+    To:
+      name: to
+      in: query
+      schema:
+        type: string
+      description: YYYY-MM-DD (конец дня не включается) или RFC3339
+    AnalyticsLimit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+  responses:
+    Unauthorized:
+      description: Нет или протух JWT
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Message"
+    Forbidden:
+      description: Роли недостаточно
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Message"
+    NotFound:
+      description: Запись не найдена
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Message"
+    ValidationError:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+              errors:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
+    BadRequest:
+      description: Неверные query-параметры
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+  schemas:
+    Message:
+      type: object
+      properties:
+        message:
+          type: string
+    Page:
+      type: object
+      properties:
+        current_page:
+          type: integer
+        last_page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        from:
+          type: [integer, "null"]
+        to:
+          type: [integer, "null"]
+    Role:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        created_at:
+          type: [string, "null"]
+        updated_at:
+          type: [string, "null"]
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        number:
+          type: [string, "null"]
+        role_id:
+          type: [integer, "null"]
+        email_verified_at:
+          type: [string, "null"]
+        role:
+          oneOf:
+            - $ref: "#/components/schemas/Role"
+            - type: "null"
+        created_at:
+          type: [string, "null"]
+        updated_at:
+          type: [string, "null"]
+    RegistrationRequest:
+      type: object
+      required: [name, email, password, number]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 30
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        number:
+          type: string
+          maxLength: 16
+          description: E.164, например +48123456789
+          pattern: "^\\+[1-9]\\d{9,14}$"
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        number:
+          type: string
+          maxLength: 16
+          pattern: "^\\+[1-9]\\d{9,14}$"
+    Timestamps:
+      type: object
+      properties:
+        created_at:
+          type: [string, "null"]
+        updated_at:
+          type: [string, "null"]
+    Category:
+      allOf:
+        - $ref: "#/components/schemas/Timestamps"
+        - type: object
+          properties:
+            id:
+              type: integer
+            parent_id:
+              type: [integer, "null"]
+            name:
+              type: string
+            slug:
+              type: string
+            parent:
+              type: [object, "null"]
+            children:
+              type: array
+              items:
+                type: object
+    CategoryWrite:
+      type: object
+      required: [name, slug]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+        parent_id:
+          type: [integer, "null"]
+    CategoryUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+        parent_id:
+          type: [integer, "null"]
+    Store:
+      allOf:
+        - $ref: "#/components/schemas/Timestamps"
+        - type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            description:
+              type: [string, "null"]
+            contacts:
+              type: [object, "null"]
+              additionalProperties: true
+    ProductAttribute:
+      type: object
+      properties:
+        id:
+          type: integer
+        product_id:
+          type: integer
+        name:
+          type: string
+        value:
+          type: string
+    Product:
+      allOf:
+        - $ref: "#/components/schemas/Timestamps"
+        - type: object
+          properties:
+            id:
+              type: integer
+            store_id:
+              type: integer
+            category_id:
+              type: integer
+            name:
+              type: string
+            description:
+              type: [string, "null"]
+            image_url:
+              type: [string, "null"]
+            price:
+              type: string
+              description: decimal:2
+            is_published:
+              type: boolean
+            category:
+              oneOf:
+                - $ref: "#/components/schemas/Category"
+                - type: "null"
+            store:
+              oneOf:
+                - $ref: "#/components/schemas/Store"
+                - type: "null"
+            attributes:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProductAttribute"
+    ProductWrite:
+      type: object
+      required: [store_id, category_id, name, price]
+      properties:
+        store_id:
+          type: integer
+        category_id:
+          type: integer
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: [string, "null"]
+        image_url:
+          type: [string, "null"]
+          maxLength: 255
+        price:
+          type: number
+          minimum: 0
+    ProductUpdate:
+      type: object
+      properties:
+        store_id:
+          type: integer
+        category_id:
+          type: integer
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: [string, "null"]
+        image_url:
+          type: [string, "null"]
+          maxLength: 255
+        price:
+          type: number
+          minimum: 0
+    Stock:
+      allOf:
+        - $ref: "#/components/schemas/Timestamps"
+        - type: object
+          properties:
+            id:
+              type: integer
+            product_id:
+              type: integer
+            store_id:
+              type: integer
+            quantity:
+              type: integer
+              description: Физический остаток
+            reserved:
+              type: integer
+            available:
+              type: integer
+              description: quantity - reserved
+            product:
+              oneOf:
+                - $ref: "#/components/schemas/Product"
+                - type: "null"
+            store:
+              oneOf:
+                - $ref: "#/components/schemas/Store"
+                - type: "null"
+    OrderStatus:
+      type: string
+      enum: [pending, awaiting_payment, confirmed, shipped, cancelled, payment_failed]
+    ProductSnapshot:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        price:
+          type: string
+        store_id:
+          type: [integer, "null"]
+        store_name:
+          type: [string, "null"]
+        category_id:
+          type: [integer, "null"]
+        category_name:
+          type: [string, "null"]
+        category_slug:
+          type: [string, "null"]
+    OrderItem:
+      allOf:
+        - $ref: "#/components/schemas/Timestamps"
+        - type: object
+          properties:
+            id:
+              type: integer
+            order_id:
+              type: integer
+            product_id:
+              type: integer
+            quantity:
+              type: integer
+            unit_price:
+              type: string
+            product_snapshot:
+              oneOf:
+                - $ref: "#/components/schemas/ProductSnapshot"
+                - type: "null"
+    Payment:
+      allOf:
+        - $ref: "#/components/schemas/Timestamps"
+        - type: object
+          properties:
+            id:
+              type: integer
+            order_id:
+              type: integer
+            amount:
+              type: string
+            status:
+              type: string
+            stripe_checkout_session_id:
+              type: [string, "null"]
+            stripe_payment_intent_id:
+              type: [string, "null"]
+    Order:
+      allOf:
+        - $ref: "#/components/schemas/Timestamps"
+        - type: object
+          properties:
+            id:
+              type: integer
+            saga_id:
+              type: string
+            user_id:
+              type: integer
+            customer_email:
+              type: string
+            customer_name:
+              type: string
+            status:
+              $ref: "#/components/schemas/OrderStatus"
+            cancel_reason:
+              type: [string, "null"]
+            total_amount:
+              type: string
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/OrderItem"
+            payments:
+              type: array
+              items:
+                $ref: "#/components/schemas/Payment"
+    SearchHit:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        price:
+          type: [number, "null"]
+        image_url:
+          type: [string, "null"]
+        category_id:
+          type: [integer, "null"]
+        category_name:
+          type: [string, "null"]
+        store_id:
+          type: [integer, "null"]
+        store_name:
+          type: [string, "null"]
+        in_stock:
+          type: boolean
+        quantity:
+          type: integer
+        attributes:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    SearchResponse:
+      type: object
+      properties:
+        products:
+          type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/SearchHit"
+            current_page:
+              type: integer
+            last_page:
+              type: integer
+            per_page:
+              type: integer
+            total:
+              type: integer
+        facets:
+          type: object
+          properties:
+            categories:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+                  count:
+                    type: integer
+            price_ranges:
+              type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  label:
+                    type: string
+                  from:
+                    type: [number, "null"]
+                  to:
+                    type: [number, "null"]
+                  count:
+                    type: integer
+            availability:
+              type: array
+              items:
+                type: object
+                properties:
+                  value:
+                    type: boolean
+                  count:
+                    type: integer
+            attributes:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    value:
+                      type: string
+                    count:
+                      type: integer
+        applied:
+          type: object
+          additionalProperties: true
+    RecommendationHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        database:
+          type: boolean
+        pgvector:
+          type: boolean
+        indexed_products:
+          type: integer
+        llm_configured:
+          type: boolean
+        llm_driver:
+          type: [string, "null"]
+    ChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        conversation_id:
+          type: [string, "null"]
+          format: uuid
+        store_id:
+          type: [integer, "null"]
+          minimum: 1
+        store_name:
+          type: [string, "null"]
+          maxLength: 255
+        category_name:
+          type: [string, "null"]
+          maxLength: 255
+        in_stock:
+          type: [boolean, "null"]
+        price_min:
+          type: [number, "null"]
+          minimum: 0
+        price_max:
+          type: [number, "null"]
+          minimum: 0
+        limit:
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 20
+    ProductCard:
+      type: object
+      properties:
+        product_id:
+          type: integer
+        store_id:
+          type: [integer, "null"]
+        store_name:
+          type: [string, "null"]
+        name:
+          type: string
+        description:
+          type: [string, "null"]
+        category_id:
+          type: [integer, "null"]
+        category_name:
+          type: [string, "null"]
+        image_url:
+          type: [string, "null"]
+        price:
+          type: number
+        attributes:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        is_published:
+          type: boolean
+        in_stock:
+          type: boolean
+        path:
+          type: string
+    ChatResponse:
+      type: object
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+        answer:
+          type: string
+        extracted_filters:
+          type: object
+          additionalProperties: true
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductCard"
+    Conversation:
+      type: object
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+        last_activity_at:
+          type: string
+        expires_at:
+          type: string
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
+              products:
+                type: [array, "null"]
+                items:
+                  $ref: "#/components/schemas/ProductCard"
+              created_at:
+                type: [string, "null"]
+    EmailLog:
+      type: object
+      properties:
+        _id:
+          type: string
+        message_id:
+          type: [string, "null"]
+        email:
+          type: string
+        name:
+          type: [string, "null"]
+        event_type:
+          type: [string, "null"]
+        status:
+          type: string
+          enum: [pending, sent, failed]
+        retries:
+          type: integer
+        moved_to_dlq:
+          type: boolean
+        error_message:
+          type: [string, "null"]
+        payload:
+          type: [object, "null"]
+          additionalProperties: true
+        created_at:
+          type: [string, "null"]
+        updated_at:
+          type: [string, "null"]
+    DayCount:
+      type: object
+      properties:
+        date:
+          type: string
+        count:
+          type: integer
+        cumulative:
+          type: integer
+    OrderFunnel:
+      type: object
+      properties:
+        created:
+          type: integer
+        paid:
+          type: integer
+        cancelled:
+          type: integer
+        open:
+          type: integer
+        completed:
+          type: integer
+    OrdersMetrics:
+      type: object
+      properties:
+        funnel:
+          $ref: "#/components/schemas/OrderFunnel"
+        conversions:
+          type: object
+          properties:
+            created_to_paid:
+              type: number
+            created_to_cancelled:
+              type: number
+        revenue:
+          type: object
+          properties:
+            total:
+              type: string
+            by_day:
+              type: array
+              items:
+                type: object
+                properties:
+                  date:
+                    type: string
+                  amount:
+                    type: string
+        avg_order_value:
+          type: string
+    DimensionMetrics:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        funnel:
+          $ref: "#/components/schemas/OrderFunnel"
+        conversions:
+          type: object
+          properties:
+            created_to_paid:
+              type: number
+            created_to_cancelled:
+              type: number
+        orders_count:
+          type: integer
+        items_quantity:
+          type: integer
+        line_amount:
+          type: string
+        paid_line_amount:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              slug:
+                type: string
+              orders_count:
+                type: integer
+              items_quantity:
+                type: integer
+              line_amount:
+                type: string
+              paid_line_amount:
+                type: string
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+              slug:
+                type: string
+    SearchMetrics:
+      type: object
+      properties:
+        total_searches:
+          type: integer
+        zero_result_count:
+          type: integer
+        zero_result_rate:
+          type: number
+        popular_queries:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueryCount"
+        zero_result_queries:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueryCount"
+    QueryCount:
+      type: object
+      properties:
+        query:
+          type: string
+        count:
+          type: integer
