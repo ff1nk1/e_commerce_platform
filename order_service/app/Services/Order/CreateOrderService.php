@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Order;
 
 use App\Contracts\IdempotencyStore;
@@ -10,11 +12,12 @@ use App\Events\OrderCreated;
 use App\Models\Order;
 use App\Models\ProductSnapshot;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
-class CreateOrderService
+final class CreateOrderService
 {
     private const LOCK_RETRY_ATTEMPTS = 2;
 
@@ -41,7 +44,7 @@ class CreateOrderService
 
         if (! $this->idempotency->acquireLock($scopeKey)) {
             for ($attempt = 0; $attempt < self::LOCK_RETRY_ATTEMPTS; $attempt++) {
-                usleep(self::LOCK_RETRY_SLEEP_MICROS);
+                Sleep::usleep(self::LOCK_RETRY_SLEEP_MICROS);
                 $cached = $this->idempotency->get($scopeKey);
                 if ($cached !== null) {
                     return $cached;

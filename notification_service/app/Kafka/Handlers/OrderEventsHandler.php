@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Kafka\Handlers;
 
 use App\Services\KafkaMailPipeline;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
-class OrderEventsHandler
+final class OrderEventsHandler
 {
     public const ALLOWED_TYPES = ['order.paid', 'order.confirmed', 'order.cancelled'];
 

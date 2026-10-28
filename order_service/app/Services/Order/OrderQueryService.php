@@ -1,17 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Order;
 
 use App\Models\Order;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
-class OrderQueryService
+final class OrderQueryService
 {
     public function __construct(
         private OrderPayloadFactory $payloads,
     ) {}
 
+    /**
+     * @return LengthAwarePaginator<int, Order>
+     */
     public function listForUser(int $userId, int $perPage = 15): LengthAwarePaginator
     {
         return Order::query()
@@ -21,6 +26,9 @@ class OrderQueryService
             ->paginate($perPage);
     }
 
+    /**
+     * @return LengthAwarePaginator<int, Order>
+     */
     public function listAll(int $perPage = 15): LengthAwarePaginator
     {
         return Order::query()
@@ -37,9 +45,7 @@ class OrderQueryService
             ->where('user_id', $userId)
             ->first();
 
-        if ($order === null) {
-            throw new NotFoundHttpException('Order not found.');
-        }
+        throw_if($order === null, NotFoundHttpException::class, 'Order not found.');
 
         return $order;
     }
@@ -50,9 +56,7 @@ class OrderQueryService
             ->with(['items.productSnapshot', 'payments'])
             ->find($orderId);
 
-        if ($order === null) {
-            throw new NotFoundHttpException('Order not found.');
-        }
+        throw_if($order === null, NotFoundHttpException::class, 'Order not found.');
 
         return $order;
     }

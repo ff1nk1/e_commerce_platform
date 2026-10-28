@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreProductRequest;
@@ -11,7 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
-class ProductController extends Controller
+final class ProductController extends Controller
 {
     private const PRODUCT_CACHE_TTL_SECONDS = 86400;
 
@@ -29,7 +31,7 @@ class ProductController extends Controller
 
         $query = Product::with(['category', 'store']);
 
-        $query->when($request->filled('store_id'), function ($q) use ($request) {
+        $query->when($request->filled('store_id'), function ($q) use ($request): void {
             $q->where('store_id', (int) $request->input('store_id'));
         });
 
@@ -45,7 +47,7 @@ class ProductController extends Controller
         return response()->json(['message' => 'Товар добавлен', 'product' => $product], 201);
     }
 
-    public function show($id)
+    public function show(int|string $id): JsonResponse
     {   // Когда память редиса заполнится, он будет убирать самые редко вызываемые
         $product = Cache::tags(['products'])->remember(CatalogCacheKeys::product($id), self::PRODUCT_CACHE_TTL_SECONDS, function () use ($id) {
             return Product::with(['category', 'store', 'attributes'])->findOrFail($id)->toArray();

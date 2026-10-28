@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Role;
@@ -10,7 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Facades\Kafka;
 use Tests\TestCase;
 
-class UserRegisteredKafkaTest extends TestCase
+final class UserRegisteredKafkaTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -34,7 +36,7 @@ class UserRegisteredKafkaTest extends TestCase
             'password' => 'secret123',
         ];
 
-        $service = app(AuthService::class);
+        $service = resolve(AuthService::class);
         $user = $service->register($userData);
 
         $this->assertDatabaseHas('users', [
@@ -45,7 +47,7 @@ class UserRegisteredKafkaTest extends TestCase
 
         $this->assertTrue(Hash::check('secret123', $user->password));
 
-        Kafka::assertPublishedOn('user.events', null, function ($message) use ($user) {
+        Kafka::assertPublishedOn('user.events', null, function ($message) use ($user): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -75,7 +77,7 @@ class UserRegisteredKafkaTest extends TestCase
             'password' => 'secret123',
         ];
 
-        $service = app(AuthService::class);
+        $service = resolve(AuthService::class);
         $user = $service->register($userData);
 
         $this->assertDatabaseHas('users', [
@@ -85,7 +87,7 @@ class UserRegisteredKafkaTest extends TestCase
 
         $logSpy->shouldHaveReceived('error')
             ->once()
-            ->withArgs(function ($message, $context) use ($user) {
+            ->withArgs(function ($message, array $context) use ($user): bool {
                 return $message === 'Kafka publish failed on user.registered'
                     && isset($context['user_id']) && $context['user_id'] === $user->id
                     && isset($context['error']) && $context['error'] === 'Connection to Kafka broker timed out';

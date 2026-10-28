@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\EmailLog;
@@ -8,40 +10,44 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * Requires MailHog (compose SMTP :1025, API :8025) and MongoDB.
- * Defaults to Docker DNS hostname; override with MAILHOG_HOST for host-side runs.
+ * Requires Mailpit (compose SMTP :1025, API :8025) and MongoDB.
+ * Defaults to Docker DNS hostname; override with MAILPIT_HOST for host-side runs.
  */
-class WelcomeMailMailhogTest extends TestCase
+final class WelcomeMailMailhogTest extends TestCase
 {
-    private string $mailhogHost;
+    private string $mailpitHost;
 
-    private string $mailhogApiBase;
+    private string $mailpitApiBase;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $host = getenv('MAILHOG_HOST');
-        $this->mailhogHost = is_string($host) && $host !== '' ? $host : 'notification_service_mailhog';
-        $this->mailhogApiBase = 'http://'.$this->mailhogHost.':8025';
+        $host = getenv('MAILPIT_HOST');
+        if (! is_string($host) || $host === '') {
+            $legacy = getenv('MAILHOG_HOST');
+            $host = is_string($legacy) ? $legacy : '';
+        }
+        $this->mailpitHost = $host !== '' ? $host : 'notification_service_mailpit';
+        $this->mailpitApiBase = 'http://'.$this->mailpitHost.':8025';
 
         config([
             'mail.default' => 'smtp',
             'mail.mailers.smtp.transport' => 'smtp',
-            'mail.mailers.smtp.host' => $this->mailhogHost,
+            'mail.mailers.smtp.host' => $this->mailpitHost,
             'mail.mailers.smtp.port' => 1025,
             'mail.mailers.smtp.encryption' => null,
             'mail.mailers.smtp.username' => null,
             'mail.mailers.smtp.password' => null,
         ]);
 
-        EmailLog::truncate();
+        EmailLog::query()->truncate();
 
-        if (! $this->mailhogIsReachable()) {
-            $this->markTestSkipped('MailHog is not running at '.$this->mailhogApiBase.'.');
+        if (! $this->mailpitIsReachable()) {
+            $this->markTestSkipped('Mailpit is not running at '.$this->mailpitApiBase.'.');
         }
 
-        Http::delete($this->mailhogApiBase.'/api/v1/messages');
+        Http::delete($this->mailpitApiBase.'/api/v1/messages');
     }
 
     public function test_welcome_mail_reaches_mailhog_and_persists_sent_in_mongo(): void
@@ -52,7 +58,7 @@ class WelcomeMailMailhogTest extends TestCase
             'name' => 'Mailhog User',
         ];
 
-        $result = app(MailDeliveryService::class)->sendMailWithRetry($payload, 'user.registered');
+        $result = resolve(MailDeliveryService::class)->sendMailWithRetry($payload, 'user.registered');
 
         $this->assertTrue($result['isSent']);
         $result['emailLog']->refresh();
@@ -64,31 +70,34 @@ class WelcomeMailMailhogTest extends TestCase
             'moved_to_dlq' => false,
         ], 'mongodb');
 
-        $messages = Http::get($this->mailhogApiBase.'/api/v2/messages')->json();
-        $this->assertGreaterThan(0, $messages['total'] ?? 0);
+        $inbox = Http::get($this->mailpitApiBase.'/api/v1/messages')->json();
+        $this->assertGreaterThan(0, is_array($inbox) ? ($inbox['total'] ?? 0) : 0);
 
-        $matched = collect($messages['items'] ?? [])->first(function (array $item) use ($email) {
+        /** @var array<int, array<string, mixed>> $messages */
+        $messages = is_array($inbox) && is_array($inbox['messages'] ?? null) ? $inbox['messages'] : [];
+
+        $matched = collect($messages)->first(function (array $item) use ($email): bool {
             foreach ($item['To'] ?? [] as $to) {
-                $addr = ($to['Mailbox'] ?? '').'@'.($to['Domain'] ?? '');
+                $addr = (string) ($to['Address'] ?? '');
                 if (strcasecmp($addr, $email) === 0) {
                     return true;
                 }
             }
 
-            return str_contains(json_encode($item), $email);
+            return str_contains((string) json_encode($item), $email);
         });
 
-        $this->assertNotNull($matched, 'Expected message for '.$email.' in MailHog');
+        $this->assertNotNull($matched, 'Expected message for '.$email.' in Mailpit');
 
-        $subject = $matched['Content']['Headers']['Subject'][0] ?? '';
-        $decodedSubject = iconv_mime_decode($subject, ICONV_MIME_DECODE_CONTINUE_ON_ERROR, 'UTF-8') ?: $subject;
-        $this->assertStringContainsString('Добро пожаловать', $decodedSubject);
+        // Mailpit decodes the subject. iconv_mime_decode is for MailHog's raw
+        // =?UTF-8?B?...?= header and corrupts an already decoded UTF-8 string.
+        $this->assertStringContainsString('Добро пожаловать', (string) ($matched['Subject'] ?? ''));
     }
 
-    private function mailhogIsReachable(): bool
+    private function mailpitIsReachable(): bool
     {
         try {
-            $response = Http::timeout(1)->get($this->mailhogApiBase.'/api/v2/messages');
+            $response = Http::timeout(1)->get($this->mailpitApiBase.'/api/v1/messages');
 
             return $response->successful();
         } catch (\Throwable) {

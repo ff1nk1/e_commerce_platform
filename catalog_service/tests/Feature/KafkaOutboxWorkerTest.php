@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Console\Commands\KafkaOutboxWorker;
@@ -9,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
 use Junges\Kafka\Facades\Kafka;
 use Tests\TestCase;
 
-class KafkaOutboxWorkerTest extends TestCase
+final class KafkaOutboxWorkerTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -17,7 +19,7 @@ class KafkaOutboxWorkerTest extends TestCase
     {
         Kafka::fake();
 
-        $event = OutboxEvent::create([
+        $event = OutboxEvent::query()->create([
             'topic' => 'catalog.events',
             'event_type' => 'stock.changed',
             'payload' => [
@@ -27,12 +29,12 @@ class KafkaOutboxWorkerTest extends TestCase
             ],
         ]);
 
-        $published = app(KafkaOutboxWorker::class)->processBatch();
+        $published = resolve(KafkaOutboxWorker::class)->processBatch();
 
         $this->assertSame(1, $published);
         $this->assertDatabaseMissing('outbox_events', ['id' => $event->id]);
 
-        Kafka::assertPublishedOn('catalog.events', null, function ($message) use ($event) {
+        Kafka::assertPublishedOn('catalog.events', null, function ($message) use ($event): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -51,13 +53,13 @@ class KafkaOutboxWorkerTest extends TestCase
             ->once()
             ->andThrow(new \Exception('broker down'));
 
-        $event = OutboxEvent::create([
+        $event = OutboxEvent::query()->create([
             'topic' => 'stock.events',
             'event_type' => 'stock.reserved',
             'payload' => ['order_id' => 42, 'status' => 'success'],
         ]);
 
-        $published = app(KafkaOutboxWorker::class)->processBatch();
+        $published = resolve(KafkaOutboxWorker::class)->processBatch();
 
         $this->assertSame(0, $published);
         $this->assertDatabaseHas('outbox_events', ['id' => $event->id]);
@@ -67,7 +69,7 @@ class KafkaOutboxWorkerTest extends TestCase
     {
         Kafka::fake();
 
-        $this->assertSame(0, app(KafkaOutboxWorker::class)->processBatch());
+        $this->assertSame(0, resolve(KafkaOutboxWorker::class)->processBatch());
         Kafka::assertNothingPublished();
     }
 
@@ -77,7 +79,7 @@ class KafkaOutboxWorkerTest extends TestCase
 
         Schema::dropIfExists('outbox_events');
 
-        $this->assertSame(0, app(KafkaOutboxWorker::class)->processBatch());
+        $this->assertSame(0, resolve(KafkaOutboxWorker::class)->processBatch());
         Kafka::assertNothingPublished();
     }
 }

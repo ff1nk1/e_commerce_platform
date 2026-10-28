@@ -1,19 +1,19 @@
-import { NavLink, Link } from 'react-router-dom'
-import CartNavLink from '../cart/CartNavLink'
-import ThemeToggle from '../theme/ThemeToggle'
-import '../styles/header.css'
+import { NavLink, Link } from "react-router-dom";
+import CartNavLink from "../cart/CartNavLink";
+import ThemeToggle from "../theme/ThemeToggle";
+import "../styles/header.css";
 
 function navClassName({ isActive }) {
-  return isActive ? 'app-header-link active' : 'app-header-link'
+  return isActive ? "app-header-link active" : "app-header-link";
 }
 
 function iconClassName({ isActive }) {
-  return isActive ? 'app-header-icon-link active' : 'app-header-icon-link'
+  return isActive ? "app-header-icon-link active" : "app-header-icon-link";
 }
 
 export default function AppHeader({ user }) {
   const showAdmin =
-    user?.role?.slug === 'admin' || user?.role?.slug === 'analyst'
+    user?.role?.slug === "admin" || user?.role?.slug === "analyst";
 
   return (
     <header className="app-header">
@@ -78,5 +78,5 @@ export default function AppHeader({ user }) {
         </div>
       </div>
     </header>
-  )
+  );
 }

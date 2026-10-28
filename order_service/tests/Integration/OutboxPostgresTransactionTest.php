@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Console\Commands\KafkaOutboxWorker;
@@ -7,7 +9,7 @@ use App\Models\Order;
 use App\Models\OutboxEvent;
 use Illuminate\Support\Str;
 
-class OutboxPostgresTransactionTest extends IntegrationTestCase
+final class OutboxPostgresTransactionTest extends IntegrationTestCase
 {
     public function test_create_persists_order_items_and_outbox_atomically(): void
     {
@@ -55,7 +57,7 @@ class OutboxPostgresTransactionTest extends IntegrationTestCase
         $order = Order::query()->findOrFail($orderId);
         $this->assertSame($order->saga_id, $event->payload['saga_id']);
 
-        $published = app(KafkaOutboxWorker::class)->processBatch();
+        $published = resolve(KafkaOutboxWorker::class)->processBatch();
         $this->assertGreaterThanOrEqual(1, $published);
         $this->assertSame(0, OutboxEvent::query()->count());
     }

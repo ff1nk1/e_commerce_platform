@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Services\ProductSearchService;
 use App\Services\SearchIndexService;
 
-class OpenSearchIndexAndSearchTest extends IntegrationTestCase
+final class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 {
     /**
      * @param  array<string, mixed>  $overrides
@@ -28,13 +30,13 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
     public function test_index_product_then_search_by_name(): void
     {
-        $index = app(SearchIndexService::class);
+        $index = resolve(SearchIndexService::class);
         $index->indexProduct($this->productDocument(101, [
             'name' => 'Alpha Wireless Headphones',
             'price' => 250.0,
         ]), preserveStock: false);
 
-        $result = app(ProductSearchService::class)->search($this->params([
+        $result = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Alpha Wireless',
             'sort' => 'relevance',
         ]));
@@ -46,12 +48,12 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
     public function test_synonym_query_finds_product(): void
     {
-        app(SearchIndexService::class)->indexProduct($this->productDocument(102, [
+        resolve(SearchIndexService::class)->indexProduct($this->productDocument(102, [
             'name' => 'Galaxy Smartphone',
             'description' => 'Android device',
         ]), preserveStock: false);
 
-        $result = app(ProductSearchService::class)->search($this->params([
+        $result = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'phone',
             'sort' => 'relevance',
         ]));
@@ -62,7 +64,7 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
     public function test_filters_category_price_stock_and_attributes(): void
     {
-        $index = app(SearchIndexService::class);
+        $index = resolve(SearchIndexService::class);
         $index->indexProduct($this->productDocument(201, [
             'name' => 'Match All Filters',
             'category_id' => 10,
@@ -116,7 +118,7 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
             ],
         ]), preserveStock: false);
 
-        $result = app(ProductSearchService::class)->search($this->params([
+        $result = resolve(ProductSearchService::class)->search($this->params([
             'category_ids' => [10],
             'min_price' => 100.0,
             'max_price' => 500.0,
@@ -131,7 +133,7 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
     public function test_post_filter_does_not_shrink_global_category_facets(): void
     {
-        $index = app(SearchIndexService::class);
+        $index = resolve(SearchIndexService::class);
         $index->indexProduct($this->productDocument(301, [
             'name' => 'Cat One Item',
             'category_id' => 1,
@@ -145,7 +147,7 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
             'price' => 50.0,
         ]), preserveStock: false);
 
-        $result = app(ProductSearchService::class)->search($this->params([
+        $result = resolve(ProductSearchService::class)->search($this->params([
             'category_ids' => [1],
             'sort' => 'new',
         ]));
@@ -158,7 +160,7 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
     public function test_sort_price_asc_and_desc(): void
     {
-        $index = app(SearchIndexService::class);
+        $index = resolve(SearchIndexService::class);
         $index->indexProduct($this->productDocument(401, [
             'name' => 'Cheap',
             'price' => 10.0,
@@ -172,21 +174,21 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
             'price' => 90.0,
         ]), preserveStock: false);
 
-        $asc = app(ProductSearchService::class)->search($this->params(['sort' => 'price_asc']));
+        $asc = resolve(ProductSearchService::class)->search($this->params(['sort' => 'price_asc']));
         $this->assertSame([401, 402, 403], array_column($asc['products']['data'], 'id'));
 
-        $desc = app(ProductSearchService::class)->search($this->params(['sort' => 'price_desc']));
+        $desc = resolve(ProductSearchService::class)->search($this->params(['sort' => 'price_desc']));
         $this->assertSame([403, 402, 401], array_column($desc['products']['data'], 'id'));
     }
 
     public function test_delete_product_removes_from_search(): void
     {
-        $index = app(SearchIndexService::class);
+        $index = resolve(SearchIndexService::class);
         $index->indexProduct($this->productDocument(501, [
             'name' => 'Delete Me Unique',
         ]), preserveStock: false);
 
-        $before = app(ProductSearchService::class)->search($this->params([
+        $before = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Delete Me Unique',
             'sort' => 'relevance',
         ]));
@@ -194,7 +196,7 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
         $index->deleteProduct(501);
 
-        $after = app(ProductSearchService::class)->search($this->params([
+        $after = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Delete Me Unique',
             'sort' => 'relevance',
         ]));
@@ -203,14 +205,14 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
     public function test_stock_update_affects_in_stock_filter(): void
     {
-        $index = app(SearchIndexService::class);
+        $index = resolve(SearchIndexService::class);
         $index->indexProduct($this->productDocument(601, [
             'name' => 'Stock Filter Item',
             'quantity' => 5,
             'in_stock' => true,
         ]), preserveStock: false);
 
-        $inStock = app(ProductSearchService::class)->search($this->params([
+        $inStock = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Stock Filter Item',
             'in_stock' => true,
             'sort' => 'relevance',
@@ -219,14 +221,14 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
         $index->updateProductStock(601, 0);
 
-        $stillInStock = app(ProductSearchService::class)->search($this->params([
+        $stillInStock = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Stock Filter Item',
             'in_stock' => true,
             'sort' => 'relevance',
         ]));
         $this->assertSame(0, $stillInStock['products']['total']);
 
-        $outOfStock = app(ProductSearchService::class)->search($this->params([
+        $outOfStock = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Stock Filter Item',
             'in_stock' => false,
             'sort' => 'relevance',
@@ -236,7 +238,7 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
     public function test_category_rename_syncs_product_category_name(): void
     {
-        $index = app(SearchIndexService::class);
+        $index = resolve(SearchIndexService::class);
         $index->indexProduct($this->productDocument(701, [
             'name' => 'Category Sync Product',
             'category_id' => 77,
@@ -245,7 +247,7 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
         $index->syncCategoryNameOnProducts(77, 'Renamed Category');
 
-        $result = app(ProductSearchService::class)->search($this->params([
+        $result = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Renamed Category',
             'sort' => 'relevance',
         ]));
@@ -256,15 +258,15 @@ class OpenSearchIndexAndSearchTest extends IntegrationTestCase
 
     public function test_autocomplete_prefix_suggestions(): void
     {
-        app(SearchIndexService::class)->indexProduct($this->productDocument(801, [
+        resolve(SearchIndexService::class)->indexProduct($this->productDocument(801, [
             'name' => 'Ultrabook Pro Max',
             'price' => 1200.0,
         ]), preserveStock: false);
 
-        $empty = app(ProductSearchService::class)->autocomplete('U');
+        $empty = resolve(ProductSearchService::class)->autocomplete('U');
         $this->assertSame([], $empty['suggestions']);
 
-        $result = app(ProductSearchService::class)->autocomplete('Ultra');
+        $result = resolve(ProductSearchService::class)->autocomplete('Ultra');
         $names = array_column($result['suggestions'], 'name');
         $this->assertContains('Ultrabook Pro Max', $names);
     }

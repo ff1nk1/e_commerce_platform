@@ -5,4 +5,4 @@
 services:
   analytic_clickhouse:
     ports:
-      - "19000:9000"
+      - "127.0.0.1:19000:9000"

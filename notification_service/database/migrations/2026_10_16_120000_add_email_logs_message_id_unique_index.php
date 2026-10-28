@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\Schema;
 
@@ -7,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('mongodb')->table('email_logs', function ($collection) {
+        Schema::connection('mongodb')->table('email_logs', function ($collection): void {
             // index($columns, $name, …) — 2nd arg is index name, not options.
             $collection->sparse_and_unique('message_id');
         });
@@ -15,7 +17,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('mongodb')->table('email_logs', function ($collection) {
+        Schema::connection('mongodb')->table('email_logs', function ($collection): void {
             $collection->dropIndexIfExists('message_id_1');
         });
     }

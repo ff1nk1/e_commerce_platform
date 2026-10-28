@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Category;
@@ -12,7 +14,7 @@ use Junges\Kafka\Facades\Kafka;
 use Tests\Concerns\UsesRedisCache;
 use Tests\TestCase;
 
-class CatalogRedisCacheTest extends TestCase
+final class CatalogRedisCacheTest extends TestCase
 {
     use RefreshDatabase;
     use UsesRedisCache;
@@ -28,7 +30,7 @@ class CatalogRedisCacheTest extends TestCase
     {
         Category::factory()->create(['name' => 'A', 'slug' => 'a']);
 
-        $service = app(CatalogService::class);
+        $service = resolve(CatalogService::class);
         $first = $service->getAllCategories();
         $this->assertCount(1, $first);
 
@@ -53,7 +55,7 @@ class CatalogRedisCacheTest extends TestCase
 
         $this->assertTrue(Cache::tags(['categories'])->has("category_tree_ids_{$parent->id}"));
 
-        app(CatalogService::class)->clearCategoryCache();
+        resolve(CatalogService::class)->clearCategoryCache();
 
         $this->assertFalse(Cache::tags(['categories'])->has("category_tree_ids_{$parent->id}"));
     }
@@ -69,7 +71,7 @@ class CatalogRedisCacheTest extends TestCase
         $this->assertTrue(Cache::tags(['products'])->has("product_{$product->id}"));
 
         // Direct DB update would leave stale cache; service update must flush
-        app(ProductService::class)->updateProduct($product, ['name' => 'New Name']);
+        resolve(ProductService::class)->updateProduct($product, ['name' => 'New Name']);
 
         $this->assertFalse(Cache::tags(['products'])->has("product_{$product->id}"));
 
@@ -86,7 +88,7 @@ class CatalogRedisCacheTest extends TestCase
         $this->getJson("/api/catalog/products/{$id}")->assertOk();
         $this->assertTrue(Cache::tags(['products'])->has("product_{$id}"));
 
-        app(ProductService::class)->deleteProduct($product);
+        resolve(ProductService::class)->deleteProduct($product);
 
         $this->assertFalse(Cache::tags(['products'])->has("product_{$id}"));
     }

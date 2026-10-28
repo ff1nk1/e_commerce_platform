@@ -1,15 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Kafka\Handlers\StockEventsHandler;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 
-class KafkaConsumeStockEvents extends AbstractKafkaConsumeCommand
+#[Description('Консьюмер Recommendation Service для stock.changed на catalog.events')]
+#[Signature('kafka:consume:stock-events')]
+final class KafkaConsumeStockEvents extends AbstractKafkaConsumeCommand
 {
-    protected $signature = 'kafka:consume:stock-events';
-
-    protected $description = 'Консьюмер Recommendation Service для stock.changed на catalog.events';
-
     protected function topics(): array
     {
         return [

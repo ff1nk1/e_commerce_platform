@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Catalog\SearchFiltersNormalizer;
 use App\Services\Llm\DTOs\SearchFilters;
 use PHPUnit\Framework\TestCase;
 
-class SearchFiltersNormalizerTest extends TestCase
+final class SearchFiltersNormalizerTest extends TestCase
 {
     public function test_defaults_in_stock_when_unset(): void
     {

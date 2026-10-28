@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Support;
 
 use Junges\Kafka\Contracts\ConsumerMessage;
@@ -32,8 +34,7 @@ final class KafkaMailMessageId
 
         $email = (string) ($body['email'] ?? '');
         $bodyHash = hash('sha256', json_encode($body, JSON_THROW_ON_ERROR));
-        $idFromBodyHash = "{$sourceTopic}:{$eventType}:{$email}:{$bodyHash}";
 
-        return $idFromBodyHash;
+        return "{$sourceTopic}:{$eventType}:{$email}:{$bodyHash}";
     }
 }

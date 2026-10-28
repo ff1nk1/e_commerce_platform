@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\Product;
@@ -8,7 +10,7 @@ use App\Services\StockService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 
-class StockSeeder extends Seeder
+final class StockSeeder extends Seeder
 {
     /**
      * Создаёт остатки для всех товаров на их store_id (как ждёт order.created / резерв).
@@ -29,7 +31,7 @@ class StockSeeder extends Seeder
         }
 
         /** @var StockService $stockService */
-        $stockService = app(StockService::class);
+        $stockService = resolve(StockService::class);
 
         foreach ($products as $index => $product) {
             // Первый товар оставляем с 0 — удобно проверить stock.reservation_failed.

@@ -1,18 +1,26 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class OutboxEvent extends Model
+#[Fillable([
+    'topic',
+    'event_type',
+    'payload',
+])]
+final class OutboxEvent extends Model
 {
-    protected $fillable = [
-        'topic',
-        'event_type',
-        'payload',
-    ];
+    use HasFactory;
 
-    protected $casts = [
-        'payload' => 'array',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'payload' => 'array',
+        ];
+    }
 }

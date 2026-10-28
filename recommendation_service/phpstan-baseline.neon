@@ -1,0 +1,115 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Parameter \#1 \$input of method App\\Services\\Chat\\RecommendationChatService\:\:chat\(\) expects array\{user_id\: int\|string, message\: string, conversation_id\?\: string\|null, store_id\?\: int\|null, store_name\?\: string\|null, category_name\?\: string\|null, in_stock\?\: bool\|null, price_min\?\: float\|null, \.\.\.\}, array\<string, mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/ChatController.php
+
+		-
+			message: '#^Class App\\Models\\Conversation uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Conversation.php
+
+		-
+			message: '#^Class App\\Models\\Message uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/Message.php
+
+		-
+			message: '#^Class App\\Models\\ProductCatalog uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/ProductCatalog.php
+
+		-
+			message: '#^Call to function is_array\(\) with \*NEVER\* will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/Catalog/ProductSearchService.php
+
+		-
+			message: '#^Empty array passed to foreach\.$#'
+			identifier: foreach.emptyArray
+			count: 1
+			path: app/Services/Catalog/ProductSearchService.php
+
+		-
+			message: '#^Offset ''name'' on \*NEVER\* on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/Catalog/ProductSearchService.php
+
+		-
+			message: '#^Offset ''value'' on \*NEVER\* on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/Catalog/ProductSearchService.php
+
+		-
+			message: '#^Parameter \#1 \$sql of method Illuminate\\Database\\Eloquent\\Builder\<App\\Models\\ProductCatalog\>\:\:whereRaw\(\) expects Illuminate\\Contracts\\Database\\Query\\Expression\|literal\-string, non\-falsy\-string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Catalog/ProductSearchService.php
+
+		-
+			message: '#^Call to function is_array\(\) with string will always evaluate to false\.$#'
+			identifier: function.impossibleType
+			count: 1
+			path: app/Services/Catalog/ProductTextBuilder.php
+
+		-
+			message: '#^Parameter \#1 \$attributes of static method App\\Services\\Chat\\CandidatePromptFormatter\:\:formatAttributes\(\) expects list\<mixed\>, array\<mixed\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Chat/CandidatePromptFormatter.php
+
+		-
+			message: '#^Parameter \#1 \$price of static method App\\Services\\Chat\\RubDisplay\:\:format\(\) expects float\|string\|null, bool\|float\|int\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Chat/CandidatePromptFormatter.php
+
+		-
+			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: config/filesystems.php
+
+		-
+			message: '#^Static property Database\\Factories\\UserFactory\:\:\$password \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: database/factories/UserFactory.php
+
+		-
+			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertStringNotContainsString\(\) expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Feature/RecommendationsApiTest.php
+
+		-
+			message: '#^Cannot access property \$attributes on App\\Models\\ProductCatalog\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/SchemaAndCleanupTest.php
+
+		-
+			message: '#^Offset ''name'' might not exist on array\{name\: string, value\: string, value_only\?\: bool\}\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Unit/AttributeResolverTest.php
+
+		-
+			message: '#^Cannot call method hasHeader\(\) on array\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Unit/GeminiLlmClientTest.php
+
+		-
+			message: '#^Cannot call method url\(\) on array\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: tests/Unit/GeminiLlmClientTest.php

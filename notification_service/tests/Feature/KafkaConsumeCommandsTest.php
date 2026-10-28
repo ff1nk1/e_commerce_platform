@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use Illuminate\Support\Facades\Artisan;
@@ -9,8 +11,14 @@ use Junges\Kafka\Facades\Kafka;
 use Mockery;
 use Tests\TestCase;
 
-class KafkaConsumeCommandsTest extends TestCase
+final class KafkaConsumeCommandsTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->mockConsoleOutput = false;
+    }
+
     protected function tearDown(): void
     {
         Mockery::close();

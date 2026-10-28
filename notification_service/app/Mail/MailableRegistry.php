@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Mail;
 
 use Illuminate\Contracts\Mail\Mailable;
 use InvalidArgumentException;
 
-class MailableRegistry
+final class MailableRegistry
 {
     /**
      * @var array<string, class-string<Mailable>>
@@ -22,9 +24,7 @@ class MailableRegistry
      */
     public function make(string $eventType, array $payload): Mailable
     {
-        if ($eventType === '' || ! isset(self::MAP[$eventType])) {
-            throw new InvalidArgumentException("Unknown notification event_type: {$eventType}");
-        }
+        throw_if($eventType === '' || ! isset(self::MAP[$eventType]), InvalidArgumentException::class, "Unknown notification event_type: {$eventType}");
 
         $class = self::MAP[$eventType];
 

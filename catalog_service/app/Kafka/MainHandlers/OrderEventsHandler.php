@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Kafka\MainHandlers;
 
 use App\Kafka\Handlers\OrderCreatedHandler;
@@ -8,7 +10,7 @@ use App\Kafka\Handlers\StockReleaseHandler;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
-class OrderEventsHandler
+final class OrderEventsHandler
 {
     public function __invoke(ConsumerMessage $message): void
     {
@@ -16,9 +18,9 @@ class OrderEventsHandler
         $eventType = $headers['event-type'] ?? null;
 
         match ($eventType) {
-            'order.created' => app(OrderCreatedHandler::class)($message),
-            'stock.release_requested' => app(StockReleaseHandler::class)($message),
-            'stock.commit_requested' => app(StockCommitHandler::class)($message),
+            'order.created' => resolve(OrderCreatedHandler::class)($message),
+            'stock.release_requested' => resolve(StockReleaseHandler::class)($message),
+            'stock.commit_requested' => resolve(StockCommitHandler::class)($message),
             default => Log::debug("Игнорируем неизвестное событие в order.events: {$eventType}"),
         };
     }

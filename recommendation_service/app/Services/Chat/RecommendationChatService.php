@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Chat;
 
 use App\Models\Conversation;
@@ -19,12 +21,12 @@ use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\DTOs\SearchFilters;
 use App\Services\Llm\Gemini\GeminiLlmClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class RecommendationChatService
+final class RecommendationChatService
 {
     private const SYSTEM_PROMPT = <<<'PROMPT'
 Ты помощник по подбору товаров в интернет-магазине.
@@ -91,8 +93,7 @@ PROMPT;
         );
 
         /** @var \Illuminate\Database\Eloquent\Collection<int, Message> $history */
-        $history = $conversation->messages()
-            ->orderByDesc('created_at')
+        $history = $conversation->messages()->latest()
             ->limit(self::HISTORY_LIMIT)
             ->get(['role', 'content'])
             ->reverse()
@@ -267,7 +268,7 @@ PROMPT;
     private function resolveConversation(string $userId, ?string $conversationId): Conversation
     {
         if ($conversationId === null || $conversationId === '') {
-            $now = Carbon::now();
+            $now = Date::now();
 
             return Conversation::query()->create([
                 'user_id' => $userId,

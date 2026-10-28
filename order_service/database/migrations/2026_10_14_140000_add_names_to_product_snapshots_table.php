@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -8,7 +10,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('product_snapshots', function (Blueprint $table) {
+        Schema::table('product_snapshots', function (Blueprint $table): void {
             $table->string('store_name')->nullable()->after('store_id');
             $table->string('category_name')->nullable()->after('category_id');
             $table->string('category_slug')->nullable()->after('category_name');
@@ -17,7 +19,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('product_snapshots', function (Blueprint $table) {
+        Schema::table('product_snapshots', function (Blueprint $table): void {
             $table->dropColumn(['store_name', 'category_name', 'category_slug']);
         });
     }

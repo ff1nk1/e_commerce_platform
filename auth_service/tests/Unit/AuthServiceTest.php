@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Models\Role;
@@ -15,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 use Mockery\MockInterface;
 use Tests\TestCase;
 
-class AuthServiceTest extends TestCase
+final class AuthServiceTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -35,10 +37,10 @@ class AuthServiceTest extends TestCase
 
         $fakeJwt = 'fake.access.token';
 
-        $this->mock(JwtService::class, function (MockInterface $mock) use ($user, $fakeJwt) {
+        $this->mock(JwtService::class, function (MockInterface $mock) use ($user, $fakeJwt): void {
             $mock->shouldReceive('createAccessToken')
                 ->once()
-                ->withArgs(fn ($arg) => $arg->id === $user->id)
+                ->withArgs(fn ($arg): bool => $arg->id === $user->id)
                 ->andReturn($fakeJwt);
         });
 
@@ -46,7 +48,7 @@ class AuthServiceTest extends TestCase
         Redis::shouldReceive('sadd')->once();
         Redis::shouldReceive('expire')->once();
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => $user->email,
             'password' => 'password123',
         ]);
@@ -63,7 +65,7 @@ class AuthServiceTest extends TestCase
             'password' => Hash::make('correct_password'),
         ]);
 
-        $this->mock(JwtService::class, function (MockInterface $mock) {
+        $this->mock(JwtService::class, function (MockInterface $mock): void {
             $mock->shouldReceive('createAccessToken')->never();
         });
 
@@ -71,7 +73,7 @@ class AuthServiceTest extends TestCase
 
         $this->expectException(ValidationException::class);
 
-        app(AuthService::class)->login([
+        resolve(AuthService::class)->login([
             'email' => $user->email,
             'password' => 'wrong_password',
         ]);
@@ -81,13 +83,13 @@ class AuthServiceTest extends TestCase
     {
         $accessToken = 'some.valid.token';
 
-        $this->mock(JwtService::class, function (MockInterface $mock) use ($accessToken) {
+        $this->mock(JwtService::class, function (MockInterface $mock) use ($accessToken): void {
             $mock->shouldReceive('revokeToken')->once()->with($accessToken);
         });
 
         Redis::shouldReceive('del')->never();
 
-        app(AuthService::class)->logout($accessToken, null);
+        resolve(AuthService::class)->logout($accessToken, null);
     }
 
     public function test_logout_blacklists_refresh_token_in_redis(): void
@@ -96,7 +98,7 @@ class AuthServiceTest extends TestCase
         $refreshToken = 'refresh-token-raw-value';
         $hash = hash('sha256', $refreshToken);
 
-        $this->mock(JwtService::class, function (MockInterface $mock) use ($accessToken) {
+        $this->mock(JwtService::class, function (MockInterface $mock) use ($accessToken): void {
             $mock->shouldReceive('revokeToken')->once()->with($accessToken);
         });
 
@@ -110,7 +112,7 @@ class AuthServiceTest extends TestCase
             ->with("refresh_token:{$hash}")
             ->andReturn(3600);
 
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($hash) {
+        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($hash): void {
             $mock->shouldReceive('blacklistRefreshToken')
                 ->once()
                 ->with($hash, 3600);
@@ -124,13 +126,13 @@ class AuthServiceTest extends TestCase
             ->once()
             ->with('user_refresh_tokens:42', $hash);
 
-        app(AuthService::class)->logout($accessToken, $refreshToken);
+        resolve(AuthService::class)->logout($accessToken, $refreshToken);
     }
 
     public function test_refresh_tokens_returns_null_for_missing_token(): void
     {
-        $this->assertNull(app(AuthService::class)->refreshTokens(null));
-        $this->assertNull(app(AuthService::class)->refreshTokens(''));
+        $this->assertNull(resolve(AuthService::class)->refreshTokens(null));
+        $this->assertNull(resolve(AuthService::class)->refreshTokens(''));
     }
 
     public function test_refresh_tokens_returns_null_when_blacklisted(): void
@@ -138,14 +140,14 @@ class AuthServiceTest extends TestCase
         $refresh = 'used-refresh';
         $hash = hash('sha256', $refresh);
 
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($hash) {
+        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($hash): void {
             $mock->shouldReceive('isRefreshTokenBlacklisted')
                 ->once()
                 ->with($hash)
                 ->andReturn(true);
         });
 
-        $this->assertNull(app(AuthService::class)->refreshTokens($refresh));
+        $this->assertNull(resolve(AuthService::class)->refreshTokens($refresh));
     }
 
     public function test_refresh_tokens_returns_null_when_unknown(): void
@@ -153,7 +155,7 @@ class AuthServiceTest extends TestCase
         $refresh = 'unknown-refresh';
         $hash = hash('sha256', $refresh);
 
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($hash) {
+        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($hash): void {
             $mock->shouldReceive('isRefreshTokenBlacklisted')
                 ->once()
                 ->with($hash)
@@ -165,7 +167,7 @@ class AuthServiceTest extends TestCase
             ->with("refresh_token:{$hash}")
             ->andReturn(null);
 
-        $this->assertNull(app(AuthService::class)->refreshTokens($refresh));
+        $this->assertNull(resolve(AuthService::class)->refreshTokens($refresh));
     }
 
     public function test_blacklist_refresh_token_uses_fallback_ttl_when_redis_ttl_non_positive(): void
@@ -178,6 +180,6 @@ class AuthServiceTest extends TestCase
             ->once()
             ->with("refresh_token:blacklist:{$hash}", '1', 120);
 
-        app(TokenBlacklistService::class)->blacklistRefreshToken($hash, -1);
+        resolve(TokenBlacklistService::class)->blacklistRefreshToken($hash, -1);
     }
 }

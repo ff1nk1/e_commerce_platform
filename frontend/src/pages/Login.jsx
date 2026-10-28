@@ -1,41 +1,46 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { login } from '../api/auth'
-import PageShell from '../components/PageShell'
-import Button from '../components/Button'
-import '../styles/auth.css'
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { login } from "../api/auth";
+import PageShell from "../components/PageShell";
+import Button from "../components/Button";
+import "../styles/auth.css";
 
 export default function Login() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [errors, setErrors] = useState({})
-  const [processing, setProcessing] = useState(false)
-  const navigate = useNavigate()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState({});
+  const [processing, setProcessing] = useState(false);
+  const navigate = useNavigate();
 
   const submit = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
 
-    setProcessing(true)
-    setErrors({})
+    setProcessing(true);
+    setErrors({});
 
     try {
-      await login(email, password)
-      navigate('/profile')
+      await login(email, password);
+      navigate("/profile");
     } catch (error) {
       if (error.response?.status === 422) {
-        setErrors(error.response.data.errors ?? {})
+        setErrors(error.response.data.errors ?? {});
       } else {
         setErrors({
-          email: 'Ошибка при авторизации',
-        })
+          email: "Ошибка при авторизации",
+        });
       }
     } finally {
-      setProcessing(false)
+      setProcessing(false);
     }
-  }
+  };
 
   return (
-    <PageShell className="page-auth" cardClassName="auth-card" title="Welcome back" subtitle="Sign in to your account">
+    <PageShell
+      className="page-auth"
+      cardClassName="auth-card"
+      title="Welcome back"
+      subtitle="Sign in to your account"
+    >
       <form onSubmit={submit} className="auth-form">
         <div className="form-group">
           <label htmlFor="email">Email</label>
@@ -64,13 +69,15 @@ export default function Login() {
           />
           {errors.password && (
             <span className="error">
-              {Array.isArray(errors.password) ? errors.password[0] : errors.password}
+              {Array.isArray(errors.password)
+                ? errors.password[0]
+                : errors.password}
             </span>
           )}
         </div>
 
         <Button type="submit" className="auth-button" disabled={processing}>
-          {processing ? 'Signing in...' : 'Sign in'}
+          {processing ? "Signing in..." : "Sign in"}
         </Button>
       </form>
 
@@ -79,5 +86,5 @@ export default function Login() {
         <Link to="/registration">Зарегистрироваться</Link>
       </div>
     </PageShell>
-  )
+  );
 }

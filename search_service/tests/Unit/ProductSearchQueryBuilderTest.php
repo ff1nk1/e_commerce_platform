@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\ProductSearchService;
@@ -9,7 +11,7 @@ use Mockery;
 use Tests\Concerns\CapturesOpenSearchRequests;
 use Tests\TestCase;
 
-class ProductSearchQueryBuilderTest extends TestCase
+final class ProductSearchQueryBuilderTest extends TestCase
 {
     use CapturesOpenSearchRequests;
 
@@ -24,7 +26,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        app(ProductSearchService::class)->search($this->searchParams([
+        resolve(ProductSearchService::class)->search($this->searchParams([
             'q' => null,
             'sort' => 'new',
         ]));
@@ -42,7 +44,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        app(ProductSearchService::class)->search($this->searchParams([
+        resolve(ProductSearchService::class)->search($this->searchParams([
             'q' => 'wireless headphones',
             'sort' => 'relevance',
         ]));
@@ -62,7 +64,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        app(ProductSearchService::class)->search($this->searchParams([
+        resolve(ProductSearchService::class)->search($this->searchParams([
             'q' => 'phone',
             'category_ids' => [3, 5],
             'min_price' => 100.0,
@@ -81,7 +83,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         $this->assertContains(['range' => ['price' => ['gte' => 100.0, 'lte' => 500.0]]], $filters);
         $this->assertContains(['term' => ['in_stock' => true]], $filters);
 
-        $nested = array_values(array_filter($filters, fn ($f) => isset($f['nested'])));
+        $nested = array_values(array_filter($filters, fn (array $f): bool => isset($f['nested'])));
         $this->assertCount(3, $nested);
 
         foreach ($nested as $clause) {
@@ -96,7 +98,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        app(ProductSearchService::class)->search($this->searchParams([
+        resolve(ProductSearchService::class)->search($this->searchParams([
             'min_price' => 50.0,
         ]));
         $this->assertContains(
@@ -104,7 +106,7 @@ class ProductSearchQueryBuilderTest extends TestCase
             $this->lastSearchBody()['post_filter']['bool']['filter']
         );
 
-        app(ProductSearchService::class)->search($this->searchParams([
+        resolve(ProductSearchService::class)->search($this->searchParams([
             'max_price' => 999.0,
         ]));
         $this->assertContains(
@@ -117,7 +119,7 @@ class ProductSearchQueryBuilderTest extends TestCase
     {
         $this->mockOpenSearchClient();
         Kafka::fake();
-        $service = app(ProductSearchService::class);
+        $service = resolve(ProductSearchService::class);
 
         $service->search($this->searchParams(['q' => 'x', 'sort' => 'relevance']));
         $this->assertSame(
@@ -158,7 +160,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        app(ProductSearchService::class)->search($this->searchParams([
+        resolve(ProductSearchService::class)->search($this->searchParams([
             'page' => 3,
             'per_page' => 15,
         ]));
@@ -173,7 +175,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        app(ProductSearchService::class)->search($this->searchParams([
+        resolve(ProductSearchService::class)->search($this->searchParams([
             'category_ids' => [1],
             'q' => 'phone',
             'sort' => 'relevance',
@@ -239,7 +241,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         ]));
         Kafka::fake();
 
-        $result = app(ProductSearchService::class)->search($this->searchParams());
+        $result = resolve(ProductSearchService::class)->search($this->searchParams());
 
         $this->assertSame([
             ['id' => 3, 'name' => 'Gadgets', 'count' => 10],
@@ -257,7 +259,7 @@ class ProductSearchQueryBuilderTest extends TestCase
     {
         $this->mockOpenSearchClient();
 
-        $result = app(ProductSearchService::class)->autocomplete('a');
+        $result = resolve(ProductSearchService::class)->autocomplete('a');
 
         $this->assertArrayHasKey('suggestions', $result);
         $this->assertCount(0, $result['suggestions']);
@@ -282,7 +284,7 @@ class ProductSearchQueryBuilderTest extends TestCase
             ],
         ]);
 
-        $result = app(ProductSearchService::class)->autocomplete('ph', 100);
+        $result = resolve(ProductSearchService::class)->autocomplete('ph', 100);
 
         $body = $this->lastSearchBody();
         $this->assertSame(20, $body['size']);
@@ -316,7 +318,7 @@ class ProductSearchQueryBuilderTest extends TestCase
         ]);
         Kafka::fake();
 
-        app(ProductSearchService::class)->search($this->searchParams([
+        resolve(ProductSearchService::class)->search($this->searchParams([
             'q' => 'laptop',
             'category_ids' => [2],
             'min_price' => 10.0,
@@ -326,7 +328,7 @@ class ProductSearchQueryBuilderTest extends TestCase
             'sort' => 'price_asc',
         ]));
 
-        Kafka::assertPublishedOn('search.events', null, function ($message) {
+        Kafka::assertPublishedOn('search.events', null, function ($message): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -356,12 +358,12 @@ class ProductSearchQueryBuilderTest extends TestCase
         ]);
         Kafka::fake();
 
-        app(ProductSearchService::class)->search($this->searchParams([
+        resolve(ProductSearchService::class)->search($this->searchParams([
             'q' => 'loadtest',
             'sort' => 'relevance',
         ]), skipAnalytics: true);
 
-        Kafka::assertPublishedOn('search.events', null, function ($message) {
+        Kafka::assertPublishedOn('search.events', null, function ($message): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -400,14 +402,14 @@ class ProductSearchQueryBuilderTest extends TestCase
 
         $logSpy = Log::spy();
 
-        $result = app(ProductSearchService::class)->search($this->searchParams(['q' => 'ok', 'sort' => 'relevance']));
+        $result = resolve(ProductSearchService::class)->search($this->searchParams(['q' => 'ok', 'sort' => 'relevance']));
 
         $this->assertSame(1, $result['products']['total']);
         $this->assertSame('Resilient', $result['products']['data'][0]['name']);
 
         $logSpy->shouldHaveReceived('error')
             ->once()
-            ->withArgs(function ($message) {
+            ->withArgs(function ($message): bool {
                 return $message === 'Kafka publish failed on search.performed';
             });
     }

@@ -2,12 +2,22 @@ package kafka
 
 import (
 	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/segmentio/kafka-go"
 )
+
+// kafkaPartition narrows a Kafka partition to int32. Partitions are small
+// non-negative ids; values outside int32 are not valid partitions.
+func kafkaPartition(partition int) int32 {
+	if partition < 0 || partition > math.MaxInt32 {
+		return 0
+	}
+	return int32(partition)
+}
 
 func headerValue(msg kafka.Message, key string) string {
 	for _, h := range msg.Headers {
@@ -98,7 +108,11 @@ func asUint64(v any) uint64 {
 }
 
 func asUint32(v any) uint32 {
-	return uint32(asUint64(v))
+	n := asUint64(v)
+	if n > math.MaxUint32 {
+		return 0
+	}
+	return uint32(n)
 }
 
 func asString(v any) string {

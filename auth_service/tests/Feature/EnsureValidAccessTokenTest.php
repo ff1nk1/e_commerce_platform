@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Role;
@@ -12,7 +14,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Tests\TestCase;
 
-class EnsureValidAccessTokenTest extends TestCase
+final class EnsureValidAccessTokenTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -32,14 +34,14 @@ class EnsureValidAccessTokenTest extends TestCase
 
     public function test_expired_access_token_is_silently_refreshed_via_cookie(): void
     {
-        $role = Role::where('slug', 'customer')->first();
+        $role = Role::query()->where('slug', 'customer')->first();
         $user = User::factory()->create([
             'email' => 'silent@example.com',
             'password' => Hash::make('password123'),
             'role_id' => $role->id,
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'silent@example.com',
             'password' => 'password123',
         ]);

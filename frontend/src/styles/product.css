@@ -38,7 +38,9 @@
 .product-full-card {
   background-color: var(--color-bg-surface);
   border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
   padding: 32px;
   position: relative;
 }
@@ -56,7 +58,9 @@
 .product-price-large {
   font-size: 28px;
   font-weight: 700;
-  color: var(--color-accent); /* Синий цвет, как у кнопок save-button (замените на ваш основной цвет) */
+  color: var(
+    --color-accent
+  ); /* Синий цвет, как у кнопок save-button (замените на ваш основной цвет) */
   margin-bottom: 20px;
 }
 

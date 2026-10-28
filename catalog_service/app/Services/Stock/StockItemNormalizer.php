@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Stock;
 
-class StockItemNormalizer
+final class StockItemNormalizer
 {
     /**
      * Validate, merge duplicate (product_id, store_id) lines, and sort for lock order.

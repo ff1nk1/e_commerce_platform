@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Auth;
 
 use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
-class TokenCookieService
+final class TokenCookieService
 {
     private const COOKIE_FORGET_MINUTES = -2628000;
 

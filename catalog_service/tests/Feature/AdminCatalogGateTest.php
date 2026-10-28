@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -7,7 +9,7 @@ use Livewire\Features\SupportFileUploads\FileUploadConfiguration;
 use Livewire\Features\SupportFileUploads\GenerateSignedUploadUrl;
 use Tests\TestCase;
 
-class AdminCatalogGateTest extends TestCase
+final class AdminCatalogGateTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -49,7 +51,7 @@ class AdminCatalogGateTest extends TestCase
         $this->assertSame('local', config('livewire.temporary_file_upload.disk'));
         $this->assertFalse(FileUploadConfiguration::isUsingS3());
 
-        $uploadUrl = app(GenerateSignedUploadUrl::class)->forLocal();
+        $uploadUrl = resolve(GenerateSignedUploadUrl::class)->forLocal();
 
         $this->assertStringStartsWith('https://', $uploadUrl);
         $this->assertStringContainsString('/admin-catalog/livewire/upload-file', $uploadUrl);

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Services\SearchIndexService;
@@ -9,7 +11,7 @@ use OpenSearch\Client;
 use OpenSearch\Namespaces\IndicesNamespace;
 use Tests\TestCase;
 
-class SearchApiTest extends TestCase
+final class SearchApiTest extends TestCase
 {
     protected function tearDown(): void
     {
@@ -126,7 +128,7 @@ class SearchApiTest extends TestCase
             ->assertJsonPath('applied.q', 'phone');
 
         if (class_exists(Kafka::class)) {
-            Kafka::assertPublishedOn('search.events', null, function ($message) {
+            Kafka::assertPublishedOn('search.events', null, function ($message): bool {
                 return ($message->getHeaders()['event-type'] ?? null) === 'search.performed'
                     && ($message->getBody()['data']['results_count'] ?? null) === 1
                     && ($message->getBody()['data']['query'] ?? null) === 'phone';
@@ -152,7 +154,7 @@ class SearchApiTest extends TestCase
 
         $this->app->instance(Client::class, $client);
 
-        app(SearchIndexService::class)->indexProduct([
+        resolve(SearchIndexService::class)->indexProduct([
             'id' => 1,
             'name' => 'Phone',
             'store_id' => 1,

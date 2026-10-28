@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Services\Auth\AuthService;
@@ -8,7 +10,7 @@ use App\Services\Gateway\ProxyService;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class GatewayController extends Controller
+final class GatewayController extends Controller
 {
     private const RECOMMENDATION_TIMEOUT = 120;
 
@@ -48,7 +50,7 @@ class GatewayController extends Controller
 
         // Filament POST /admin-catalog/logout — revoke JWT so the panel cannot be re-entered
         // with the same cookies after the catalog clears its session.
-        $normalizedPath = rtrim(ltrim((string) $path, '/'), '/');
+        $normalizedPath = rtrim(ltrim($path, '/'), '/');
         $isLogoutPath = strtoupper($request->method()) === 'POST'
             && (
                 $request->is('admin-catalog/logout')

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Middleware;
 
 use Closure;
@@ -11,7 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
  * Gateway (or other trusted callers) must send X-Internal-Token.
  * When the config token is empty, this middleware is a no-op.
  */
-class EnsureInternalToken
+final class EnsureInternalToken
 {
     public function handle(Request $request, Closure $next): Response
     {
@@ -21,9 +23,7 @@ class EnsureInternalToken
         }
 
         $provided = (string) $request->header('X-Internal-Token', '');
-        if ($provided === '' || ! hash_equals($expected, $provided)) {
-            abort(401, 'Invalid internal token');
-        }
+        abort_if($provided === '' || ! hash_equals($expected, $provided), 401, 'Invalid internal token');
 
         return $next($request);
     }

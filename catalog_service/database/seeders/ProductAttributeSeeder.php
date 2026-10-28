@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\Product;
@@ -17,7 +19,7 @@ use Illuminate\Support\Facades\Schema;
  *   php artisan opensearch:setup --recreate --force
  * then re-run this seeder (or RepublishProductsSeeder).
  */
-class ProductAttributeSeeder extends Seeder
+final class ProductAttributeSeeder extends Seeder
 {
     /**
      * Атрибуты по имени категории (конечные ветки из ShopSeeder).
@@ -84,7 +86,7 @@ class ProductAttributeSeeder extends Seeder
     public function run(): void
     {
         Schema::disableForeignKeyConstraints();
-        ProductAttribute::truncate();
+        ProductAttribute::query()->truncate();
         Schema::enableForeignKeyConstraints();
 
         $products = Product::with('category')->get();
@@ -104,10 +106,10 @@ class ProductAttributeSeeder extends Seeder
                 ];
             }
 
-            ProductAttribute::insert($rows);
+            ProductAttribute::query()->insert($rows);
         }
 
-        $service = app(ProductService::class);
+        $service = resolve(ProductService::class);
         $service->clearProductCache();
 
         // Publish product.updated so search_service and recommendation_service reindex.

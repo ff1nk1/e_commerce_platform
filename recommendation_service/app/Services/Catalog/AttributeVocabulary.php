@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Support\SqlLike;
@@ -9,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Distinct attribute names from the local catalog index, optionally scoped by category.
  */
-class AttributeVocabulary
+final class AttributeVocabulary
 {
     public const CACHE_PREFIX = 'attr_vocab:v1:';
 

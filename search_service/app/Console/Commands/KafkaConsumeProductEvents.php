@@ -1,18 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Console\Commands\Concerns\RunsKafkaConsumer;
 use App\Kafka\Handlers\ProductEventsHandler;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-class KafkaConsumeProductEvents extends Command
+#[Description('Консьюмер Search Service для product.created / product.updated / product.deleted')]
+#[Signature('kafka:consume:product-events')]
+final class KafkaConsumeProductEvents extends Command
 {
     use RunsKafkaConsumer;
-
-    protected $signature = 'kafka:consume:product-events';
-
-    protected $description = 'Консьюмер Search Service для product.created / product.updated / product.deleted';
 
     public function handle(): int
     {

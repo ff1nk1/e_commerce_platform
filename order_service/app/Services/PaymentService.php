@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\Order;
@@ -10,7 +12,7 @@ use App\Services\Payment\FailPaymentAndReleaseStock;
 /**
  * Facade over payment use-cases (HTTP + webhook entry points).
  */
-class PaymentService
+final class PaymentService
 {
     public function __construct(
         private CreateCheckoutService $checkout,
@@ -26,6 +28,9 @@ class PaymentService
         return $this->checkout->forOrder($order, $idempotencyKey);
     }
 
+    /**
+     * @param  array<string, mixed>  $event
+     */
     public function handleWebhookEvent(array $event): void
     {
         $type = $event['type'] ?? null;

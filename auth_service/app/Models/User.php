@@ -1,8 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -20,30 +24,22 @@ use Illuminate\Notifications\Notifiable;
  *
  * @method static UserFactory factory($count = null, $state = [])
  */
-class User extends Authenticatable
+#[Fillable([
+    'name',
+    'email',
+    'password',
+    'role_id',
+    'number',
+])]
+#[Hidden([
+    'password',
+    'remember_token',
+    'deleted_password',
+])]
+final class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
-
-    /**
-     * @var list<string>
-     */
-    protected $fillable = [
-        'name',
-        'email',
-        'password',
-        'role_id',
-        'number',
-    ];
-
-    /**
-     * @var list<string>
-     */
-    protected $hidden = [
-        'password',
-        'remember_token',
-        'deleted_password',
-    ];
 
     /**
      * @return BelongsTo<Role, $this>

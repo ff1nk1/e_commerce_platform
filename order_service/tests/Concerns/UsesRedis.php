@@ -1,9 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Concerns;
 
+use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Request;
 use Throwable;
 
 trait UsesRedis
@@ -47,7 +51,7 @@ trait UsesRedis
 
     private function envNullable(string $key, ?string $default = null): ?string
     {
-        $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
+        $value = Env::get($key, Request::server($key) ?? getenv($key));
 
         if ($value === false || $value === '') {
             return $default;

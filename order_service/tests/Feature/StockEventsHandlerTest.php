@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Exceptions\SagaStepBusyException;
@@ -14,7 +16,7 @@ use Mockery\MockInterface;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
-class StockEventsHandlerTest extends TestCase
+final class StockEventsHandlerTest extends TestCase
 {
     use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
@@ -41,7 +43,7 @@ class StockEventsHandlerTest extends TestCase
             'total_amount' => '10.00',
         ]);
 
-        app(StockEventsHandler::class)(
+        resolve(StockEventsHandler::class)(
             $this->message('stock.reserved', [
                 'saga_id' => $sagaId,
                 'order_id' => $order->id,
@@ -61,7 +63,7 @@ class StockEventsHandlerTest extends TestCase
             'total_amount' => '10.00',
         ]);
 
-        app(StockEventsHandler::class)(
+        resolve(StockEventsHandler::class)(
             $this->message('stock.reserved', ['order_id' => $order->id, 'status' => 'success'])
         );
 
@@ -77,7 +79,7 @@ class StockEventsHandlerTest extends TestCase
             'total_amount' => '10.00',
         ]);
 
-        app(StockEventsHandler::class)(
+        resolve(StockEventsHandler::class)(
             $this->message('stock.reserved', [
                 'saga_id' => (string) Str::uuid(),
                 'order_id' => $order->id,
@@ -100,7 +102,7 @@ class StockEventsHandlerTest extends TestCase
             'total_amount' => '10.00',
         ]);
 
-        app(StockEventsHandler::class)(
+        resolve(StockEventsHandler::class)(
             $this->message('stock.reservation_failed', [
                 'saga_id' => $sagaId,
                 'order_id' => $order->id,
@@ -134,12 +136,12 @@ class StockEventsHandlerTest extends TestCase
             'status' => 'success',
         ];
 
-        app(StockEventsHandler::class)($this->message('stock.reserved', $payload));
+        resolve(StockEventsHandler::class)($this->message('stock.reserved', $payload));
         $this->assertSame('awaiting_payment', $order->fresh()->status->value);
 
         Order::query()->whereKey($order->id)->update(['status' => 'pending']);
 
-        app(StockEventsHandler::class)($this->message('stock.reserved', $payload));
+        resolve(StockEventsHandler::class)($this->message('stock.reserved', $payload));
 
         $this->assertSame('pending', $order->fresh()->status->value);
         $this->assertSame(
@@ -161,7 +163,7 @@ class StockEventsHandlerTest extends TestCase
         $this->sagaStepLocks[$sagaId.':stock.reserved'] = true;
 
         try {
-            app(StockEventsHandler::class)(
+            resolve(StockEventsHandler::class)(
                 $this->message('stock.reserved', [
                     'saga_id' => $sagaId,
                     'order_id' => $order->id,
@@ -175,6 +177,9 @@ class StockEventsHandlerTest extends TestCase
         }
     }
 
+    /**
+     * @param  array<string, mixed>  $body
+     */
     private function message(string $eventType, array $body): ConsumerMessage&MockInterface
     {
         /** @var ConsumerMessage&MockInterface $message */

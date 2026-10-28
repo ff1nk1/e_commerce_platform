@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Models\Order;
@@ -16,7 +18,7 @@ use Tests\TestCase;
 /**
  * Webhook compensate / confirm paths with locally signed payloads (no Stripe HTTP).
  */
-class PaymentServiceWebhookUnitTest extends TestCase
+final class PaymentServiceWebhookUnitTest extends TestCase
 {
     use RefreshDatabase;
     use UsesFakeStripe;
@@ -86,7 +88,7 @@ class PaymentServiceWebhookUnitTest extends TestCase
         $this->assertSame($order->saga_id, $commit->payload['saga_id'] ?? null);
         $this->assertSame(
             SagaStepGuard::STATUS_DONE,
-            app(SagaStepGuard::class)->get($order->saga_id, 'stock.commit_requested')['status'] ?? null
+            resolve(SagaStepGuard::class)->get($order->saga_id, 'stock.commit_requested')['status'] ?? null
         );
     }
 
@@ -139,7 +141,7 @@ class PaymentServiceWebhookUnitTest extends TestCase
 
         $this->assertSame(
             'done',
-            app(SagaStepGuard::class)->get($order->saga_id, 'stock.release_requested')['status'] ?? null
+            resolve(SagaStepGuard::class)->get($order->saga_id, 'stock.release_requested')['status'] ?? null
         );
     }
 

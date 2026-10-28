@@ -1,8 +1,0 @@
-# Shared Larastan settings. Prefer ./scripts/lint-all.sh — it runs PHPStan
-# inside each Laravel service so Larastan can bootstrap the app.
-includes:
-    - vendor/larastan/larastan/extension.neon
-
-parameters:
-    level: 5
-    tmpDir: .phpstan.cache.local

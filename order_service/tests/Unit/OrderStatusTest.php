@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Domain\OrderStatus;
 use PHPUnit\Framework\TestCase;
 
-class OrderStatusTest extends TestCase
+final class OrderStatusTest extends TestCase
 {
     public function test_allowed_transitions(): void
     {

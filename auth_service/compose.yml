@@ -32,9 +32,15 @@ services:
       SESSION_DOMAIN: null
       JWT_COOKIE_DOMAIN: ""
       APP_URL: http://auth_service_app:8001
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:'.getenv('NGINX_PORT').'/up')===false?1:0);"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     depends_on:
       auth_db:
-        condition: service_started
+        condition: service_healthy
       auth_redis:
         condition: service_healthy
     networks:
@@ -45,13 +51,18 @@ services:
     container_name: auth_service_db
     restart: unless-stopped
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     environment:
       POSTGRES_DB: auth_db
       POSTGRES_USER: laravel
       POSTGRES_PASSWORD: secret
     volumes:
       - auth_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laravel -d auth_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - php_project_net
 
@@ -60,7 +71,7 @@ services:
     container_name: auth_service_redis
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - auth_redisdata:/data
     command: redis-server --appendonly yes

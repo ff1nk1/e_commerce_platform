@@ -1,18 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Services\SearchIndexService;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-class OpenSearchSetup extends Command
-{
-    protected $signature = 'opensearch:setup
+#[Description('Create OpenSearch indices used by search_service (with nested attributes + synonym analyzers)')]
+#[Signature('opensearch:setup
                             {--recreate : Delete existing products/categories indices (and aliases) then create fresh}
-                            {--force : Skip confirmation when using --recreate}';
-
-    protected $description = 'Create OpenSearch indices used by search_service (with nested attributes + synonym analyzers)';
-
+                            {--force : Skip confirmation when using --recreate}')]
+final class OpenSearchSetup extends Command
+{
     public function handle(SearchIndexService $index): int
     {
         if ($this->option('recreate')) {

@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Http\Requests\SearchProductsRequest;
 use Tests\TestCase;
 
-class SearchProductsRequestTest extends TestCase
+final class SearchProductsRequestTest extends TestCase
 {
     public function test_normalizes_scalar_and_array_category_ids(): void
     {

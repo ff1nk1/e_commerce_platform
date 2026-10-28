@@ -17,36 +17,27 @@ services:
     env_file:
       - .env
     environment:
-      # Unique hostnames on shared php_project_net
-      DB_HOST: notification_service_db
-      DB_PORT: 5432
+      # Mail log lives in Mongo. SQL is an unused Laravel skeleton, so sqlite
+      # overrides a stale .env that still says pgsql.
+      DB_CONNECTION: sqlite
+      DB_DATABASE: database/database.sqlite
+      QUEUE_CONNECTION: sync
       MONGODB_HOST: notification_service_mongodb
       MONGODB_PORT: 27017
       KAFKA_BROKERS: kafka:29092
-      MAIL_HOST: notification_service_mailhog
+      MAIL_HOST: notification_service_mailpit
       MAIL_PORT: 1025
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:'.getenv('NGINX_PORT').'/up')===false?1:0);"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     depends_on:
-      notification_db:
-        condition: service_started
       notification_mongodb:
-        condition: service_started
-      notification_mailhog:
         condition: service_healthy
-    networks:
-      - php_project_net
-
-  notification_db:
-    image: postgres:16-alpine
-    container_name: notification_service_db
-    restart: unless-stopped
-    ports:
-      - "5435:5432"
-    environment:
-      POSTGRES_DB: notification_db
-      POSTGRES_USER: laravel
-      POSTGRES_PASSWORD: secret
-    volumes:
-      - notification_pgdata:/var/lib/postgresql/data
+      notification_mailpit:
+        condition: service_healthy
     networks:
       - php_project_net
 
@@ -55,29 +46,36 @@ services:
     container_name: notification_service_mongodb
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: root
       MONGO_INITDB_DATABASE: notification_db
     volumes:
       - notification_mongodata:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--username", "root", "--password", "root", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     networks:
       - php_project_net
 
-  notification_mailhog:
-    image: mailhog/mailhog
-    container_name: notification_service_mailhog
+  notification_mailpit:
+    image: axllent/mailpit:v1.32.0
+    container_name: notification_service_mailpit
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
     networks:
       - php_project_net
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "1025"]
-      interval: 3s
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
       timeout: 3s
-      retries: 2
+      retries: 10
+      start_period: 5s
 
   notification_kafka_consumer:
     image: notification_service:local
@@ -90,22 +88,21 @@ services:
     env_file:
       - .env
     environment:
-      DB_HOST: notification_service_db
-      DB_PORT: 5432
+      DB_CONNECTION: sqlite
+      DB_DATABASE: database/database.sqlite
+      QUEUE_CONNECTION: sync
       MONGODB_HOST: notification_service_mongodb
       MONGODB_PORT: 27017
       KAFKA_BROKERS: kafka:29092
-      MAIL_HOST: notification_service_mailhog
+      MAIL_HOST: notification_service_mailpit
       MAIL_PORT: 1025
     depends_on:
       notification_app:
-        condition: service_started
+        condition: service_healthy
       notification_mongodb:
-        condition: service_started
-      notification_mailhog:
-        condition: service_started
-      notification_db:
-        condition: service_started
+        condition: service_healthy
+      notification_mailpit:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
@@ -122,27 +119,25 @@ services:
     env_file:
       - .env
     environment:
-      DB_HOST: notification_service_db
-      DB_PORT: 5432
+      DB_CONNECTION: sqlite
+      DB_DATABASE: database/database.sqlite
+      QUEUE_CONNECTION: sync
       MONGODB_HOST: notification_service_mongodb
       MONGODB_PORT: 27017
       KAFKA_BROKERS: kafka:29092
-      MAIL_HOST: notification_service_mailhog
+      MAIL_HOST: notification_service_mailpit
       MAIL_PORT: 1025
     depends_on:
       notification_app:
-        condition: service_started
+        condition: service_healthy
       notification_mongodb:
-        condition: service_started
-      notification_mailhog:
-        condition: service_started
-      notification_db:
-        condition: service_started
+        condition: service_healthy
+      notification_mailpit:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
       - php_project_net
 
 volumes:
-  notification_pgdata:
   notification_mongodata:

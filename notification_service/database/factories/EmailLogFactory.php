@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Models\EmailLog;
@@ -8,7 +10,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 /**
  * @extends Factory<EmailLog>
  */
-class EmailLogFactory extends Factory
+final class EmailLogFactory extends Factory
 {
     protected $model = EmailLog::class;
 
@@ -17,11 +19,11 @@ class EmailLogFactory extends Factory
      */
     public function definition(): array
     {
-        $email = $this->faker->unique()->safeEmail();
-        $name = $this->faker->name();
+        $email = fake()->unique()->safeEmail();
+        $name = fake()->name();
 
         return [
-            'message_id' => $this->faker->uuid(),
+            'message_id' => fake()->uuid(),
             'email' => $email,
             'name' => $name,
             'payload' => [
@@ -37,7 +39,7 @@ class EmailLogFactory extends Factory
 
     public function sent(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'status' => 'sent',
             'retries' => 1,
         ]);
@@ -45,7 +47,7 @@ class EmailLogFactory extends Factory
 
     public function failed(string $errorMessage = 'Connection timeout'): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'status' => 'failed',
             'error_message' => $errorMessage,
         ]);
@@ -53,7 +55,7 @@ class EmailLogFactory extends Factory
 
     public function dlq(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'status' => 'failed',
             'moved_to_dlq' => true,
             'retries' => 3,

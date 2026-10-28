@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Models\Message;
@@ -8,7 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
-class ConversationController extends Controller
+final class ConversationController extends Controller
 {
     public function __construct(
         private readonly RecommendationChatService $chat,
@@ -19,8 +21,7 @@ class ConversationController extends Controller
         $userId = $this->requireUserId($request);
         $conversation = $this->chat->getConversation($userId, $id);
 
-        $messages = $conversation->messages()
-            ->orderBy('created_at')
+        $messages = $conversation->messages()->oldest()
             ->get(['id', 'role', 'content', 'products', 'created_at'])
             ->map(static fn (Message $msg): array => [
                 'id' => $msg->id,
@@ -50,9 +51,7 @@ class ConversationController extends Controller
     private function requireUserId(Request $request): string
     {
         $userId = $request->input('user_id') ?? $request->query('user_id');
-        if ($userId === null || $userId === '' || is_array($userId) || is_object($userId)) {
-            abort(422, 'user_id is required');
-        }
+        abort_if($userId === null || $userId === '' || is_array($userId) || is_object($userId), 422, 'user_id is required');
 
         return (string) $userId;
     }

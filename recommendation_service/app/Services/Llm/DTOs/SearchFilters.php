@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Llm\DTOs;
 
-readonly class SearchFilters
+final readonly class SearchFilters
 {
     /**
      * @param  list<array{name: string, value: string}>  $attributes  Soft preferences (re-rank only)
@@ -128,7 +130,6 @@ readonly class SearchFilters
     {
         return new self(
             storeId: $this->storeId,
-            storeName: null,
             categoryName: $this->categoryName,
             inStock: $this->inStock,
             priceMin: $this->priceMin,
@@ -147,8 +148,6 @@ readonly class SearchFilters
             storeName: $this->storeName,
             categoryName: $this->categoryName,
             inStock: $this->inStock,
-            priceMin: null,
-            priceMax: null,
             query: $this->query,
             attributes: $this->attributes,
             requiredAttributes: $this->requiredAttributes,

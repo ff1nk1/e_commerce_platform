@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Services\Catalog\ValueMatchers\NumericValueMatcher;
@@ -9,7 +11,7 @@ use App\Services\Catalog\ValueMatchers\TextValueMatcher;
 /**
  * Facade: pick value-match strategy from config and compare product vs requested value.
  */
-class AttributeValueMatcher
+final class AttributeValueMatcher
 {
     public function __construct(
         private readonly ValueMatchStrategyResolver $strategies = new ValueMatchStrategyResolver,

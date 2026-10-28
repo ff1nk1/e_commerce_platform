@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Order;
@@ -10,7 +12,7 @@ use Illuminate\Support\Str;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
-class OrderCancelOutboxTest extends TestCase
+final class OrderCancelOutboxTest extends TestCase
 {
     use BindsInMemorySagaStepGuard;
     use RefreshDatabase;

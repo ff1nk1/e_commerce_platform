@@ -1,15 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Kafka\Handlers\ProductEventsHandler;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 
-class KafkaConsumeProductEvents extends AbstractKafkaConsumeCommand
+#[Description('Консьюмер Recommendation Service для product.* событий')]
+#[Signature('kafka:consume:product-events')]
+final class KafkaConsumeProductEvents extends AbstractKafkaConsumeCommand
 {
-    protected $signature = 'kafka:consume:product-events';
-
-    protected $description = 'Консьюмер Recommendation Service для product.* событий';
-
     protected function topics(): array
     {
         return [

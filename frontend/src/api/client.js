@@ -1,71 +1,71 @@
-import axios from 'axios'
-import { refreshSession } from '../auth/session'
+import axios from "axios";
+import { refreshSession } from "../auth/session";
 
-const baseURL = import.meta.env.VITE_API_URL || '/api'
+const baseURL = import.meta.env.VITE_API_URL || "/api";
 
 export const api = axios.create({
   baseURL,
-  headers: { Accept: 'application/json' },
+  headers: { Accept: "application/json" },
   withCredentials: true,
-})
+});
 
-let isRefreshing = false
-let failedQueue = []
+let isRefreshing = false;
+let failedQueue = [];
 
 function processQueue(error, token = null) {
   failedQueue.forEach((prom) => {
     if (error) {
-      prom.reject(error)
+      prom.reject(error);
     } else {
-      prom.resolve(token)
+      prom.resolve(token);
     }
-  })
-  failedQueue = []
+  });
+  failedQueue = [];
 }
 
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config
+    const originalRequest = error.config;
 
     const shouldAttemptRefresh =
       error.response?.status === 401 &&
       !!originalRequest &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes('/refresh')
+      !originalRequest.url?.includes("/refresh");
 
     if (!shouldAttemptRefresh) {
-      return Promise.reject(error)
+      return Promise.reject(error);
     }
 
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
-        failedQueue.push({ resolve, reject })
+        failedQueue.push({ resolve, reject });
       })
         .then(() => api(originalRequest))
-        .catch((err) => Promise.reject(err))
+        .catch((err) => Promise.reject(err));
     }
 
-    isRefreshing = true
-    originalRequest._retry = true
+    isRefreshing = true;
+    originalRequest._retry = true;
 
     try {
-      const refreshed = await refreshSession()
+      const refreshed = await refreshSession();
 
       if (!refreshed) {
-        processQueue(new Error('Refresh failed'), null)
-        window.location.href = '/login'
-        return Promise.reject(error)
+        processQueue(new Error("Refresh failed"), null);
+        window.location.href = "/login";
+        return Promise.reject(error);
       }
 
-      processQueue(null, 'Success')
-      return api(originalRequest)
+      processQueue(null, "Success");
+      return api(originalRequest);
     } catch (err) {
-      processQueue(err, null)
-      window.location.href = '/login'
-      return Promise.reject(err)
+      processQueue(err, null);
+      window.location.href = "/login";
+      return Promise.reject(err);
     } finally {
-      isRefreshing = false
+      isRefreshing = false;
     }
-  }
-)
+  },
+);

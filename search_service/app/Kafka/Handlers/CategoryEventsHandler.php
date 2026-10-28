@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Kafka\Handlers;
 
 use App\Kafka\Concerns\ResolvesEventType;
@@ -7,7 +9,7 @@ use App\Services\SearchIndexService;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
-class CategoryEventsHandler
+final class CategoryEventsHandler
 {
     use ResolvesEventType;
 

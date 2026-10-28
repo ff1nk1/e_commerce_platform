@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Listeners;
 
 use App\Events\ProductCreated;
@@ -10,7 +12,7 @@ use App\Models\Product;
 use App\Services\Kafka\KafkaPublisher;
 use Illuminate\Support\Facades\Log;
 
-class PublishProductToKafka
+final class PublishProductToKafka
 {
     public function __construct(
         private KafkaPublisher $kafka,

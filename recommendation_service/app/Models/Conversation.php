@@ -1,10 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
@@ -18,8 +22,15 @@ use Illuminate\Support\Carbon;
  * @property array<string, mixed>|null $active_filters
  * @property-read Collection<int, Message> $messages
  */
-class Conversation extends Model
+#[Fillable([
+    'user_id',
+    'last_activity_at',
+    'expires_at',
+    'active_filters',
+])]
+final class Conversation extends Model
 {
+    use HasFactory;
     use HasUuids;
 
     public const HARD_TTL_HOURS = 24;
@@ -28,19 +39,6 @@ class Conversation extends Model
 
     /** Physical delete only after this many minutes past expires_at (API already blocks access). */
     public const CLEANUP_GRACE_MINUTES = 5;
-
-    protected $fillable = [
-        'user_id',
-        'last_activity_at',
-        'expires_at',
-        'active_filters',
-    ];
-
-    protected $casts = [
-        'last_activity_at' => 'datetime',
-        'expires_at' => 'datetime',
-        'active_filters' => 'array',
-    ];
 
     /** @return HasMany<Message, $this> */
     public function messages(): HasMany
@@ -52,9 +50,8 @@ class Conversation extends Model
     {
         $hardCap = (new Carbon($createdAt))->addHours(self::HARD_TTL_HOURS);
         $idleCap = (new Carbon($lastActivityAt))->addMinutes(self::IDLE_TTL_MINUTES);
-        $earliestExpiry = $hardCap->lt($idleCap) ? $hardCap : $idleCap;
 
-        return $earliestExpiry;
+        return $hardCap->lt($idleCap) ? $hardCap : $idleCap;
     }
 
     public function touchActivity(?CarbonInterface $at = null): void
@@ -63,5 +60,14 @@ class Conversation extends Model
         $this->last_activity_at = $at;
         $this->expires_at = self::computeExpiresAt($this->created_at ?? $at, $at);
         $this->save();
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'last_activity_at' => 'datetime',
+            'expires_at' => 'datetime',
+            'active_filters' => 'array',
+        ];
     }
 }

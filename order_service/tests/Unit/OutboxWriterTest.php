@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Models\OutboxEvent;
@@ -7,13 +9,13 @@ use App\Services\OutboxWriter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-class OutboxWriterTest extends TestCase
+final class OutboxWriterTest extends TestCase
 {
     use RefreshDatabase;
 
     public function test_write_embeds_event_type_into_payload(): void
     {
-        $event = app(OutboxWriter::class)->write('order.events', 'order.paid', [
+        $event = resolve(OutboxWriter::class)->write('order.events', 'order.paid', [
             'order_id' => 18,
             'email' => 'buyer@example.com',
         ]);

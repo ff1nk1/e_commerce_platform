@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Services\CatalogService;
@@ -7,7 +9,7 @@ use App\Services\ProductService;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
-class DatabaseSeeder extends Seeder
+final class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
@@ -20,7 +22,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // Safety net after StockSeeder: Redis must match freshly seeded DB.
-        app(CatalogService::class)->clearCategoryCache();
-        app(ProductService::class)->clearProductCache();
+        resolve(CatalogService::class)->clearCategoryCache();
+        resolve(ProductService::class)->clearProductCache();
     }
 }

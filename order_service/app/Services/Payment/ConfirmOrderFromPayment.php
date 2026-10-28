@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Payment;
 
 use App\Contracts\PaymentGateway;
@@ -15,7 +17,7 @@ use App\Services\Stripe\StripeSessionMoney;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class ConfirmOrderFromPayment
+final class ConfirmOrderFromPayment
 {
     public function __construct(
         private OrderPayloadFactory $payloads,
@@ -41,9 +43,9 @@ class ConfirmOrderFromPayment
 
         $commitOrder = null;
 
-        DB::transaction(function () use ($session, &$commitOrder) {
+        DB::transaction(function () use ($session, &$commitOrder): void {
             $payment = StripePaymentResolver::lockForSession($session);
-            if ($payment === null || $payment->status === 'succeeded') {
+            if (! $payment instanceof Payment || $payment->status === 'succeeded') {
                 return;
             }
 
@@ -64,7 +66,7 @@ class ConfirmOrderFromPayment
             $this->applyConfirm($payment, $order, $session, $commitOrder);
         });
 
-        if ($commitOrder !== null) {
+        if ($commitOrder instanceof Order) {
             $this->stockCommit->recordSagaStep($commitOrder);
         }
     }

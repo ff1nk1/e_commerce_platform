@@ -1,17 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Events\StockChanged;
 use App\Models\Stock;
 use Illuminate\Support\Facades\DB;
 
-class StockService
+final class StockService
 {
+    /**
+     * @param  array<string, mixed>  $data
+     */
     public function createStock(array $data): Stock
     {
         return DB::transaction(function () use ($data) {
-            $stock = Stock::create([
+            $stock = Stock::query()->create([
                 'product_id' => $data['product_id'],
                 'store_id' => $data['store_id'],
                 'quantity' => (int) $data['quantity'],

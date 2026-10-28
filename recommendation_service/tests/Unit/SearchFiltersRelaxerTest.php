@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Catalog\SearchFiltersRelaxer;
 use App\Services\Llm\DTOs\SearchFilters;
 use PHPUnit\Framework\TestCase;
 
-class SearchFiltersRelaxerTest extends TestCase
+final class SearchFiltersRelaxerTest extends TestCase
 {
     public function test_drops_material_before_color(): void
     {
@@ -31,9 +33,9 @@ class SearchFiltersRelaxerTest extends TestCase
     {
         $relaxer = new SearchFiltersRelaxer;
         $filters = new SearchFilters(
-            query: 'x',
             storeName: 'Галерея',
             priceMax: 100,
+            query: 'x',
         );
 
         $step1 = $relaxer->relaxOnce($filters);

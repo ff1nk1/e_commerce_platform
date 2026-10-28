@@ -33,9 +33,15 @@ services:
       # do not set ${STRIPE_*} here: root compose has no values and would overwrite with "".
       STRIPE_SUCCESS_URL: https://app.localhost/orders/{ORDER_ID}?paid=1
       STRIPE_CANCEL_URL: https://app.localhost/orders/{ORDER_ID}?canceled=1
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:'.getenv('NGINX_PORT').'/up')===false?1:0);"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     depends_on:
       order_db:
-        condition: service_started
+        condition: service_healthy
       order_redis:
         condition: service_healthy
     networks:
@@ -46,13 +52,18 @@ services:
     container_name: order_service_db
     restart: unless-stopped
     ports:
-      - "5436:5432"
+      - "127.0.0.1:5436:5432"
     environment:
       POSTGRES_DB: order_db
       POSTGRES_USER: laravel
       POSTGRES_PASSWORD: secret
     volumes:
       - order_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laravel -d order_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - php_project_net
 
@@ -61,7 +72,7 @@ services:
     container_name: order_service_redis
     restart: unless-stopped
     ports:
-      - "6382:6379"
+      - "127.0.0.1:6382:6379"
     volumes:
       - order_redisdata:/data
     command: redis-server --appendonly yes
@@ -93,11 +104,11 @@ services:
       KAFKA_CACHE_DRIVER: array
     depends_on:
       order_app:
-        condition: service_started
+        condition: service_healthy
       order_db:
-        condition: service_started
+        condition: service_healthy
       order_redis:
-        condition: service_started
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
@@ -122,11 +133,11 @@ services:
       KAFKA_CACHE_DRIVER: array
     depends_on:
       order_app:
-        condition: service_started
+        condition: service_healthy
       order_db:
-        condition: service_started
+        condition: service_healthy
       order_redis:
-        condition: service_started
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
@@ -151,11 +162,11 @@ services:
       KAFKA_CACHE_DRIVER: array
     depends_on:
       order_app:
-        condition: service_started
+        condition: service_healthy
       order_db:
-        condition: service_started
+        condition: service_healthy
       order_redis:
-        condition: service_started
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:

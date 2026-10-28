@@ -1,11 +1,13 @@
-import { useRouteError, isRouteErrorResponse, Link } from 'react-router-dom';
-import "../styles/errors.css"
+import { useRouteError, isRouteErrorResponse, Link } from "react-router-dom";
+import "../styles/errors.css";
 
 export default function RootErrorBoundary() {
   const error = useRouteError();
 
   // Достаем статус из ошибки React Router (404) ИЛИ из Axios (403, 500)
-  const status = isRouteErrorResponse(error) ? error.status : error?.response?.status;
+  const status = isRouteErrorResponse(error)
+    ? error.status
+    : error?.response?.status;
 
   if (status === 403) {
     return (
@@ -52,10 +54,14 @@ export default function RootErrorBoundary() {
         <div className="error-badge">500</div>
         <h1 className="error-title">Что-то пошло не так</h1>
         <p className="error-description">
-          {error?.message || 'Произошла непредвиденная ошибка на стороне сервера.'}
+          {error?.message ||
+            "Произошла непредвиденная ошибка на стороне сервера."}
         </p>
         <div className="error-actions">
-          <button onClick={() => window.location.reload()} className="btn btn-primary">
+          <button
+            onClick={() => window.location.reload()}
+            className="btn btn-primary"
+          >
             Перезагрузить страницу
           </button>
         </div>

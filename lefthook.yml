@@ -1,0 +1,14 @@
+# Install: https://lefthook.dev/install/  then `lefthook install`
+pre-commit:
+  commands:
+    pint:
+      glob: "*.php"
+      run: |
+        set -euo pipefail
+        for dir in auth_service catalog_service notification_service order_service recommendation_service search_service; do
+          (cd "$dir" && ./vendor/bin/pint --dirty --config=../pint.json)
+        done
+    oxlint:
+      root: frontend
+      glob: "*.{js,jsx,ts,tsx}"
+      run: npx oxlint {staged_files}

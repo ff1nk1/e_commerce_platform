@@ -28,13 +28,19 @@ services:
       APP_URL: https://app.localhost
       SESSION_PATH: /admin-catalog
       SESSION_DOMAIN: null
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:'.getenv('NGINX_PORT').'/up')===false?1:0);"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     depends_on:
       catalog_db:
-        condition: service_started
+        condition: service_healthy
       catalog_redis:
         condition: service_healthy
       catalog_minio:
-        condition: service_started
+        condition: service_healthy
     networks:
       - php_project_net
 
@@ -43,13 +49,18 @@ services:
     container_name: catalog_service_db
     restart: unless-stopped
     ports:
-      - "5434:5432"
+      - "127.0.0.1:5434:5432"
     environment:
       POSTGRES_DB: catalog_db
       POSTGRES_USER: laravel
       POSTGRES_PASSWORD: secret
     volumes:
       - catalog_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laravel -d catalog_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - php_project_net
 
@@ -58,7 +69,7 @@ services:
     container_name: catalog_service_redis
     restart: unless-stopped
     ports:
-      - "6381:6379"
+      - "127.0.0.1:6381:6379"
     volumes:
       - catalog_redisdata:/data
     command: redis-server --appendonly yes
@@ -71,18 +82,25 @@ services:
       - php_project_net
 
   catalog_minio:
-    image: cr.yandex/mirror/minio/minio:latest
+    # Docker Hub dropped minio/minio. Pin the Yandex mirror by digest so the tag cannot float.
+    image: cr.yandex/mirror/minio/minio@sha256:6b8ba482948772c6e49edec1ee0860fb41baa10a274bff7a8fb385e45adbab32
     container_name: catalog_service_minio
     restart: unless-stopped
     ports:
-      - "9000:9000"
-      - "8999:8999"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:8999:8999"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadminpassword
     volumes:
       - catalog_minio_data:/data
     command: server /data --console-address ":8999"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     networks:
       php_project_net:
         aliases:
@@ -90,7 +108,7 @@ services:
           - catalog-minio
 
   catalog_minio_init:
-    image: cr.yandex/mirror/minio/mc:latest
+    image: cr.yandex/mirror/minio/mc@sha256:7cc5ec7a0547484742ae991ac8a735d48e469dfa395125db15e5cd7dce54912b
     container_name: catalog_service_minio_init
     depends_on:
       - catalog_minio
@@ -127,11 +145,11 @@ services:
       KAFKA_BROKERS: kafka:29092
     depends_on:
       catalog_app:
-        condition: service_started
+        condition: service_healthy
       catalog_db:
-        condition: service_started
+        condition: service_healthy
       catalog_redis:
-        condition: service_started
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:
@@ -155,9 +173,9 @@ services:
       KAFKA_BROKERS: kafka:29092
     depends_on:
       catalog_app:
-        condition: service_started
+        condition: service_healthy
       catalog_db:
-        condition: service_started
+        condition: service_healthy
       kafka:
         condition: service_healthy
     networks:

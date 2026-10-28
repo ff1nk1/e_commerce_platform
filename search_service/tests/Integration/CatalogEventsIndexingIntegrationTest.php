@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Kafka\Handlers\CategoryEventsHandler;
@@ -8,7 +10,7 @@ use App\Kafka\Handlers\StockEventsHandler;
 use App\Services\ProductSearchService;
 use OpenSearch\Client;
 
-class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
+final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 {
     /**
      * @param  array<string, mixed>  $overrides
@@ -49,9 +51,9 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
             ],
         ], 'product.created');
 
-        app(ProductEventsHandler::class)($message);
+        resolve(ProductEventsHandler::class)($message);
 
-        $result = app(ProductSearchService::class)->search($this->params([
+        $result = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Kafka Created Phone',
             'sort' => 'relevance',
         ]));
@@ -63,7 +65,7 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 
     public function test_product_updated_preserves_stock_from_index(): void
     {
-        app(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
+        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
             'event' => 'product.created',
             'data' => [
                 'id' => 9002,
@@ -75,13 +77,13 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
             ],
         ], 'product.created'));
 
-        app(StockEventsHandler::class)($this->stubConsumerMessage('stock.changed', [
+        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.changed', [
             'product_id' => 9002,
             'store_id' => 1,
             'quantity' => 8,
         ], 'catalog.events'));
 
-        app(ProductEventsHandler::class)($this->stubConsumerMessage('product.updated', [
+        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.updated', [
             'event' => 'product.updated',
             'data' => [
                 'id' => 9002,
@@ -93,7 +95,7 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
             ],
         ], 'product.updated'));
 
-        $doc = app(Client::class)->get([
+        $doc = resolve(Client::class)->get([
             'index' => config('opensearch.indices.products'),
             'id' => '9002',
         ]);
@@ -105,7 +107,7 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 
     public function test_product_deleted_event_removes_document(): void
     {
-        app(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
+        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
             'event' => 'product.created',
             'data' => [
                 'id' => 9003,
@@ -115,12 +117,12 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
             ],
         ], 'product.created'));
 
-        app(ProductEventsHandler::class)($this->stubConsumerMessage('product.deleted', [
+        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.deleted', [
             'event' => 'product.deleted',
             'data' => ['id' => 9003],
         ], 'product.deleted'));
 
-        $result = app(ProductSearchService::class)->search($this->params([
+        $result = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'To Be Deleted Via Kafka',
             'sort' => 'relevance',
         ]));
@@ -129,7 +131,7 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 
     public function test_category_updated_syncs_name_on_products(): void
     {
-        app(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
+        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
             'event' => 'product.created',
             'data' => [
                 'id' => 9004,
@@ -141,7 +143,7 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
             ],
         ], 'product.created'));
 
-        app(CategoryEventsHandler::class)($this->stubConsumerMessage('category.updated', [
+        resolve(CategoryEventsHandler::class)($this->stubConsumerMessage('category.updated', [
             'event' => 'category.updated',
             'data' => [
                 'id' => 55,
@@ -150,13 +152,13 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
             ],
         ], 'category.updated'));
 
-        $doc = app(Client::class)->get([
+        $doc = resolve(Client::class)->get([
             'index' => config('opensearch.indices.products'),
             'id' => '9004',
         ]);
         $this->assertSame('After Sync', $doc['_source']['category_name']);
 
-        $cat = app(Client::class)->get([
+        $cat = resolve(Client::class)->get([
             'index' => config('opensearch.indices.categories'),
             'id' => '55',
         ]);
@@ -165,7 +167,7 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 
     public function test_stock_changed_event_updates_availability(): void
     {
-        app(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
+        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
             'event' => 'product.created',
             'data' => [
                 'id' => 9005,
@@ -177,13 +179,13 @@ class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
             ],
         ], 'product.created'));
 
-        app(StockEventsHandler::class)($this->stubConsumerMessage('stock.changed', [
+        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.changed', [
             'product_id' => 9005,
             'store_id' => 1,
             'quantity' => 0,
         ], 'catalog.events'));
 
-        $result = app(ProductSearchService::class)->search($this->params([
+        $result = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Stock Event Product',
             'in_stock' => false,
             'sort' => 'relevance',

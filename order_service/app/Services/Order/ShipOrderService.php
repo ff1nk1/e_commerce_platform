@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Order;
 
 use App\Events\OrderShipped;
@@ -7,7 +9,7 @@ use App\Models\Order;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
-class ShipOrderService
+final class ShipOrderService
 {
     public function __construct(
         private OrderPayloadFactory $payloads,
@@ -22,9 +24,7 @@ class ShipOrderService
                 ->lockForUpdate()
                 ->first();
 
-            if ($order === null) {
-                throw new NotFoundHttpException('Order not found.');
-            }
+            throw_if($order === null, NotFoundHttpException::class, 'Order not found.');
 
             $order->assertShippable();
             $order->ship();

@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\OutboxEvent;
 
-class OutboxWriter
+final class OutboxWriter
 {
     /**
      * @param  array<string, mixed>  $payload

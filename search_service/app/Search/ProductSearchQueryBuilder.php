@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Search;
 
-class ProductSearchQueryBuilder
+final class ProductSearchQueryBuilder
 {
     private const CATEGORY_AGG_SIZE = 100;
 

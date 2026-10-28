@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Models\OutboxEvent;
 use App\Services\IdempotencyService;
 use Illuminate\Support\Str;
 
-class IdempotencyRedisIntegrationTest extends IntegrationTestCase
+final class IdempotencyRedisIntegrationTest extends IntegrationTestCase
 {
     public function test_duplicate_create_with_same_idempotency_key_writes_single_order(): void
     {
@@ -27,7 +29,7 @@ class IdempotencyRedisIntegrationTest extends IntegrationTestCase
         $this->assertSame(1, OutboxEvent::query()->where('event_type', 'order.created')->count());
         $this->assertDatabaseCount('orders', 1);
 
-        $idem = app(IdempotencyService::class);
+        $idem = resolve(IdempotencyService::class);
         $scopeKey = $idem->scopeKey('create', (int) $payload['user_id'], $clientKey);
         $cached = $idem->get($scopeKey);
         $this->assertSame(201, $cached['status'] ?? null);
@@ -37,7 +39,7 @@ class IdempotencyRedisIntegrationTest extends IntegrationTestCase
     public function test_lock_contention_returns_conflict_when_response_not_cached_yet(): void
     {
         $clientKey = 'it-lock-'.Str::uuid();
-        $idem = app(IdempotencyService::class);
+        $idem = resolve(IdempotencyService::class);
         $scopeKey = $idem->scopeKey('create', 42, $clientKey);
 
         $this->assertTrue($idem->acquireLock($scopeKey));
@@ -48,7 +50,7 @@ class IdempotencyRedisIntegrationTest extends IntegrationTestCase
         ]);
 
         // Lock held, no cached body → 409 after short wait in CreateOrderService.
-        $response->assertStatus(409);
+        $response->assertConflict();
 
         $idem->releaseLock($scopeKey);
     }

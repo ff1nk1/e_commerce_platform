@@ -1,8 +1,8 @@
-import { Link, useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext } from "react-router-dom";
 
 export default function AdminHub() {
-  const { user } = useOutletContext()
-  const isAdmin = user?.role?.slug === 'admin'
+  const { user } = useOutletContext();
+  const isAdmin = user?.role?.slug === "admin";
 
   return (
     <div className="admin-hub">
@@ -79,5 +79,5 @@ export default function AdminHub() {
         )}
       </ul>
     </div>
-  )
+  );
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers;
 
 use App\Http\Middleware\AuthenticateFromGatewayHeaders;
@@ -17,7 +19,7 @@ use Livewire\Features\SupportFileUploads\FilePreviewController;
 use Livewire\Features\SupportFileUploads\FileUploadController;
 use Livewire\Livewire;
 
-class AppServiceProvider extends ServiceProvider
+final class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
@@ -48,7 +50,7 @@ class AppServiceProvider extends ServiceProvider
 
             return User::fromGatewayHeaders(
                 (int) $userId,
-                (string) $role,
+                $role,
                 $request->header('X-User-Name'),
                 $request->header('X-User-Email'),
             );
@@ -88,7 +90,7 @@ class AppServiceProvider extends ServiceProvider
                 ->middleware(['web', AuthenticateFromGatewayHeaders::class]);
         });
 
-        $this->app->booted(function () {
+        $this->app->booted(function (): void {
             Route::post('/admin-catalog/livewire/upload-file', [FileUploadController::class, 'handle'])
                 ->middleware(['web', AuthenticateFromGatewayHeaders::class])
                 ->name('livewire.upload-file');
@@ -97,18 +99,18 @@ class AppServiceProvider extends ServiceProvider
                 ->middleware(['web', AuthenticateFromGatewayHeaders::class])
                 ->name('livewire.preview-file');
 
-            $this->app->booted(function () {
+            $this->app->booted(function (): void {
                 $routes = Route::getRoutes();
                 if (! $routes instanceof RouteCollection) {
                     return;
                 }
 
                 $upload = collect($routes->getRoutes())
-                    ->first(fn ($route) => $route->uri() === 'admin-catalog/livewire/upload-file');
+                    ->first(fn ($route): bool => $route->uri() === 'admin-catalog/livewire/upload-file');
                 $preview = collect($routes->getRoutes())
-                    ->first(fn ($route) => $route->uri() === 'admin-catalog/livewire/preview-file/{filename}');
+                    ->first(fn ($route): bool => $route->uri() === 'admin-catalog/livewire/preview-file/{filename}');
 
-                (function () use ($upload, $preview) {
+                (function () use ($upload, $preview): void {
                     /** @var RouteCollection $this */
                     if ($upload) {
                         $this->nameList['livewire.upload-file'] = $upload;

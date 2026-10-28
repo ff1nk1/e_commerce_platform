@@ -1,45 +1,45 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useCart } from '../cart/CartContext'
-import { createOrder } from '../api/orders'
-import { formatImageUrl, PLACEHOLDER_IMAGE } from '../utils/formatImageUrl'
-import '../styles/orders.css'
-import '../styles/cart.css'
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useCart } from "../cart/CartContext";
+import { createOrder } from "../api/orders";
+import { formatImageUrl, PLACEHOLDER_IMAGE } from "../utils/formatImageUrl";
+import "../styles/orders.css";
+import "../styles/cart.css";
 
 export default function Cart() {
   const { items, updateQuantity, removeItem, clear, totalCount, totalPrice } =
-    useCart()
-  const navigate = useNavigate()
-  const [checkingOut, setCheckingOut] = useState(false)
-  const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
+    useCart();
+  const navigate = useNavigate();
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   const handleCheckout = async () => {
-    if (items.length === 0 || checkingOut) return
-    setCheckingOut(true)
-    setError('')
-    setMessage('')
+    if (items.length === 0 || checkingOut) return;
+    setCheckingOut(true);
+    setError("");
+    setMessage("");
     try {
       const { data } = await createOrder(
         items.map((item) => ({
           product_id: item.product_id,
           quantity: item.quantity,
         })),
-        crypto.randomUUID()
-      )
-      clear()
-      setMessage('Заказ создан.')
-      navigate(`/orders/${data.id}`)
+        crypto.randomUUID(),
+      );
+      clear();
+      setMessage("Заказ создан.");
+      navigate(`/orders/${data.id}`);
     } catch (err) {
       const msg =
         err.response?.data?.message ||
         err.response?.data?.errors?.items?.[0] ||
-        'Не удалось создать заказ. Нужен локальный снапшот товара в order_service.'
-      setError(msg)
+        "Не удалось создать заказ. Нужен локальный снапшот товара в order_service.";
+      setError(msg);
     } finally {
-      setCheckingOut(false)
+      setCheckingOut(false);
     }
-  }
+  };
 
   return (
     <div className="orders-page">
@@ -50,7 +50,7 @@ export default function Cart() {
             <p>
               {totalCount > 0
                 ? `${totalCount} поз. · к оплате ${totalPrice.toFixed(2)} ₽`
-                : 'Добавьте товары со страницы товара'}
+                : "Добавьте товары со страницы товара"}
             </p>
           </div>
 
@@ -59,8 +59,7 @@ export default function Cart() {
 
           {items.length === 0 ? (
             <div className="orders-empty">
-              Корзина пуста.{' '}
-              <Link to="/categories">Перейти в каталог →</Link>
+              Корзина пуста. <Link to="/categories">Перейти в каталог →</Link>
             </div>
           ) : (
             <>
@@ -75,8 +74,8 @@ export default function Cart() {
                         src={formatImageUrl(item.image_url)}
                         alt={item.name}
                         onError={(e) => {
-                          e.target.onerror = null
-                          e.target.src = PLACEHOLDER_IMAGE
+                          e.target.onerror = null;
+                          e.target.src = PLACEHOLDER_IMAGE;
                         }}
                       />
                     </Link>
@@ -85,7 +84,7 @@ export default function Cart() {
                         <strong>{item.name}</strong>
                       </Link>
                       <div className="cart-item-meta">
-                        {Number(item.price).toFixed(2)} ₽ × {item.quantity} ={' '}
+                        {Number(item.price).toFixed(2)} ₽ × {item.quantity} ={" "}
                         {(Number(item.price) * item.quantity).toFixed(2)} ₽
                       </div>
                       <div className="cart-item-actions">
@@ -98,7 +97,7 @@ export default function Cart() {
                             onChange={(e) =>
                               updateQuantity(
                                 item.product_id,
-                                Math.max(1, Number(e.target.value) || 1)
+                                Math.max(1, Number(e.target.value) || 1),
                               )
                             }
                           />
@@ -135,7 +134,7 @@ export default function Cart() {
                     onClick={handleCheckout}
                     disabled={checkingOut || items.length === 0}
                   >
-                    {checkingOut ? 'Оформление...' : 'Оформить заказ'}
+                    {checkingOut ? "Оформление..." : "Оформить заказ"}
                   </button>
                 </div>
               </div>
@@ -144,5 +143,5 @@ export default function Cart() {
         </div>
       </div>
     </div>
-  )
+  );
 }

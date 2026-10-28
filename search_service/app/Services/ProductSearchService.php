@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Events\SearchPerformed;
@@ -8,7 +10,7 @@ use App\Search\ProductSearchQueryBuilder;
 use App\Search\ProductSearchResponseMapper;
 use OpenSearch\Client;
 
-class ProductSearchService
+final class ProductSearchService
 {
     private const MIN_AUTOCOMPLETE_CHARS = 2;
 

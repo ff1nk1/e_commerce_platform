@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Indexing;
 
 use App\Indexing\Concerns\DeletesOpenSearchDocuments;
@@ -7,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 use OpenSearch\Client;
 use Throwable;
 
-class ProductDocumentWriter
+final class ProductDocumentWriter
 {
     use DeletesOpenSearchDocuments;
 
@@ -174,7 +176,7 @@ class ProductDocumentWriter
     private function productExists(int $id): bool
     {
         try {
-            return (bool) $this->client->exists([
+            return $this->client->exists([
                 'index' => $this->indices->productsIndex(),
                 'id' => (string) $id,
             ]);

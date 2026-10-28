@@ -64,7 +64,7 @@ func EnsureDatabase(ctx context.Context, cfg config.Config) error {
 	if err != nil {
 		return fmt.Errorf("clickhouse open for ensure db: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	q := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", quoteIdent(cfg.ClickHouseDatabase))
 	if err := conn.Exec(ctx, q); err != nil {

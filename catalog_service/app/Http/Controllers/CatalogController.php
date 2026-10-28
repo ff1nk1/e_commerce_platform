@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CatalogFilterRequest;
@@ -12,7 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
 
-class CatalogController extends Controller
+final class CatalogController extends Controller
 {
     public function __construct(
         private CatalogService $catalogService
@@ -33,9 +35,9 @@ class CatalogController extends Controller
         $categoryProductsTtl = now()->addHours(2);
         $perPage = 20;
 
-        $data = Cache::tags(['products', 'categories'])->remember($cacheKey, $categoryProductsTtl, function () use ($request, $cat_slug, $perPage) {
+        $data = Cache::tags(['products', 'categories'])->remember($cacheKey, $categoryProductsTtl, function () use ($request, $cat_slug, $perPage): array {
             // Поиск категории тоже прячем в кэш, чтобы сэкономить 1 запрос к БД
-            $category = Category::where('slug', $cat_slug)->firstOrFail();
+            $category = Category::query()->where('slug', $cat_slug)->firstOrFail();
 
             $allIds = $category->getTreeIds();
             $category->unsetRelation('allChildren');
@@ -59,7 +61,7 @@ class CatalogController extends Controller
     // GET /api/catalog/stores/{store_id}/products
     public function show_products_by_store_id(CatalogFilterRequest $request, int $store_id): JsonResponse
     {
-        $store = Store::findOrFail($store_id);
+        $store = Store::query()->findOrFail($store_id);
 
         $query = Product::with(['store', 'category'])
             ->where('store_id', $store_id);
@@ -75,27 +77,30 @@ class CatalogController extends Controller
 
     /**
      * Приватный метод для фильтрации товаров на витрине
+     *
+     * @param  Builder<Product>  $query
+     * @return Builder<Product>
      */
     private function applyFilters(Builder $query, CatalogFilterRequest $request, ?int $storeId = null): Builder
     {
         $filters = $request->validated();
 
-        $query->when($filters['search'] ?? null, function (Builder $q, $search) {
+        $query->when($filters['search'] ?? null, function (Builder $q, $search): void {
             $q->where('name', 'like', "%{$search}%");
         });
 
-        $query->when($filters['min_price'] ?? null, function (Builder $q, $minPrice) {
+        $query->when($filters['min_price'] ?? null, function (Builder $q, $minPrice): void {
             $q->where('price', '>=', $minPrice);
         });
 
-        $query->when($filters['max_price'] ?? null, function (Builder $q, $maxPrice) {
+        $query->when($filters['max_price'] ?? null, function (Builder $q, $maxPrice): void {
             $q->where('price', '<=', $maxPrice);
         });
 
         if (($filters['status'] ?? null) === 'in_stock') {
             // Sellable qty: physical quantity minus reserved holds.
             $availableStockSql = '(stocks.quantity - stocks.reserved) > 0';
-            $query->whereExists(function ($sub) use ($storeId, $availableStockSql) {
+            $query->whereExists(function ($sub) use ($storeId, $availableStockSql): void {
                 $sub->selectRaw('1')
                     ->from('stocks')
                     ->whereColumn('stocks.product_id', 'products.id')
@@ -114,7 +119,7 @@ class CatalogController extends Controller
         match ($sort) {
             'price_asc' => $query->orderBy('price', 'asc'),
             'price_desc' => $query->orderBy('price', 'desc'),
-            default => $query->orderBy('created_at', 'desc'),
+            default => $query->latest(),
         };
 
         return $query;

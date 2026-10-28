@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Events\StockChanged;
@@ -10,7 +12,7 @@ use App\Services\Stock\StockItemNormalizer;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class StockReservationService
+final class StockReservationService
 {
     public function __construct(
         private StockItemNormalizer $normalizer,
@@ -31,12 +33,12 @@ class StockReservationService
             return ['outcome' => 'reservation_failed', 'order_id' => $orderId];
         }
 
-        return DB::transaction(function () use ($orderId, $normalized, $sagaId) {
+        return DB::transaction(function () use ($orderId, $normalized, $sagaId): array {
             /** @var list<array{0: Stock, 1: int}> $toReserve */
             $toReserve = [];
 
             foreach ($normalized as $item) {
-                $stock = Stock::where('product_id', $item['product_id'])
+                $stock = Stock::query()->where('product_id', $item['product_id'])
                     ->where('store_id', $item['store_id'])
                     ->lockForUpdate()
                     ->first();
@@ -86,7 +88,7 @@ class StockReservationService
      * @param  list<array<string, mixed>>  $items
      * @return bool true when items were valid and processed (even if some rows missing)
      */
-    public function release(int|string $orderId, array $items, ?string $sagaId = null): bool
+    public function release(int|string $orderId, array $items): bool
     {
         $normalized = $this->normalizer->normalize($items);
         if ($normalized === null) {
@@ -95,11 +97,11 @@ class StockReservationService
             return false;
         }
 
-        DB::transaction(function () use ($orderId, $normalized) {
+        DB::transaction(function () use ($orderId, $normalized): void {
             $stockChangedEvents = [];
 
             foreach ($normalized as $item) {
-                $stock = Stock::where('product_id', $item['product_id'])
+                $stock = Stock::query()->where('product_id', $item['product_id'])
                     ->where('store_id', $item['store_id'])
                     ->lockForUpdate()
                     ->first();
@@ -131,7 +133,7 @@ class StockReservationService
      * @param  list<array<string, mixed>>  $items
      * @return bool true when items were valid and processed
      */
-    public function commit(int|string $orderId, array $items, ?string $sagaId = null): bool
+    public function commit(int|string $orderId, array $items): bool
     {
         $normalized = $this->normalizer->normalize($items);
         if ($normalized === null) {
@@ -140,11 +142,11 @@ class StockReservationService
             return false;
         }
 
-        DB::transaction(function () use ($orderId, $normalized) {
+        DB::transaction(function () use ($orderId, $normalized): void {
             $stockChangedEvents = [];
 
             foreach ($normalized as $item) {
-                $stock = Stock::where('product_id', $item['product_id'])
+                $stock = Stock::query()->where('product_id', $item['product_id'])
                     ->where('store_id', $item['store_id'])
                     ->lockForUpdate()
                     ->first();

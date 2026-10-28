@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog\Contracts;
 
 use App\Services\Catalog\DTOs\CatalogFetchResult;

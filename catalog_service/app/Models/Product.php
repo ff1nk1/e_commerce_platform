@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use Database\Factories\ProductFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,34 +18,19 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property bool $is_published
  * @property-read Category|null $category
  */
-class Product extends Model
+#[Fillable([
+    'store_id',
+    'category_id',
+    'name',
+    'description',
+    'image_url',
+    'price',
+    'is_published',
+])]
+final class Product extends Model
 {
+    /** @use HasFactory<ProductFactory> */
     use HasFactory;
-
-    /**
-     * Поля, доступные для массового заполнения (Mass Assignment).
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'store_id',
-        'category_id',
-        'name',
-        'description',
-        'image_url',
-        'price',
-        'is_published',
-    ];
-
-    /**
-     * Приведение типов атрибутов.
-     *
-     * @var array<string, string>
-     */
-    protected $casts = [
-        'price' => 'decimal:2',
-        'is_published' => 'boolean',
-    ];
 
     /**
      * Магазин, которому принадлежит товар.
@@ -67,5 +56,18 @@ class Product extends Model
     public function attributes(): HasMany
     {
         return $this->hasMany(ProductAttribute::class);
+    }
+
+    /**
+     * Приведение типов атрибутов.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'price' => 'decimal:2',
+            'is_published' => 'boolean',
+        ];
     }
 }

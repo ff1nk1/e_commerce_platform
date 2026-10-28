@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Listeners;
 
 use App\Events\SearchPerformed;
 use App\Services\Kafka\KafkaPublisher;
 use Illuminate\Support\Facades\Log;
 
-class PublishSearchPerformedToKafka
+final class PublishSearchPerformedToKafka
 {
     public function __construct(
         private KafkaPublisher $kafka,

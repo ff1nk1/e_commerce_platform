@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\ProductEventsHandler;
@@ -13,7 +15,7 @@ use Tests\Fakes\FakeConsumerMessage;
 use Tests\Fakes\FakeLlmClient;
 use Tests\TestCase;
 
-class ProductKafkaHandlersTest extends TestCase
+final class ProductKafkaHandlersTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -48,7 +50,7 @@ class ProductKafkaHandlersTest extends TestCase
             topicName: 'product.created',
         );
 
-        app(ProductEventsHandler::class)($message);
+        resolve(ProductEventsHandler::class)($message);
 
         $this->assertDatabaseHas('product_catalog', [
             'product_id' => 55,
@@ -66,7 +68,7 @@ class ProductKafkaHandlersTest extends TestCase
 
     public function test_product_created_unpublished_is_stored(): void
     {
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: [
                 'event' => 'product.created',
                 'data' => [
@@ -91,7 +93,7 @@ class ProductKafkaHandlersTest extends TestCase
 
     public function test_product_updated_changes_fields_and_reembeds(): void
     {
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: [
                 'event' => 'product.created',
                 'data' => [
@@ -107,7 +109,7 @@ class ProductKafkaHandlersTest extends TestCase
         ));
         $this->assertSame(1, $this->llm->embedCalls);
 
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: [
                 'event' => 'product.updated',
                 'data' => [
@@ -135,7 +137,7 @@ class ProductKafkaHandlersTest extends TestCase
 
     public function test_product_published_upserts_new_product(): void
     {
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: [
                 'event' => 'product.published',
                 'data' => [
@@ -170,7 +172,7 @@ class ProductKafkaHandlersTest extends TestCase
             'attributes' => [],
         ]);
 
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: [
                 'event' => 'product.published',
                 'data' => ['id' => 62],
@@ -198,7 +200,7 @@ class ProductKafkaHandlersTest extends TestCase
             'attributes' => [],
         ]);
 
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: ['event' => 'product.deleted', 'data' => ['id' => 70]],
             headers: ['event-type' => 'product.deleted'],
         ));
@@ -218,7 +220,7 @@ class ProductKafkaHandlersTest extends TestCase
             'attributes' => [],
         ]);
 
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: ['event' => 'product.unpublished', 'data' => ['id' => 71, 'is_published' => false]],
             headers: ['event-type' => 'product.unpublished'],
         ));
@@ -233,7 +235,7 @@ class ProductKafkaHandlersTest extends TestCase
     {
         Log::spy();
 
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: ['event' => 'product.something', 'data' => ['id' => 1]],
             headers: ['event-type' => 'product.something'],
         ));
@@ -246,7 +248,7 @@ class ProductKafkaHandlersTest extends TestCase
     {
         Log::spy();
 
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: ['event' => 'product.created'],
             headers: ['event-type' => 'product.created'],
         ));
@@ -258,7 +260,7 @@ class ProductKafkaHandlersTest extends TestCase
     {
         Log::spy();
 
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: ['event' => 'product.created', 'data' => ['name' => 'No Id']],
             headers: ['event-type' => 'product.created'],
         ));
@@ -278,7 +280,7 @@ class ProductKafkaHandlersTest extends TestCase
             'attributes' => [],
         ]);
 
-        app(StockEventsHandler::class)(new FakeConsumerMessage(
+        resolve(StockEventsHandler::class)(new FakeConsumerMessage(
             body: ['product_id' => 80, 'store_id' => 1, 'quantity' => 0],
             headers: ['event-type' => 'stock.changed'],
             topicName: 'catalog.events',
@@ -292,7 +294,7 @@ class ProductKafkaHandlersTest extends TestCase
 
     public function test_product_updated_preserves_in_stock_when_stock_fields_absent(): void
     {
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: [
                 'event' => 'product.created',
                 'data' => [
@@ -306,7 +308,7 @@ class ProductKafkaHandlersTest extends TestCase
             headers: ['event-type' => 'product.created'],
         ));
 
-        app(StockEventsHandler::class)(new FakeConsumerMessage(
+        resolve(StockEventsHandler::class)(new FakeConsumerMessage(
             body: ['product_id' => 81, 'store_id' => 1, 'quantity' => 0],
             headers: ['event-type' => 'stock.changed'],
         ));
@@ -316,7 +318,7 @@ class ProductKafkaHandlersTest extends TestCase
             'in_stock' => false,
         ]);
 
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: [
                 'event' => 'product.updated',
                 'data' => [
@@ -339,7 +341,7 @@ class ProductKafkaHandlersTest extends TestCase
 
     public function test_stock_changed_for_unknown_product_is_noop(): void
     {
-        app(StockEventsHandler::class)(new FakeConsumerMessage(
+        resolve(StockEventsHandler::class)(new FakeConsumerMessage(
             body: ['product_id' => 9999, 'store_id' => 1, 'quantity' => 5],
             headers: ['event-type' => 'stock.changed'],
             topicName: 'catalog.events',
@@ -350,7 +352,7 @@ class ProductKafkaHandlersTest extends TestCase
 
     public function test_product_created_then_chat_returns_product(): void
     {
-        app(ProductEventsHandler::class)(new FakeConsumerMessage(
+        resolve(ProductEventsHandler::class)(new FakeConsumerMessage(
             body: [
                 'event' => 'product.created',
                 'data' => [

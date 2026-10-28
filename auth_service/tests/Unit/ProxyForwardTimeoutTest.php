@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Gateway\ProxyService;
@@ -7,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
-class ProxyForwardTimeoutTest extends TestCase
+final class ProxyForwardTimeoutTest extends TestCase
 {
     public function test_forward_accepts_custom_timeout(): void
     {
@@ -19,7 +21,7 @@ class ProxyForwardTimeoutTest extends TestCase
             'message' => 'hello',
         ]);
 
-        $response = app(ProxyService::class)->forward(
+        $response = resolve(ProxyService::class)->forward(
             $request,
             'http://recommendation.test',
             '/api/recommendations/chat',
@@ -30,7 +32,7 @@ class ProxyForwardTimeoutTest extends TestCase
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame('{"status":"ok"}', $response->getContent());
 
-        Http::assertSent(function ($httpRequest) {
+        Http::assertSent(function ($httpRequest): bool {
             return str_contains($httpRequest->url(), '/api/recommendations/chat');
         });
     }

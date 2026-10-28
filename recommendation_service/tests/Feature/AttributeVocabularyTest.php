@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\ProductCatalog;
@@ -9,7 +11,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
-class AttributeVocabularyTest extends TestCase
+final class AttributeVocabularyTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -19,7 +21,7 @@ class AttributeVocabularyTest extends TestCase
         $this->insert(1, 'Смартфоны', [['name' => 'Экран', 'value' => '6.1"'], ['name' => 'Память', 'value' => '128']]);
         $this->insert(2, 'Джинсы', [['name' => 'Размер', 'value' => '32']]);
 
-        $names = app(AttributeVocabulary::class)->namesForScope([
+        $names = resolve(AttributeVocabulary::class)->namesForScope([
             'key' => 'smartphones',
             'category_ilike' => 'Смартфон',
         ]);
@@ -31,7 +33,7 @@ class AttributeVocabularyTest extends TestCase
 
     public function test_null_scope_returns_empty(): void
     {
-        $this->assertSame([], app(AttributeVocabulary::class)->namesForScope(null));
+        $this->assertSame([], resolve(AttributeVocabulary::class)->namesForScope(null));
     }
 
     /**

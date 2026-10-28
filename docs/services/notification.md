@@ -10,10 +10,10 @@
 
 | Что | Зачем |
 |-----|--------|
-| Postgres | служебные таблицы Laravel |
+| SQLite | пустое подключение Laravel, очереди не используются |
 | MongoDB `email_logs` | статусы писем |
 | Kafka | `user.events`, `order.events`, свои DLQ |
-| Mailhog | SMTP на `1025` |
+| Mailpit | SMTP на `1025` |
 
 Другие сервисы по HTTP не вызывает. Снаружи его читает gateway.
 
@@ -21,8 +21,8 @@
 
 | Переменная | Тип | Дефолт | Обязательна |
 |------------|-----|--------|-------------|
-| `DB_HOST` | string | `notification_service_db` | да |
-| `DB_DATABASE` | string | `notification_db` | да |
+| `DB_CONNECTION` | string | `sqlite` | нет |
+| `DB_DATABASE` | string | `database/database.sqlite` | нет |
 | `MONGODB_HOST` | string | `notification_service_mongodb` | да |
 | `MONGODB_PORT` | int | `27017` | да |
 | `MONGODB_DATABASE` | string | `notification_db` | да |
@@ -32,7 +32,7 @@
 | `KAFKA_TOPIC_USER_EVENTS_DLQ` | string | `user.events.dlq` | нет |
 | `KAFKA_TOPIC_ORDER_EVENTS` | string | `order.events` | нет |
 | `KAFKA_TOPIC_ORDER_EVENTS_DLQ` | string | `order.events.dlq` | нет |
-| `MAIL_HOST` | string | `notification_service_mailhog` | да |
+| `MAIL_HOST` | string | `notification_service_mailpit` | да |
 | `MAIL_PORT` | int | `1025` | да |
 | `MAIL_FROM_ADDRESS` | string | `noreply@example.com` | нет |
 

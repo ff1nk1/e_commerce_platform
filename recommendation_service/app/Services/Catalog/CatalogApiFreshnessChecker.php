@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Services\Catalog\Contracts\CatalogProductClient;
@@ -7,7 +9,7 @@ use App\Services\Catalog\Contracts\ProductFreshnessChecker;
 use App\Services\Catalog\DTOs\SearchHit;
 use Illuminate\Support\Facades\Log;
 
-class CatalogApiFreshnessChecker implements ProductFreshnessChecker
+final class CatalogApiFreshnessChecker implements ProductFreshnessChecker
 {
     public function __construct(
         private readonly CatalogProductClient $catalog,

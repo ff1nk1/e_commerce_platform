@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Conversation;
@@ -15,7 +17,7 @@ use Illuminate\Support\Facades\Log;
 use Tests\Fakes\FakeLlmClient;
 use Tests\TestCase;
 
-class RecommendationsApiTest extends TestCase
+final class RecommendationsApiTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -112,9 +114,9 @@ class RecommendationsApiTest extends TestCase
         $this->seedProduct(1, 'Blue sneakers');
 
         $this->llm->filters = new SearchFilters(
+            priceMax: 999,
             query: 'sneakers',
             attributes: [['name' => 'Цвет', 'value' => 'синий']],
-            priceMax: 999,
         );
 
         $response = $this->postJson('/api/recommendations/chat', [
@@ -163,7 +165,9 @@ class RecommendationsApiTest extends TestCase
             ['name' => 'Цвет', 'value' => 'синий'],
             ['name' => 'Размер', 'value' => '28'],
         ], $response->json('extracted_filters.required_attributes'));
-        $this->assertSame([1], collect($response->json('products'))->pluck('product_id')->all());
+        /** @var array<int, array<string, mixed>> $products */
+        $products = $response->json('products') ?? [];
+        $this->assertSame([1], collect($products)->pluck('product_id')->all());
     }
 
     public function test_chat_keeps_products_when_extracted_attributes_do_not_match(): void
@@ -278,14 +282,16 @@ class RecommendationsApiTest extends TestCase
             'limit' => 5,
         ])->assertOk();
 
-        $this->assertSame([2], collect($response->json('products'))->pluck('product_id')->all());
+        /** @var array<int, array<string, mixed>> $products */
+        $products = $response->json('products') ?? [];
+        $this->assertSame([2], collect($products)->pluck('product_id')->all());
         $this->assertSame([['name' => 'Цвет', 'value' => 'красный']], $response->json('extracted_filters.preferred_attributes'));
     }
 
     public function test_chat_greeting_skips_catalog_search(): void
     {
         $this->seedProduct(1, 'Blue sneakers');
-        $this->llm->filters = new SearchFilters(query: null);
+        $this->llm->filters = new SearchFilters;
         $this->llm->lastChatAnswer = 'Привет! Что ищем?';
 
         $response = $this->postJson('/api/recommendations/chat', [
@@ -356,8 +362,8 @@ class RecommendationsApiTest extends TestCase
     {
         $this->seedProduct(1, 'Item', attributes: []);
         $this->llm->filters = new SearchFilters(
-            query: 'item',
             storeName: 'Чужой магазин',
+            query: 'item',
         );
 
         $response = $this->postJson('/api/recommendations/chat', [
@@ -423,7 +429,9 @@ class RecommendationsApiTest extends TestCase
             ['name' => 'Цвет', 'value' => 'синий'],
             ['name' => 'Размер', 'value' => '28'],
         ], $second->json('extracted_filters.required_attributes'));
-        $this->assertSame([1], collect($second->json('products'))->pluck('product_id')->all());
+        /** @var array<int, array<string, mixed>> $products */
+        $products = $second->json('products') ?? [];
+        $this->assertSame([1], collect($products)->pluck('product_id')->all());
         $this->assertNotEmpty($this->llm->lastExtractInput);
         $this->assertStringContainsString('Previous structured filters', $this->llm->lastExtractInput);
     }
@@ -451,7 +459,9 @@ class RecommendationsApiTest extends TestCase
         ])->assertOk();
 
         $this->assertNotEmpty($response->json('extracted_filters.relaxed'));
-        $this->assertSame([1], collect($response->json('products'))->pluck('product_id')->all());
+        /** @var array<int, array<string, mixed>> $products */
+        $products = $response->json('products') ?? [];
+        $this->assertSame([1], collect($products)->pluck('product_id')->all());
     }
 
     public function test_chat_logs_when_relevance_gate_drops_all_hits(): void
@@ -714,7 +724,7 @@ class RecommendationsApiTest extends TestCase
             'limit' => 5,
         ]);
 
-        $response->assertStatus(503)
+        $response->assertServiceUnavailable()
             ->assertJsonPath('message', 'Сервис ИИ сейчас перегружен. Попробуйте чуть позже.')
             ->assertJsonMissingPath('exception');
 

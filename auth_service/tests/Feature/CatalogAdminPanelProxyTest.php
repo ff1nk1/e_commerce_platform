@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Role;
@@ -14,7 +16,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Redis;
 use Tests\TestCase;
 
-class CatalogAdminPanelProxyTest extends TestCase
+final class CatalogAdminPanelProxyTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -36,7 +38,7 @@ class CatalogAdminPanelProxyTest extends TestCase
             '*' => Http::response('<html>catalog-admin</html>', 200, ['Content-Type' => 'text/html']),
         ]);
 
-        $adminRole = Role::where('slug', 'admin')->firstOrFail();
+        $adminRole = Role::query()->where('slug', 'admin')->firstOrFail();
         $user = User::factory()->create([
             'name' => 'Catalog Admin',
             'email' => 'admin-panel@example.com',
@@ -44,17 +46,15 @@ class CatalogAdminPanelProxyTest extends TestCase
             'role_id' => $adminRole->id,
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'admin-panel@example.com',
             'password' => 'password123',
         ]);
 
         $this->withToken($tokens['access_token'])
-            ->get('/admin-catalog')
-            ->assertOk()
-            ->assertSee('catalog-admin', false);
+            ->get('/admin-catalog')->assertOk()->assertSeeHtml('catalog-admin');
 
-        Http::assertSent(function ($request) use ($user) {
+        Http::assertSent(function ($request) use ($user): bool {
             return str_contains($request->url(), '/admin-catalog')
                 && $request->header('X-User-Id') === [(string) $user->id]
                 && $request->header('X-User-Role') === ['admin']
@@ -70,7 +70,7 @@ class CatalogAdminPanelProxyTest extends TestCase
             '*' => Http::response(['data' => []], 200, ['Content-Type' => 'application/json']),
         ]);
 
-        $adminRole = Role::where('slug', 'admin')->firstOrFail();
+        $adminRole = Role::query()->where('slug', 'admin')->firstOrFail();
         $user = User::factory()->create([
             'name' => 'Catalog Admin',
             'email' => 'admin-json@example.com',
@@ -78,7 +78,7 @@ class CatalogAdminPanelProxyTest extends TestCase
             'role_id' => $adminRole->id,
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'admin-json@example.com',
             'password' => 'password123',
         ]);
@@ -87,7 +87,7 @@ class CatalogAdminPanelProxyTest extends TestCase
             ->get('/api/admin/products?per_page=20')
             ->assertOk();
 
-        Http::assertSent(function ($request) use ($user) {
+        Http::assertSent(function ($request) use ($user): bool {
             return str_contains($request->url(), '/api/admin/products')
                 && $request->header('X-User-Id') === [(string) $user->id]
                 && $request->header('X-User-Role') === ['admin']
@@ -103,14 +103,14 @@ class CatalogAdminPanelProxyTest extends TestCase
 
     public function test_catalog_admin_panel_rejects_non_admin(): void
     {
-        $customerRole = Role::where('slug', 'customer')->firstOrFail();
+        $customerRole = Role::query()->where('slug', 'customer')->firstOrFail();
         User::factory()->create([
             'email' => 'customer-panel@example.com',
             'password' => Hash::make('password123'),
             'role_id' => $customerRole->id,
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'customer-panel@example.com',
             'password' => 'password123',
         ]);
@@ -129,14 +129,14 @@ class CatalogAdminPanelProxyTest extends TestCase
             ]),
         ]);
 
-        $adminRole = Role::where('slug', 'admin')->firstOrFail();
+        $adminRole = Role::query()->where('slug', 'admin')->firstOrFail();
         User::factory()->create([
             'email' => 'admin-logout@example.com',
             'password' => Hash::make('password123'),
             'role_id' => $adminRole->id,
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'admin-logout@example.com',
             'password' => 'password123',
         ]);
@@ -145,11 +145,11 @@ class CatalogAdminPanelProxyTest extends TestCase
             ->withUnencryptedCookie('refresh_token', $tokens['refresh_token'])
             ->post('/admin-catalog/logout');
 
-        $response->assertStatus(302);
+        $response->assertFound();
         $response->assertCookieExpired('access_token');
         $response->assertCookieExpired('refresh_token');
 
-        $jwt = app(JwtService::class);
+        $jwt = resolve(JwtService::class);
         $decoded = $jwt->decode($tokens['access_token']);
         $this->assertTrue(
             Cache::has("jwt:blacklist:{$decoded->jti}"),

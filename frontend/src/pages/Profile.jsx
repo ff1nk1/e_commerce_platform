@@ -1,61 +1,67 @@
-import { useState } from 'react'
-import { useLoaderData, useNavigate } from 'react-router-dom'
-import { logout as apiLogout, updatePassword, updateProfile } from '../api/auth'
-import '../styles/profile.css'
+import { useState } from "react";
+import { useLoaderData, useNavigate } from "react-router-dom";
+import {
+  logout as apiLogout,
+  updatePassword,
+  updateProfile,
+} from "../api/auth";
+import "../styles/profile.css";
 
-const E164_PHONE_RE = /^\+[1-9]\d{9,14}$/
+const E164_PHONE_RE = /^\+[1-9]\d{9,14}$/;
 
 function normalizePhone(value) {
-  return String(value ?? '').replace(/[\s\-()]/g, '')
+  return String(value ?? "").replace(/[\s\-()]/g, "");
 }
 
 function validatePhone(value) {
-  const normalized = normalizePhone(value)
+  const normalized = normalizePhone(value);
   if (!normalized) {
-    return 'Укажите номер телефона.'
+    return "Укажите номер телефона.";
   }
   if (normalized.length > 16 || !E164_PHONE_RE.test(normalized)) {
-    return 'Номер телефона должен быть в формате E.164 (например +48123456789).'
+    return "Номер телефона должен быть в формате E.164 (например +48123456789).";
   }
-  return null
+  return null;
 }
 
 function fieldErrorMessage(error, field) {
-  const fieldErrors = error.response?.data?.errors?.[field]
+  const fieldErrors = error.response?.data?.errors?.[field];
   if (Array.isArray(fieldErrors) && fieldErrors[0]) {
-    return fieldErrors[0]
+    return fieldErrors[0];
   }
-  return error.response?.data?.message || 'Ошибка при изменении данных'
+  return error.response?.data?.message || "Ошибка при изменении данных";
 }
 
 export default function Profile() {
-  const user = useLoaderData()
-  const navigate = useNavigate()
-  const [name, setName] = useState(user?.name || '')
-  const [number, setNumber] = useState(user?.number || '')
+  const user = useLoaderData();
+  const navigate = useNavigate();
+  const [name, setName] = useState(user?.name || "");
+  const [number, setNumber] = useState(user?.number || "");
 
   // --- Добавлено: состояния для смены пароля ---
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordStatus, setPasswordStatus] = useState({ message: '', type: '' });
+  const [passwordStatus, setPasswordStatus] = useState({
+    message: "",
+    type: "",
+  });
   // ---------------------------------------------
 
-
   const [loadingField, setLoadingField] = useState(null);
-  const [status, setStatus] = useState({ message: '', type: '' });
+  const [status, setStatus] = useState({ message: "", type: "" });
 
   const handleUpdate = async (field, value) => {
-    setStatus({ message: '', type: '' });
+    setStatus({ message: "", type: "" });
 
-    if (field === 'number') {
-      const phoneError = validatePhone(value)
+    if (field === "number") {
+      const phoneError = validatePhone(value);
       if (phoneError) {
-        setStatus({ message: phoneError, type: 'error' });
-        return
+        setStatus({ message: phoneError, type: "error" });
+        return;
       }
-      value = normalizePhone(value)
-      setNumber(value)
+      value = normalizePhone(value);
+      setNumber(value);
     }
 
     setLoadingField(field);
@@ -63,18 +69,18 @@ export default function Profile() {
     try {
       // Используем твой api, он сам подставит baseURL, куки и токены (withCredentials: true)
       // Если бэкенд вернет 401, твой интерсептор сам обновит сессию и повторит этот запрос!
-      const response = await updateProfile(field, value)
-      const saved = response?.data?.user?.[field]
-      if (field === 'number' && typeof saved === 'string') {
-        setNumber(saved)
+      const response = await updateProfile(field, value);
+      const saved = response?.data?.user?.[field];
+      if (field === "number" && typeof saved === "string") {
+        setNumber(saved);
       }
-      if (field === 'name' && typeof saved === 'string') {
-        setName(saved)
+      if (field === "name" && typeof saved === "string") {
+        setName(saved);
       }
 
-      setStatus({ message: 'Данные успешно обновлены!', type: 'success' });
+      setStatus({ message: "Данные успешно обновлены!", type: "success" });
     } catch (error) {
-      setStatus({ message: fieldErrorMessage(error, field), type: 'error' });
+      setStatus({ message: fieldErrorMessage(error, field), type: "error" });
     } finally {
       setLoadingField(null);
     }
@@ -83,12 +89,13 @@ export default function Profile() {
   // --- Отредактировано: выход из аккаунта ---
   const logout = async () => {
     try {
-      await apiLogout()
+      await apiLogout();
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Ошибка при выходе из аккаунта'
-      console.warn(errorMessage)
+      const errorMessage =
+        error.response?.data?.message || "Ошибка при выходе из аккаунта";
+      console.warn(errorMessage);
     } finally {
-      navigate('/login', { replace: true })
+      navigate("/login", { replace: true });
     }
   };
   // -------------------------------------------
@@ -96,34 +103,37 @@ export default function Profile() {
   // --- Добавлено: функция смены пароля ---
   const handleChangePassword = async () => {
     setPasswordLoading(true);
-    setPasswordStatus({ message: '', type: '' });
+    setPasswordStatus({ message: "", type: "" });
 
     try {
       await updatePassword({
         current_password: currentPassword,
         new_password: newPassword,
-      })
+      });
 
-      setPasswordStatus({ message: 'Пароль успешно изменён!', type: 'success' });
-      setCurrentPassword('');
-      setNewPassword('');
+      setPasswordStatus({
+        message: "Пароль успешно изменён!",
+        type: "success",
+      });
+      setCurrentPassword("");
+      setNewPassword("");
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Ошибка при смене пароля';
-      setPasswordStatus({ message: errorMessage, type: 'error' });
+      const errorMessage =
+        error.response?.data?.message || "Ошибка при смене пароля";
+      setPasswordStatus({ message: errorMessage, type: "error" });
     } finally {
       setPasswordLoading(false);
     }
   };
   // ---------------------------------------
 
-  if (!user) return null
+  if (!user) return null;
 
-  const avatarInitial = (name || user.email || 'U').charAt(0).toUpperCase()
+  const avatarInitial = (name || user.email || "U").charAt(0).toUpperCase();
 
   return (
     <div className="profile-page">
       <div className="profile-card">
-
         {/* --- Добавлено: кнопка выхода в углу --- */}
         <button
           className="logout-button"
@@ -132,7 +142,16 @@ export default function Profile() {
           aria-label="Выйти из аккаунта"
         >
           {/* Иконка "выход" (стрелка из двери). Можно заменить на свой SVG или текст "→]" */}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
@@ -144,7 +163,7 @@ export default function Profile() {
         <div className="profile-header">
           <div className="profile-avatar">{avatarInitial}</div>
           <div className="profile-title-group">
-            <h1>{name || 'Профиль'}</h1>
+            <h1>{name || "Профиль"}</h1>
             <p>{user.email}</p>
           </div>
         </div>
@@ -177,10 +196,10 @@ export default function Profile() {
               />
               <button
                 className="save-button"
-                onClick={() => handleUpdate('name', name)}
-                disabled={loadingField === 'name'}
+                onClick={() => handleUpdate("name", name)}
+                disabled={loadingField === "name"}
               >
-                {loadingField === 'name' ? 'Сохранение...' : 'Изменить'}
+                {loadingField === "name" ? "Сохранение..." : "Изменить"}
               </button>
             </div>
           </div>
@@ -198,17 +217,19 @@ export default function Profile() {
               />
               <button
                 className="save-button"
-                onClick={() => handleUpdate('number', number)}
-                disabled={loadingField === 'number'}
+                onClick={() => handleUpdate("number", number)}
+                disabled={loadingField === "number"}
               >
-                {loadingField === 'number' ? 'Сохранение...' : 'Изменить'}
+                {loadingField === "number" ? "Сохранение..." : "Изменить"}
               </button>
             </div>
           </div>
         </div>
 
-        <div className="profile-form" style={{ marginTop: '24px' }}>
-          <h2 style={{ marginBottom: '12px', fontSize: '18px' }}>Смена пароля</h2>
+        <div className="profile-form" style={{ marginTop: "24px" }}>
+          <h2 style={{ marginBottom: "12px", fontSize: "18px" }}>
+            Смена пароля
+          </h2>
 
           {passwordStatus.message && (
             <div className={`status-message ${passwordStatus.type}`}>
@@ -246,12 +267,11 @@ export default function Profile() {
                 onClick={handleChangePassword}
                 disabled={passwordLoading || !currentPassword || !newPassword}
               >
-                {passwordLoading ? 'Сохранение...' : 'Изменить пароль'}
+                {passwordLoading ? "Сохранение..." : "Изменить пароль"}
               </button>
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );

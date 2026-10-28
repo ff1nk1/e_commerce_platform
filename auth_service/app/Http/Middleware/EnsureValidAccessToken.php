@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Middleware;
 
 use App\Models\User;
@@ -18,7 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
  * Also sets the api guard user from cookie/bearer (via JwtService) so auth:api works
  * without a separate cookie→Authorization middleware.
  */
-class EnsureValidAccessToken
+final class EnsureValidAccessToken
 {
     public function __construct(
         private AuthService $authService,
@@ -30,7 +32,7 @@ class EnsureValidAccessToken
     {
         $user = $this->jwtService->userFromRequest($request);
 
-        if ($user) {
+        if ($user instanceof User) {
             $this->setApiUser($user);
 
             return $next($request);

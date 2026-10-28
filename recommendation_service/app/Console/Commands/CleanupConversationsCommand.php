@@ -1,16 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Models\Conversation;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-class CleanupConversationsCommand extends Command
+#[Description('Delete expired conversation contexts after grace period (messages cascade)')]
+#[Signature('conversations:cleanup')]
+final class CleanupConversationsCommand extends Command
 {
-    protected $signature = 'conversations:cleanup';
-
-    protected $description = 'Delete expired conversation contexts after grace period (messages cascade)';
-
     public function handle(): int
     {
         // API blocks access when expires_at <= now(); physical delete waits grace minutes

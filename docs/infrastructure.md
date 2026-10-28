@@ -11,7 +11,7 @@ docker compose logs -f catalog_kafka_order_consumer
 
 Laravel дополнительно пишет в `storage/logs` внутри каталога сервиса (том смонтирован в контейнер).
 
-Почта notification смотрится в Mailhog: [http://localhost:8025](http://localhost:8025).
+Почта notification смотрится в Mailpit: [http://localhost:8025](http://localhost:8025).
 
 ClickHouse Play слушает порт `8123` (пароль пользователя из `CLICKHOUSE_PASSWORD`).
 
@@ -47,7 +47,7 @@ docker compose up -d --build
 
 | Job | Что делает |
 |-----|------------|
-| lint | PHP 8.5, Go 1.23, `./scripts/lint-all.sh --no-fix` |
+| lint | PHP 8.5, Go 1.27.0, `./scripts/lint-all.sh --no-fix` |
 | test | `./scripts/bootstrap.sh`, подстановка секретов, `docker compose up` нужных контейнеров, `./scripts/test-all.sh` |
 | deploy | после lint и test, только не на pull request: SCP проекта на VM и SSH. `docker compose up` на VM в скрипте закомментирован |
 

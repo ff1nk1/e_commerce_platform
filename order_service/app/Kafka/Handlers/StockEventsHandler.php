@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Kafka\Handlers;
 
 use App\Contracts\SagaStepStore;
@@ -14,7 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
-class StockEventsHandler
+final class StockEventsHandler
 {
     public function __construct(
         private SagaStepStore $saga,
@@ -64,12 +66,12 @@ class StockEventsHandler
         $releaseOrder = null;
 
         $this->sagaRunner->run($sagaId, 'stock.reserved', function () use ($orderId, $sagaId, &$releaseOrder) {
-            return DB::transaction(function () use ($orderId, $sagaId, &$releaseOrder) {
+            return DB::transaction(function () use ($orderId, $sagaId, &$releaseOrder): ?array {
                 return $this->applyReserved((int) $orderId, $sagaId, $releaseOrder);
             });
         });
 
-        if ($releaseOrder !== null) {
+        if ($releaseOrder instanceof Order) {
             $this->stockRelease->recordSagaStep($releaseOrder);
         }
     }
@@ -153,8 +155,8 @@ class StockEventsHandler
             return;
         }
 
-        $this->sagaRunner->run($sagaId, 'stock.reservation_failed', function () use ($orderId, $sagaId) {
-            $applied = DB::transaction(function () use ($orderId, $sagaId) {
+        $this->sagaRunner->run($sagaId, 'stock.reservation_failed', function () use ($orderId, $sagaId): ?array {
+            $applied = DB::transaction(function () use ($orderId, $sagaId): bool {
                 return $this->applyReservationFailed((int) $orderId, $sagaId);
             });
 

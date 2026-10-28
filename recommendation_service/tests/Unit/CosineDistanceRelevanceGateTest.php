@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Models\ProductCatalog;
@@ -7,7 +9,7 @@ use App\Services\Catalog\CosineDistanceRelevanceGate;
 use App\Services\Catalog\DTOs\SearchHit;
 use PHPUnit\Framework\TestCase;
 
-class CosineDistanceRelevanceGateTest extends TestCase
+final class CosineDistanceRelevanceGateTest extends TestCase
 {
     public function test_filters_hits_above_threshold(): void
     {

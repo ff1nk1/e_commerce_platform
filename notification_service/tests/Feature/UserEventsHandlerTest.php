@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\UserEventsHandler;
@@ -15,12 +17,12 @@ use Mockery\MockInterface;
 use Tests\Fakes\FakeConsumerMessage;
 use Tests\TestCase;
 
-class UserEventsHandlerTest extends TestCase
+final class UserEventsHandlerTest extends TestCase
 {
     protected function setUp(): void
     {
         parent::setUp();
-        EmailLog::truncate();
+        EmailLog::query()->truncate();
     }
 
     protected function tearDown(): void
@@ -39,13 +41,13 @@ class UserEventsHandlerTest extends TestCase
             'user_id' => 7,
         ], 'user.registered');
 
-        app(UserEventsHandler::class)($message);
+        resolve(UserEventsHandler::class)($message);
 
         Mail::assertSent(WelcomeMail::class, function (WelcomeMail $mail) {
             return $mail->hasTo('new@example.com');
         });
 
-        $log = EmailLog::where('email', 'new@example.com')->first();
+        $log = EmailLog::query()->where('email', 'new@example.com')->first();
         $this->assertNotNull($log);
         $this->assertSame('sent', $log->status);
         $this->assertSame('user.registered', $log->event_type);
@@ -57,13 +59,13 @@ class UserEventsHandlerTest extends TestCase
         Mail::fake();
         Kafka::fake();
 
-        app(UserEventsHandler::class)($this->message([
+        resolve(UserEventsHandler::class)($this->message([
             'email' => 'x@example.com',
             'name' => 'X',
         ], 'user.updated'));
 
         Mail::assertNothingSent();
-        $this->assertSame(0, EmailLog::count());
+        $this->assertSame(0, EmailLog::query()->count());
         Kafka::assertNothingPublished();
     }
 
@@ -77,10 +79,10 @@ class UserEventsHandlerTest extends TestCase
             'name' => 'X',
         ], [], '1');
 
-        app(UserEventsHandler::class)($message);
+        resolve(UserEventsHandler::class)($message);
 
         Mail::assertNothingSent();
-        $this->assertSame(0, EmailLog::count());
+        $this->assertSame(0, EmailLog::query()->count());
         Kafka::assertNothingPublished();
     }
 
@@ -96,11 +98,11 @@ class UserEventsHandlerTest extends TestCase
             'laravel-kafka::message-id' => 'idempotent-user-1',
         ]);
 
-        app(UserEventsHandler::class)($message);
-        app(UserEventsHandler::class)($message);
+        resolve(UserEventsHandler::class)($message);
+        resolve(UserEventsHandler::class)($message);
 
         Mail::assertSent(WelcomeMail::class, 1);
-        $this->assertSame(1, EmailLog::where('message_id', 'idempotent-user-1')->count());
+        $this->assertSame(1, EmailLog::query()->where('message_id', 'idempotent-user-1')->count());
     }
 
     public function test_handler_marks_failed_and_publishes_to_dlq_after_retries_exhausted(): void
@@ -124,14 +126,14 @@ class UserEventsHandlerTest extends TestCase
         $service->shouldReceive('sleepInTest')->times($maxRetries - 1);
         $this->app->instance(MailDeliveryService::class, $service);
 
-        $handler = app(UserEventsHandler::class);
+        $handler = resolve(UserEventsHandler::class);
         $handler($this->message([
             'email' => 'dlq@example.com',
             'name' => 'DLQ User',
             'user_id' => 42,
         ], 'user.registered', '42'));
 
-        $log = EmailLog::where('email', 'dlq@example.com')->first();
+        $log = EmailLog::query()->where('email', 'dlq@example.com')->first();
         $this->assertNotNull($log);
         $this->assertEquals('failed', $log->status);
         $this->assertTrue((bool) $log->moved_to_dlq);
@@ -152,9 +154,9 @@ class UserEventsHandlerTest extends TestCase
             '1',
         );
 
-        app(UserEventsHandler::class)($message);
+        resolve(UserEventsHandler::class)($message);
 
-        $this->assertSame(0, EmailLog::count());
+        $this->assertSame(0, EmailLog::query()->count());
         Kafka::assertNothingPublished();
     }
 

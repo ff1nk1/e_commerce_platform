@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Exceptions\SagaStepBusyException;
@@ -18,7 +20,7 @@ use Tests\TestCase;
  * Handler step logic with real Redis saga guard + sqlite DB (phpunit.xml).
  * ConsumerMessage is a thin stub — not a mock of Redis/Kafka/Stripe.
  */
-class StockEventsHandlerUnitTest extends TestCase
+final class StockEventsHandlerUnitTest extends TestCase
 {
     use RefreshDatabase;
     use UsesRedis;
@@ -41,7 +43,7 @@ class StockEventsHandlerUnitTest extends TestCase
             'total_amount' => '10.00',
         ]);
 
-        app(StockEventsHandler::class)($this->message('stock.reserved', [
+        resolve(StockEventsHandler::class)($this->message('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $order->id,
             'status' => 'success',
@@ -50,7 +52,7 @@ class StockEventsHandlerUnitTest extends TestCase
         $this->assertSame('awaiting_payment', $order->fresh()->status->value);
         $this->assertSame(
             SagaStepGuard::STATUS_DONE,
-            app(SagaStepGuard::class)->get($sagaId, 'stock.reserved')['status'] ?? null
+            resolve(SagaStepGuard::class)->get($sagaId, 'stock.reserved')['status'] ?? null
         );
     }
 
@@ -78,7 +80,7 @@ class StockEventsHandlerUnitTest extends TestCase
             'unit_price' => '10.00',
         ]);
 
-        app(StockEventsHandler::class)($this->message('stock.reservation_failed', [
+        resolve(StockEventsHandler::class)($this->message('stock.reservation_failed', [
             'saga_id' => $sagaId,
             'order_id' => $order->id,
             'reason' => 'Not enough stock',
@@ -94,7 +96,7 @@ class StockEventsHandlerUnitTest extends TestCase
         $this->assertSame('stock@example.com', $event->payload['email'] ?? null);
         $this->assertSame(
             SagaStepGuard::STATUS_FAILED,
-            app(SagaStepGuard::class)->get($sagaId, 'stock.reservation_failed')['status'] ?? null
+            resolve(SagaStepGuard::class)->get($sagaId, 'stock.reservation_failed')['status'] ?? null
         );
     }
 
@@ -116,12 +118,12 @@ class StockEventsHandlerUnitTest extends TestCase
             'status' => 'success',
         ];
 
-        app(StockEventsHandler::class)($this->message('stock.reserved', $payload));
+        resolve(StockEventsHandler::class)($this->message('stock.reserved', $payload));
         $this->assertSame('awaiting_payment', $order->fresh()->status->value);
 
         Order::query()->whereKey($order->id)->update(['status' => 'pending']);
 
-        app(StockEventsHandler::class)($this->message('stock.reserved', $payload));
+        resolve(StockEventsHandler::class)($this->message('stock.reserved', $payload));
         $this->assertSame('pending', $order->fresh()->status->value);
     }
 
@@ -137,10 +139,10 @@ class StockEventsHandlerUnitTest extends TestCase
             'total_amount' => '10.00',
         ]);
 
-        app(SagaStepGuard::class)->acquire($sagaId, 'stock.reserved');
+        resolve(SagaStepGuard::class)->acquire($sagaId, 'stock.reserved');
 
         try {
-            app(StockEventsHandler::class)($this->message('stock.reserved', [
+            resolve(StockEventsHandler::class)($this->message('stock.reserved', [
                 'saga_id' => $sagaId,
                 'order_id' => $order->id,
                 'status' => 'success',
@@ -149,7 +151,7 @@ class StockEventsHandlerUnitTest extends TestCase
         } catch (SagaStepBusyException) {
             $this->assertSame('pending', $order->fresh()->status->value);
         } finally {
-            app(SagaStepGuard::class)->release($sagaId, 'stock.reserved');
+            resolve(SagaStepGuard::class)->release($sagaId, 'stock.reserved');
         }
     }
 
@@ -177,7 +179,7 @@ class StockEventsHandlerUnitTest extends TestCase
             'unit_price' => '10.00',
         ]);
 
-        app(StockEventsHandler::class)($this->message('stock.reserved', [
+        resolve(StockEventsHandler::class)($this->message('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $order->id,
             'status' => 'success',
@@ -192,11 +194,11 @@ class StockEventsHandlerUnitTest extends TestCase
         ], $release->payload['items'] ?? null);
         $this->assertSame(
             SagaStepGuard::STATUS_DONE,
-            app(SagaStepGuard::class)->get($sagaId, 'stock.reserved')['status'] ?? null
+            resolve(SagaStepGuard::class)->get($sagaId, 'stock.reserved')['status'] ?? null
         );
         $this->assertSame(
             SagaStepGuard::STATUS_DONE,
-            app(SagaStepGuard::class)->get($sagaId, 'stock.release_requested')['status'] ?? null
+            resolve(SagaStepGuard::class)->get($sagaId, 'stock.release_requested')['status'] ?? null
         );
     }
 
@@ -207,6 +209,9 @@ class StockEventsHandlerUnitTest extends TestCase
     {
         return new class($eventType, $body) implements ConsumerMessage
         {
+            /**
+             * @param  array<string, mixed>  $body
+             */
             public function __construct(
                 private string $eventType,
                 private array $body,
@@ -222,11 +227,17 @@ class StockEventsHandlerUnitTest extends TestCase
                 return 0;
             }
 
+            /**
+             * @return array<string, mixed>
+             */
             public function getHeaders(): array
             {
                 return ['event-type' => $this->eventType];
             }
 
+            /**
+             * @return array<string, mixed>
+             */
             public function getBody(): array
             {
                 return $this->body;

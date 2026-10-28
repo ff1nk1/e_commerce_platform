@@ -1,0 +1,61 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: config/filesystems.php
+
+		-
+			message: '#^Static property Database\\Factories\\UserFactory\:\:\$password \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: database/factories/UserFactory.php
+
+		-
+			message: '#^Cannot call method expectsOutputToContain\(\) on Illuminate\\Testing\\PendingCommand\|int\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Feature/CategoryEventsHandlerTest.php
+
+		-
+			message: '#^Cannot call method expectsOutputToContain\(\) on Illuminate\\Testing\\PendingCommand\|int\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Feature/ProductEventsHandlerTest.php
+
+		-
+			message: '#^Cannot call method expectsOutputToContain\(\) on Illuminate\\Testing\\PendingCommand\|int\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Feature/StockEventsHandlerTest.php
+
+		-
+			message: '#^Parameter \#1 \$params of method App\\Services\\ProductSearchService\:\:search\(\) expects array\{q\: string\|null, category_ids\: list\<int\>, min_price\: float\|null, max_price\: float\|null, in_stock\: bool\|null, attributes\: array\<string, list\<string\>\>, page\: int, per_page\: int, \.\.\.\}, array\<string, mixed\> given\.$#'
+			identifier: argument.type
+			count: 3
+			path: tests/Integration/CatalogEventsIndexingIntegrationTest.php
+
+		-
+			message: '#^Parameter \#1 \$params of method App\\Services\\ProductSearchService\:\:search\(\) expects array\{q\: string\|null, category_ids\: list\<int\>, min_price\: float\|null, max_price\: float\|null, in_stock\: bool\|null, attributes\: array\<string, list\<string\>\>, page\: int, per_page\: int, \.\.\.\}, array\<string, mixed\> given\.$#'
+			identifier: argument.type
+			count: 12
+			path: tests/Integration/OpenSearchIndexAndSearchTest.php
+
+		-
+			message: '#^Offset int\<0, max\>\|null might not exist on list\<array\<string, mixed\>\>\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Unit/ProductSearchQueryBuilderTest.php
+
+		-
+			message: '#^Possibly invalid array key type int\<0, max\>\|null\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 2
+			path: tests/Unit/ProductSearchQueryBuilderTest.php
+
+		-
+			message: '#^Possibly invalid array key type int\<0, max\>\|null\.$#'
+			identifier: offsetAccess.invalidOffset
+			count: 1
+			path: tests/Unit/SearchIndexServiceTest.php

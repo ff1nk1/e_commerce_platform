@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Chat;
 
 use App\Models\Message;
@@ -30,7 +32,7 @@ final class FilterExtractPrompt
                 if ($row->role !== Message::ROLE_USER) {
                     continue;
                 }
-                $lines[] = 'user: '.(string) $row->content;
+                $lines[] = 'user: '.$row->content;
             }
             if ($lines !== []) {
                 $parts[] = "Conversation so far (user turns):\n".implode("\n", $lines);

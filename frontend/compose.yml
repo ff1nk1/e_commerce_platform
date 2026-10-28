@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     container_name: react_frontend
     restart: unless-stopped
     # Vite only on Docker network — Traefik talks to nginx, not Vite directly
@@ -13,12 +14,12 @@ services:
       - /app/node_modules
     environment:
       VITE_API_URL: /api
-    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    command: sh -c "if [ ! -x node_modules/.bin/vite ]; then npm ci; fi && npm run dev -- --host 0.0.0.0"
     networks:
       - php_project_net
 
   frontend_nginx:
-    image: nginx:alpine
+    image: nginx:1.28.0-alpine
     container_name: frontend_nginx
     restart: unless-stopped
     volumes:
@@ -27,10 +28,3 @@ services:
       - frontend
     networks:
       - php_project_net
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=php_project_net
-      - traefik.http.routers.frontend.rule=Host(`app.localhost`)
-      - traefik.http.routers.frontend.entrypoints=web
-      - traefik.http.routers.frontend.priority=1
-      - traefik.http.services.frontend.loadbalancer.server.port=80

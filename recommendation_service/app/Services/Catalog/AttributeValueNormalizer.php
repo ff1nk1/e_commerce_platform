@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Support\RuText;
@@ -7,7 +9,7 @@ use App\Support\RuText;
 /**
  * Config-driven value normalization helpers (strip patterns / stems live in attributes.php).
  */
-class AttributeValueNormalizer
+final class AttributeValueNormalizer
 {
     public function normalizeForCompare(string $value, bool $applyStem = true): string
     {

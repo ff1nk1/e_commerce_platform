@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\Role;
 use Illuminate\Database\Seeder;
 
-class RoleSeeder extends Seeder
+final class RoleSeeder extends Seeder
 {
     /**
      * Run the database seeds.
@@ -19,10 +21,7 @@ class RoleSeeder extends Seeder
         ];
 
         foreach ($roles as $role) {
-            Role::firstOrCreate(
-                ['slug' => $role['slug']],
-                ['name' => $role['name']]
-            );
+            Role::query()->firstOrCreate(['slug' => $role['slug']], ['name' => $role['name']]);
         }
     }
 }

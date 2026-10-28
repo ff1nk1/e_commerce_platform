@@ -6,8 +6,8 @@ export default function PageShell({
   subtitle,
   headerExtra = null,
   children,
-  className = '',
-  cardClassName = '',
+  className = "",
+  cardClassName = "",
 }) {
   return (
     <div className={`page ${className}`.trim()}>
@@ -24,5 +24,5 @@ export default function PageShell({
         {children}
       </div>
     </div>
-  )
+  );
 }

@@ -10,7 +10,7 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports:
       # HTTP only on host — native 9000 stays internal (9000 used by MinIO)
-      - "8123:8123"
+      - "127.0.0.1:8123:8123"
     volumes:
       - analytic_chdata:/var/lib/clickhouse
     ulimits:

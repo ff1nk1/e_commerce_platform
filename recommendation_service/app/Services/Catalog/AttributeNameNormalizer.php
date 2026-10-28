@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Support\RuText;
@@ -7,7 +9,7 @@ use App\Support\RuText;
 /**
  * Maps LLM / user attribute names to catalog-canonical labels.
  */
-class AttributeNameNormalizer
+final class AttributeNameNormalizer
 {
     /** @var array<string, string> lowercase alias → canonical */
     private const ALIASES = [

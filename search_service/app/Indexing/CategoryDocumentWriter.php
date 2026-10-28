@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Indexing;
 
 use App\Indexing\Concerns\DeletesOpenSearchDocuments;
 use OpenSearch\Client;
 
-class CategoryDocumentWriter
+final class CategoryDocumentWriter
 {
     use DeletesOpenSearchDocuments;
 

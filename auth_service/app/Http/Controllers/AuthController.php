@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\PasswordChangeRequest;
 use App\Http\Requests\RegistrationRequest;
 use App\Http\Requests\UpdateProfileRequest;
+use App\Models\User;
 use App\Services\Auth\AuthService;
 use App\Services\Auth\TokenCookieService;
 use Illuminate\Http\JsonResponse;
@@ -13,7 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
-class AuthController extends Controller
+final class AuthController extends Controller
 {
     public function __construct(
         private AuthService $authService,
@@ -90,7 +93,7 @@ class AuthController extends Controller
         $accessToken = $this->accessTokenFromRequest($request);
 
         try {
-            $user = DB::transaction(function () use ($request, $data) {
+            $user = DB::transaction(function () use ($request, $data): User {
                 $user = $this->authService->verifyPassword($request->user(), $data['current_password']);
                 $this->authService->archivePassword($user);
                 $this->authService->setNewPassword($user, $data['new_password']);

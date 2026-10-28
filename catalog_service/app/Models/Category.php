@@ -1,29 +1,28 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use Database\Factories\CategoryFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
 
-class Category extends Model
+#[Fillable([
+    'parent_id',
+    'name',
+    'slug',
+])]
+final class Category extends Model
 {
+    /** @use HasFactory<CategoryFactory> */
     use HasFactory;
 
     private const TREE_IDS_CACHE_TTL_SECONDS = 7200;
-
-    /**
-     * Атрибуты, доступные для массового заполнения.
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'parent_id',
-        'name',
-        'slug',
-    ];
 
     /**
      * Получить родительскую категорию.
@@ -64,11 +63,13 @@ class Category extends Model
 
     /**
      * Получить ID текущей категории и всех её подкатегорий (рекурсивно)
+     *
+     * @return list<int>
      */
     public function getTreeIds(): array
     {
         // Кэшируем массив ID для каждой отдельной категории
-        return Cache::tags(['categories'])->remember("category_tree_ids_{$this->id}", self::TREE_IDS_CACHE_TTL_SECONDS, function () {
+        return Cache::tags(['categories'])->remember("category_tree_ids_{$this->id}", self::TREE_IDS_CACHE_TTL_SECONDS, function (): array {
 
             // Начинаем с ID самой категории (например, "Компьютеры")
             $ids = [$this->id];
@@ -77,7 +78,7 @@ class Category extends Model
             $this->load('allChildren');
 
             // Запускаем рекурсивную функцию для обхода дерева
-            $collectIds = function ($categories) use (&$collectIds, &$ids) {
+            $collectIds = function ($categories) use (&$collectIds, &$ids): void {
                 foreach ($categories as $category) {
                     $ids[] = $category->id; // Добавляем ID ребенка
 

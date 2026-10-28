@@ -1,14 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Filament\Resources\ProductResource;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Mockery;
 use Tests\TestCase;
 
-class PrepareProductPayloadTest extends TestCase
+final class PrepareProductPayloadTest extends TestCase
 {
     protected function tearDown(): void
     {
@@ -44,7 +47,7 @@ class PrepareProductPayloadTest extends TestCase
         $this->assertStringContainsString('/uploads/', $payload['image_url']);
         $this->assertStringEndsWith('.jpg', $payload['image_url']);
 
-        @unlink($tempPath);
+        File::delete($tempPath);
     }
 
     public function test_prepare_product_payload_keeps_existing_image_when_no_upload(): void

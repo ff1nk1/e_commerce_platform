@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers;
 
 use App\Events\CategoryCreated;
@@ -19,7 +21,7 @@ use App\Listeners\WriteStockReservationFailedOutbox;
 use App\Listeners\WriteStockReservedOutbox;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 
-class EventServiceProvider extends ServiceProvider
+final class EventServiceProvider extends ServiceProvider
 {
     /**
      * @var array<class-string, list<class-string>>

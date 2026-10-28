@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Events\CategoryCreated;
@@ -8,12 +10,14 @@ use App\Events\CategoryUpdated;
 use App\Models\Category;
 use Illuminate\Support\Facades\Cache;
 
-class CatalogService
+final class CatalogService
 {
     private const ALL_CATEGORIES_CACHE_TTL_SECONDS = 3600;
 
     /**
      * Получение всех категорий из кэша.
+     *
+     * @return list<array<string, mixed>>
      */
     public function getAllCategories(): array
     {
@@ -30,9 +34,12 @@ class CatalogService
         Cache::tags(['categories'])->flush();
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
     public function createCategory(array $data): Category
     {
-        $category = Category::create($data);
+        $category = Category::query()->create($data);
 
         $this->clearCategoryCache();
         event(new CategoryCreated($category));
@@ -40,6 +47,9 @@ class CatalogService
         return $category;
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
     public function updateCategory(Category $category, array $data): Category
     {
         $category->update($data);

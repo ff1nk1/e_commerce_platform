@@ -81,7 +81,7 @@ JWT и роли проверяет только auth. [`ProxyService`](auth_serv
 |---------|------|
 | Stripe | webhook на gateway → order |
 | Gemini | embed и ответы ассистента в recommendation |
-| Mailhog | исходящая почта notification |
+| Mailpit | исходящая почта notification |
 
 ## Документация API
 
@@ -103,7 +103,7 @@ docker compose up -d --build
 
 Laravel HTTP-контейнеры (`*_app`) слушают свои порты через **nginx + php-fpm** (общий образ `php-project-php-base:8.5`). Kafka/scheduler/outbox в тех же образах запускают `php artisan …` через CLI. Edge `frontend_nginx` / Traefik без изменений.
 
-Логи, Mailhog, ClickHouse и CI: [docs/infrastructure.md](docs/infrastructure.md).
+Логи, Mailpit, ClickHouse и CI: [docs/infrastructure.md](docs/infrastructure.md).
 
 ## Секреты (заполнить вручную)
 

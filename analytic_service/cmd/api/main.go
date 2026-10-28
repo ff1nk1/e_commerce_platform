@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,12 +16,16 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	cfg, err := config.Load()
 	if err != nil {
 		log.Error("config", "err", err)
-		os.Exit(1)
+		return 1
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -29,9 +34,9 @@ func main() {
 	conn, st, err := bootstrap.OpenStore(ctx, cfg)
 	if err != nil {
 		log.Error("bootstrap", "err", err)
-		os.Exit(1)
+		return 1
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -41,7 +46,7 @@ func main() {
 
 	go func() {
 		log.Info("analytic api listening", "addr", cfg.HTTPAddr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server", "err", err)
 			stop()
 		}
@@ -52,4 +57,5 @@ func main() {
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
 	log.Info("analytic api stopped")
+	return 0
 }

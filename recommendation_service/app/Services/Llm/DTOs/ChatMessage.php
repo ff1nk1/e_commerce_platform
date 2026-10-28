@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Llm\DTOs;
 
-readonly class ChatMessage
+final readonly class ChatMessage
 {
     public const ROLE_USER = 'user';
 

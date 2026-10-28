@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Kafka;
 
 use Junges\Kafka\Facades\Kafka;
 
-class KafkaPublisher
+final class KafkaPublisher
 {
     /**
      * @param  array<string, string>  $headers

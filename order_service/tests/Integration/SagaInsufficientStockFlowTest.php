@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Console\Commands\KafkaOutboxWorker;
@@ -10,7 +12,7 @@ use App\Services\SagaStepGuard;
 use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
 
-class SagaInsufficientStockFlowTest extends IntegrationTestCase
+final class SagaInsufficientStockFlowTest extends IntegrationTestCase
 {
     public function test_reservation_failed_cancels_order_and_publishes_cancelled(): void
     {
@@ -31,10 +33,10 @@ class SagaInsufficientStockFlowTest extends IntegrationTestCase
         $orderId = (int) $create->json('id');
         $sagaId = Order::query()->findOrFail($orderId)->saga_id;
 
-        app(KafkaOutboxWorker::class)->processBatch();
+        resolve(KafkaOutboxWorker::class)->processBatch();
 
         // Direct handler invoke (Kafka consume is flaky with live brokers/workers).
-        app(StockEventsHandler::class)($this->stubConsumerMessage('stock.reservation_failed', [
+        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.reservation_failed', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'reason' => 'Not enough stock',
@@ -43,7 +45,7 @@ class SagaInsufficientStockFlowTest extends IntegrationTestCase
         $this->assertSame('cancelled', Order::query()->findOrFail($orderId)->status->value);
         $this->assertSame(
             SagaStepGuard::STATUS_FAILED,
-            app(SagaStepGuard::class)->get($sagaId, 'stock.reservation_failed')['status'] ?? null
+            resolve(SagaStepGuard::class)->get($sagaId, 'stock.reservation_failed')['status'] ?? null
         );
 
         $cancelled = OutboxEvent::query()->where('event_type', 'order.cancelled')->first();
@@ -51,9 +53,9 @@ class SagaInsufficientStockFlowTest extends IntegrationTestCase
         $this->assertSame('insufficient_stock', $cancelled->payload['reason'] ?? null);
         $this->assertSame('scarce@example.com', $cancelled->payload['email'] ?? null);
 
-        app(KafkaOutboxWorker::class)->processBatch();
+        resolve(KafkaOutboxWorker::class)->processBatch();
 
-        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId) {
+        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -65,6 +67,6 @@ class SagaInsufficientStockFlowTest extends IntegrationTestCase
 
         $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 11], [
             'Idempotency-Key' => 'it-scarce-pay-'.Str::uuid(),
-        ])->assertStatus(422);
+        ])->assertUnprocessable();
     }
 }

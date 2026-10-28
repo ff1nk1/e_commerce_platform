@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Kafka\Handlers;
 
 use App\Services\Saga\SagaStepRunner;
@@ -9,7 +11,7 @@ use App\Support\StockSagaMessage;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
-class StockCommitHandler
+final class StockCommitHandler
 {
     public function __construct(
         private SagaStepRunner $sagaRunner,
@@ -20,7 +22,7 @@ class StockCommitHandler
     public function __invoke(ConsumerMessage $message): void
     {
         $parsed = StockSagaMessage::tryFrom($message);
-        if ($parsed === null) {
+        if (! $parsed instanceof StockSagaMessage) {
             $payload = $message->getBody();
             if (! is_array($payload)) {
                 Log::warning('Получено невалидное событие stock.commit_requested', ['payload' => $payload]);
@@ -49,7 +51,7 @@ class StockCommitHandler
         $items = $parsed->items;
         $sagaId = $parsed->sagaId;
 
-        $this->sagaRunner->run($sagaId, 'stock.commit', function () use ($orderId, $items, $sagaId) {
+        $this->sagaRunner->run($sagaId, 'stock.commit', function () use ($orderId, $items, $sagaId): ?array {
             if ($this->saga->isCompleted($sagaId, 'stock.release')) {
                 Log::info('stock.commit skipped: stock.release already completed', [
                     'order_id' => $orderId,
@@ -62,7 +64,7 @@ class StockCommitHandler
                 ];
             }
 
-            $committed = $this->reservations->commit($orderId, $items, $sagaId);
+            $committed = $this->reservations->commit($orderId, $items);
 
             if (! $committed) {
                 return null;

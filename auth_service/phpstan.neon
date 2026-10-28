@@ -1,8 +1,9 @@
 includes:
-    - ../vendor/larastan/larastan/extension.neon
+    - ../tools/phpstan/base.neon
+    - vendor/larastan/larastan/extension.neon
+    - phpstan-baseline.neon
 
 parameters:
-    level: 5
     tmpDir: ../.phpstan.cache.local/auth_service
 
     paths:

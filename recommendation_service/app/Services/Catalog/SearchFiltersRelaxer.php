@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Services\Llm\DTOs\SearchFilters;
@@ -8,7 +10,7 @@ use App\Support\RuText;
 /**
  * Progressive filter relaxation when a hard search returns no hits.
  */
-class SearchFiltersRelaxer
+final class SearchFiltersRelaxer
 {
     private const PREFERRED_DROP_ORDER = ['Материал', 'Бренд', 'Цвет'];
 

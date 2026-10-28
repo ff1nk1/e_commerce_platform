@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Catalog\AttributeConstraintDetector;
 use Tests\TestCase;
 
-class AttributeConstraintDetectorTest extends TestCase
+final class AttributeConstraintDetectorTest extends TestCase
 {
     private AttributeConstraintDetector $detector;
 

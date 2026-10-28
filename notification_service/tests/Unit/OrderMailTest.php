@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Mail\OrderCancelledMail;
@@ -7,7 +9,7 @@ use App\Mail\OrderConfirmedMail;
 use App\Mail\OrderPaidMail;
 use Tests\TestCase;
 
-class OrderMailTest extends TestCase
+final class OrderMailTest extends TestCase
 {
     public function test_order_paid_mail_subject_and_body(): void
     {

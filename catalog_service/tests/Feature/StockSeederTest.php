@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\OutboxEvent;
@@ -10,7 +12,7 @@ use Database\Seeders\StockSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-class StockSeederTest extends TestCase
+final class StockSeederTest extends TestCase
 {
     use RefreshDatabase;
 

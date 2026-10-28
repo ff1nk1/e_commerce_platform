@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Support\Env;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -23,7 +26,7 @@ abstract class TestCase extends BaseTestCase
         // auth_app often starts with JWT_SECRET="" in $_SERVER (empty .env at
         // container create). Laravel Env::get prefers $_SERVER over $_ENV, so
         // phpunit.xml force=true alone leaves config('jwt.secret') empty.
-        $jwtSecret = (string) ($_ENV['JWT_SECRET'] ?? getenv('JWT_SECRET') ?: '');
+        $jwtSecret = (string) (Env::get('JWT_SECRET', getenv('JWT_SECRET')) ?: '');
         if ($jwtSecret === '') {
             $jwtSecret = 'test-secret-key-for-phpunit-only';
         }

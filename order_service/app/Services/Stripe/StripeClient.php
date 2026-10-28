@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Stripe;
 
 use App\Contracts\PaymentGateway;
 use Illuminate\Http\Client\RequestException;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Stripe\Webhook;
@@ -50,9 +52,7 @@ class StripeClient implements PaymentGateway
     public function constructWebhookEvent(string $payload, string $signatureHeader): array
     {
         $secret = (string) config('services.stripe.webhook_secret');
-        if ($secret === '') {
-            throw new RuntimeException('STRIPE_WEBHOOK_SECRET is not configured.');
-        }
+        throw_if($secret === '', RuntimeException::class, 'STRIPE_WEBHOOK_SECRET is not configured.');
 
         if (class_exists(Webhook::class)) {
             $event = Webhook::constructEvent($payload, $signatureHeader, $secret);
@@ -63,22 +63,19 @@ class StripeClient implements PaymentGateway
         $this->verifySignature($payload, $signatureHeader, $secret);
 
         $decoded = json_decode($payload, true);
-        if (! is_array($decoded) || ! isset($decoded['type'], $decoded['data']['object'])) {
-            throw new UnexpectedValueException('Invalid Stripe webhook payload.');
-        }
+        throw_if(! is_array($decoded) || ! isset($decoded['type'], $decoded['data']['object']), UnexpectedValueException::class, 'Invalid Stripe webhook payload.');
 
         return $decoded;
     }
 
     /**
+     * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      */
     private function request(string $method, string $path, array $params = []): array
     {
         $secret = (string) config('services.stripe.secret');
-        if ($secret === '') {
-            throw new RuntimeException('STRIPE_SECRET is not configured.');
-        }
+        throw_if($secret === '', RuntimeException::class, 'STRIPE_SECRET is not configured.');
 
         $pending = Http::withToken($secret)
             ->acceptJson()
@@ -95,7 +92,7 @@ class StripeClient implements PaymentGateway
             $body = $e->response->json();
             $stripeErrorMessage = $body['error']['message'] ?? $e->getMessage();
 
-            throw new RuntimeException('Stripe API error: '.$stripeErrorMessage, previous: $e);
+            throw new RuntimeException('Stripe API error: '.$stripeErrorMessage, $e->getCode(), previous: $e);
         }
 
         /** @var array<string, mixed> $json */
@@ -123,14 +120,10 @@ class StripeClient implements PaymentGateway
             }
         }
 
-        if ($timestamp === null || $signatures === []) {
-            throw new UnexpectedValueException('Unable to extract timestamp and signatures from header');
-        }
+        throw_if($timestamp === null || $signatures === [], UnexpectedValueException::class, 'Unable to extract timestamp and signatures from header');
 
-        $eventTime = Carbon::createFromTimestamp((int) $timestamp);
-        if ($eventTime->diffInSeconds(now(), absolute: true) > self::SIGNATURE_TOLERANCE_SECONDS) {
-            throw new UnexpectedValueException('Timestamp outside the tolerance zone');
-        }
+        $eventTime = Date::createFromTimestamp((int) $timestamp);
+        throw_if($eventTime->diffInSeconds(now(), absolute: true) > self::SIGNATURE_TOLERANCE_SECONDS, UnexpectedValueException::class, 'Timestamp outside the tolerance zone');
 
         $signedPayload = $timestamp.'.'.$payload;
         $expected = hash_hmac('sha256', $signedPayload, $secret);

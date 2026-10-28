@@ -91,4 +91,4 @@ flowchart TB
 |---------|------|
 | Stripe | webhook на gateway → order |
 | Gemini | эмбеддинги и ответы ассистента в recommendation |
-| Mailhog | исходящая почта notification |
+| Mailpit | исходящая почта notification |

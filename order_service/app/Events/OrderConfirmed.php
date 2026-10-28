@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Events;
 
 use App\Contracts\Outboxable;
 use Illuminate\Foundation\Events\Dispatchable;
 
-class OrderConfirmed implements Outboxable
+final class OrderConfirmed implements Outboxable
 {
     use Dispatchable;
 

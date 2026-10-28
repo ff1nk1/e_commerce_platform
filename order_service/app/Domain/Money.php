@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Domain;
 
 use InvalidArgumentException;
@@ -20,9 +22,7 @@ final class Money
             $raw = number_format((float) $amount, 2, '.', '');
         }
 
-        if ($raw === '' || ! is_numeric($raw)) {
-            throw new InvalidArgumentException('Invalid money amount: '.$raw);
-        }
+        throw_if($raw === '' || ! is_numeric($raw), InvalidArgumentException::class, 'Invalid money amount: '.$raw);
 
         if (function_exists('bcadd')) {
             $normalized = bcadd($raw, '0', 2);

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Support\RuText;
@@ -7,7 +9,7 @@ use App\Support\RuText;
 /**
  * Maps attribute names to value-match strategy ids via config synonym groups.
  */
-class ValueMatchStrategyResolver
+final class ValueMatchStrategyResolver
 {
     public const STRATEGY_NUMERIC = 'numeric';
 

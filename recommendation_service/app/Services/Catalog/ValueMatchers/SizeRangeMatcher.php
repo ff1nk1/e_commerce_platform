@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog\ValueMatchers;
 
 use App\Services\Catalog\AttributeValueNormalizer;
 use App\Support\RuText;
 
-class SizeRangeMatcher
+final class SizeRangeMatcher
 {
     public function __construct(
         private readonly AttributeValueNormalizer $values = new AttributeValueNormalizer,

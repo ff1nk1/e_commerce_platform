@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Order;
@@ -8,11 +10,13 @@ use App\Models\Payment;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\Concerns\UsesFakeStripe;
 use Tests\TestCase;
 
-class StripeWebhookTest extends TestCase
+final class StripeWebhookTest extends TestCase
 {
     use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
@@ -132,7 +136,11 @@ class StripeWebhookTest extends TestCase
         return $order->fresh('items.productSnapshot');
     }
 
-    private function postSignedWebhook(array $event)
+    /**
+     * @param  array<string, mixed>  $event
+     * @return TestResponse<Response>
+     */
+    private function postSignedWebhook(array $event): TestResponse
     {
         $signed = $this->signFakeStripeWebhook($event);
 

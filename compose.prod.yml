@@ -1,0 +1,56 @@
+# Production overlay: run images as built, without host source bind-mounts.
+#   docker compose -f compose.yml -f compose.prod.yml up -d --build
+#
+# Local development keeps the bind-mounts in the service compose files.
+
+services:
+  auth_app:
+    volumes: !reset []
+  catalog_app:
+    volumes: !reset []
+  catalog_kafka_order_consumer:
+    volumes: !reset []
+  catalog_kafka_outbox_worker:
+    volumes: !reset []
+  notification_app:
+    volumes: !reset []
+  notification_kafka_consumer:
+    volumes: !reset []
+  notification_kafka_order_consumer:
+    volumes: !reset []
+  order_app:
+    volumes: !reset []
+  order_kafka_product_consumer:
+    volumes: !reset []
+  order_kafka_stock_consumer:
+    volumes: !reset []
+  order_kafka_outbox_worker:
+    volumes: !reset []
+  search_app:
+    volumes: !reset []
+  search_kafka_product_consumer:
+    volumes: !reset []
+  search_kafka_category_consumer:
+    volumes: !reset []
+  search_kafka_stock_consumer:
+    volumes: !reset []
+  recommendation_app:
+    volumes: !reset []
+  recommendation_scheduler:
+    volumes: !reset []
+  recommendation_kafka_product_consumer:
+    volumes: !reset []
+  recommendation_kafka_stock_consumer:
+    volumes: !reset []
+
+  frontend:
+    profiles: ["dev"]
+
+  frontend_nginx:
+    image: frontend:prod
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: prod
+    volumes: !reset []
+    depends_on: !reset []

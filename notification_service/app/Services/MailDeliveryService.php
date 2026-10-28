@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Mail\MailableRegistry;
@@ -7,6 +9,7 @@ use App\Models\EmailLog;
 use Illuminate\Contracts\Mail\Mailable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Sleep;
 use InvalidArgumentException;
 
 class MailDeliveryService
@@ -25,11 +28,7 @@ class MailDeliveryService
     public function resend(EmailLog $notification): bool
     {
         $eventType = $this->resolveEventTypeForResend($notification);
-        if ($eventType === null) {
-            throw new InvalidArgumentException(
-                'У записи нет event_type: переотправка невозможна (order.paid и order.confirmed неразличимы по payload).'
-            );
-        }
+        throw_if($eventType === null, InvalidArgumentException::class, 'У записи нет event_type: переотправка невозможна (order.paid и order.confirmed неразличимы по payload).');
 
         $logEmail = $notification->email;
         $payload = is_array($notification->payload) ? $notification->payload : [];
@@ -52,7 +51,7 @@ class MailDeliveryService
         $result = $this->attemptSendWithRetry(
             $notification,
             (string) $logEmail,
-            fn () => $this->mailableRegistry->make($eventType, $payload),
+            fn (): Mailable => $this->mailableRegistry->make($eventType, $payload),
         );
 
         if (! $result['isSent']) {
@@ -119,12 +118,12 @@ class MailDeliveryService
             $attributes['message_id'] = $messageId;
         }
 
-        $emailLog = EmailLog::create($attributes);
+        $emailLog = EmailLog::query()->create($attributes);
 
         $result = $this->attemptSendWithRetry(
             $emailLog,
             (string) $emailAddress,
-            fn () => $this->mailableRegistry->make($eventType, $payload),
+            fn (): Mailable => $this->mailableRegistry->make($eventType, $payload),
         );
 
         return [
@@ -162,7 +161,7 @@ class MailDeliveryService
         $result = $this->attemptSendWithRetry(
             $emailLog,
             $emailAddress,
-            fn () => $this->mailableRegistry->make($eventType, $payload),
+            fn (): Mailable => $this->mailableRegistry->make($eventType, $payload),
         );
 
         return [
@@ -237,6 +236,6 @@ class MailDeliveryService
             return;
         }
 
-        sleep($seconds);
+        Sleep::sleep($seconds);
     }
 }

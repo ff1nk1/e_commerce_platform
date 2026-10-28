@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Search;
 
-class ProductSearchResponseMapper
+final class ProductSearchResponseMapper
 {
     /**
      * @param  array<string, mixed>  $response

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Mail\OrderConfirmedMail;
@@ -11,12 +13,12 @@ use Illuminate\Support\Facades\Mail;
 use Mockery;
 use Tests\TestCase;
 
-class NotificationsApiTest extends TestCase
+final class NotificationsApiTest extends TestCase
 {
     protected function setUp(): void
     {
         parent::setUp();
-        EmailLog::truncate();
+        EmailLog::query()->truncate();
     }
 
     protected function tearDown(): void
@@ -96,7 +98,7 @@ class NotificationsApiTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('data.status', 'sent');
 
-        Mail::assertSent(OrderPaidMail::class, function (OrderPaidMail $mail) {
+        Mail::assertSent(OrderPaidMail::class, function (OrderPaidMail $mail): bool {
             return ($mail->payload['order_id'] ?? null) === 99;
         });
     }
@@ -109,7 +111,7 @@ class NotificationsApiTest extends TestCase
 
         $response = $this->postJson('/api/notifications/'.$log->id.'/resend');
 
-        $response->assertStatus(422);
+        $response->assertUnprocessable();
         Mail::assertNothingSent();
     }
 
@@ -159,7 +161,7 @@ class NotificationsApiTest extends TestCase
 
         $response = $this->postJson('/api/notifications/'.$log->id.'/resend');
 
-        $response->assertStatus(422)
+        $response->assertUnprocessable()
             ->assertJsonFragment([
                 'message' => 'У записи нет event_type, переотправка невозможна.',
             ]);
@@ -211,7 +213,7 @@ class NotificationsApiTest extends TestCase
 
         $response = $this->postJson('/api/notifications/'.$log->id.'/resend');
 
-        $response->assertStatus(400)
+        $response->assertBadRequest()
             ->assertJsonFragment([
                 'message' => 'Ошибка отправки из админки: SMTP Connection Rejected',
             ]);

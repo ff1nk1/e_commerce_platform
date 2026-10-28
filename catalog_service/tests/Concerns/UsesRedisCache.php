@@ -1,9 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Concerns;
 
+use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Request;
 
 trait UsesRedisCache
 {
@@ -31,7 +35,7 @@ trait UsesRedisCache
 
     private function envString(string $key, string $default = ''): string
     {
-        $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
+        $value = Env::get($key, Request::server($key) ?? getenv($key));
 
         if ($value === false || $value === '') {
             return $default;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Concerns;
 
 use App\Services\SagaStepGuard;
@@ -26,7 +28,7 @@ trait BindsInMemorySagaStepGuard
             return $store[$sagaId.':'.$step] ?? null;
         });
 
-        $guard->shouldReceive('isCompleted')->andReturnUsing(function (string $sagaId, string $step) use (&$store) {
+        $guard->shouldReceive('isCompleted')->andReturnUsing(function (string $sagaId, string $step) use (&$store): bool {
             $existing = $store[$sagaId.':'.$step] ?? null;
             if ($existing === null) {
                 return false;
@@ -35,7 +37,7 @@ trait BindsInMemorySagaStepGuard
             return in_array($existing['status'], [SagaStepGuard::STATUS_DONE, SagaStepGuard::STATUS_FAILED], true);
         });
 
-        $guard->shouldReceive('acquire')->andReturnUsing(function (string $sagaId, string $step) use (&$locks) {
+        $guard->shouldReceive('acquire')->andReturnUsing(function (string $sagaId, string $step) use (&$locks): bool {
             $key = $sagaId.':'.$step;
             if (isset($locks[$key])) {
                 return false;
@@ -45,11 +47,11 @@ trait BindsInMemorySagaStepGuard
             return true;
         });
 
-        $guard->shouldReceive('release')->andReturnUsing(function (string $sagaId, string $step) use (&$locks) {
+        $guard->shouldReceive('release')->andReturnUsing(function (string $sagaId, string $step) use (&$locks): void {
             unset($locks[$sagaId.':'.$step]);
         });
 
-        $guard->shouldReceive('put')->andReturnUsing(function (string $sagaId, string $step, string $status, ?array $result = null) use (&$store) {
+        $guard->shouldReceive('put')->andReturnUsing(function (string $sagaId, string $step, string $status, ?array $result = null) use (&$store): void {
             $payload = [
                 'status' => $status,
                 'at' => now()->toIso8601String(),
@@ -60,7 +62,7 @@ trait BindsInMemorySagaStepGuard
             $store[$sagaId.':'.$step] = $payload;
         });
 
-        $guard->shouldReceive('tryBegin')->andReturnUsing(function (string $sagaId, string $step) use ($guard) {
+        $guard->shouldReceive('tryBegin')->andReturnUsing(function (string $sagaId, string $step) use ($guard): string {
             if ($guard->isCompleted($sagaId, $step)) {
                 return 'skip';
             }

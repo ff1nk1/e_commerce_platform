@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\ProductResource\Pages\ManageProducts;
@@ -31,7 +33,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
-class ProductResource extends Resource
+final class ProductResource extends Resource
 {
     protected static ?string $model = Product::class;
 
@@ -93,7 +95,7 @@ class ProductResource extends Resource
                 TextColumn::make('id')->label('ID')->sortable(),
                 ImageColumn::make('image_url')
                     ->label('Image')
-                    ->getStateUsing(fn (Product $record): ?string => static::publicImageUrl($record->image_url))
+                    ->getStateUsing(fn (Product $record): ?string => self::publicImageUrl($record->image_url))
                     ->height(48),
                 TextColumn::make('name')->searchable()->sortable(),
                 TextColumn::make('price')->sortable(),
@@ -105,7 +107,7 @@ class ProductResource extends Resource
                         ? 'Visible for AI — click to unpublish'
                         : 'Hidden from AI — click to publish')
                     ->updateStateUsing(function (Product $record): bool {
-                        $updated = app(ProductService::class)->togglePublished($record);
+                        $updated = resolve(ProductService::class)->togglePublished($record);
 
                         Notification::make()
                             ->title($updated->is_published
@@ -124,8 +126,8 @@ class ProductResource extends Resource
             ])
             ->headerActions([
                 CreateAction::make()
-                    ->using(fn (array $data): Product => app(ProductService::class)->createProduct(
-                        static::prepareProductPayload($data)
+                    ->using(fn (array $data): Product => resolve(ProductService::class)->createProduct(
+                        self::prepareProductPayload($data)
                     )),
             ])
             ->recordActions([
@@ -142,13 +144,13 @@ class ProductResource extends Resource
 
                         return $data;
                     })
-                    ->using(fn (Product $record, array $data): Product => app(ProductService::class)->updateProduct(
+                    ->using(fn (Product $record, array $data): Product => resolve(ProductService::class)->updateProduct(
                         $record,
-                        static::prepareProductPayload($data, $record->image_url)
+                        self::prepareProductPayload($data, $record->image_url)
                     )),
                 DeleteAction::make()
                     ->using(function (Product $record): bool {
-                        app(ProductService::class)->deleteProduct($record);
+                        resolve(ProductService::class)->deleteProduct($record);
 
                         return true;
                     }),
@@ -171,10 +173,10 @@ class ProductResource extends Resource
         $image = $data['image'] ?? null;
         unset($data['image']);
 
-        $file = static::resolveUploadedFile($image);
+        $file = self::resolveUploadedFile($image);
 
         if ($file instanceof TemporaryUploadedFile) {
-            $data['image_url'] = static::uploadImage($file);
+            $data['image_url'] = self::uploadImage($file);
         } elseif (is_string($existingImageUrl) && $existingImageUrl !== '') {
             $data['image_url'] = $existingImageUrl;
         }
@@ -182,7 +184,7 @@ class ProductResource extends Resource
         return $data;
     }
 
-    protected static function resolveUploadedFile(mixed $image): ?TemporaryUploadedFile
+    private static function resolveUploadedFile(mixed $image): ?TemporaryUploadedFile
     {
         if ($image instanceof TemporaryUploadedFile) {
             return $image;
@@ -198,7 +200,7 @@ class ProductResource extends Resource
 
         if (is_array($image)) {
             foreach (Arr::flatten($image) as $item) {
-                $resolved = static::resolveUploadedFile($item);
+                $resolved = self::resolveUploadedFile($item);
                 if ($resolved instanceof TemporaryUploadedFile) {
                     return $resolved;
                 }
@@ -208,7 +210,7 @@ class ProductResource extends Resource
         return null;
     }
 
-    protected static function uploadImage(TemporaryUploadedFile $file): string
+    private static function uploadImage(TemporaryUploadedFile $file): string
     {
         $extension = $file->getClientOriginalExtension() ?: 'jpg';
         $path = MediaUploadPath::new($extension);

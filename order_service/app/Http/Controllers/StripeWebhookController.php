@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Contracts\PaymentGateway;
@@ -10,7 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Stripe\Exception\SignatureVerificationException;
 use UnexpectedValueException;
 
-class StripeWebhookController extends Controller
+final class StripeWebhookController extends Controller
 {
     public function __construct(
         private PaymentGateway $stripe,

@@ -1,6 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Concerns;
+
+use Illuminate\Support\Env;
+use Illuminate\Support\Facades\Request;
 
 trait RequiresStripe
 {
@@ -33,6 +38,7 @@ trait RequiresStripe
 
     /**
      * @param  array<string, mixed>  $event
+     * @return array{payload: string, header: string}
      */
     protected function signStripeWebhookPayload(array $event): array
     {
@@ -49,7 +55,7 @@ trait RequiresStripe
 
     private function envString(string $key, string $default = ''): string
     {
-        $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
+        $value = Env::get($key, Request::server($key) ?? getenv($key));
 
         if ($value === false || $value === '') {
             return $default;

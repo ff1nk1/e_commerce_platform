@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Role;
@@ -14,13 +16,13 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Tests\TestCase;
 
-class AuthServiceTest extends TestCase
+final class AuthServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected AuthService $authService;
+    private AuthService $authService;
 
-    protected JwtService $jwtService;
+    private JwtService $jwtService;
 
     protected function setUp(): void
     {
@@ -31,8 +33,8 @@ class AuthServiceTest extends TestCase
         Config::set('jwt.ttl', 15);
         Config::set('jwt.refresh_ttl', 100);
 
-        $this->jwtService = app(JwtService::class);
-        $this->authService = app(AuthService::class);
+        $this->jwtService = resolve(JwtService::class);
+        $this->authService = resolve(AuthService::class);
 
         Redis::connection()->select((int) config('database.redis.default.database', 15));
         Redis::flushdb();

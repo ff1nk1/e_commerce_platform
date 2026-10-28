@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Support\RuText;
@@ -7,7 +9,7 @@ use App\Support\RuText;
 /**
  * Decides which extracted attributes are hard, preferred (semi-hard), or soft.
  */
-class AttributeConstraintDetector
+final class AttributeConstraintDetector
 {
     public function __construct(
         private readonly AttributeNameNormalizer $names = new AttributeNameNormalizer,

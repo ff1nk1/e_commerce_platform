@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Role;
@@ -15,7 +17,7 @@ use Junges\Kafka\Facades\Kafka;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
-class AuthHttpTest extends TestCase
+final class AuthHttpTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -85,6 +87,9 @@ class AuthHttpTest extends TestCase
             ->assertJsonValidationErrors(['number']);
     }
 
+    /**
+     * @return array<string, array<int, mixed>>
+     */
     public static function invalidRegistrationPhoneProvider(): array
     {
         return [
@@ -97,7 +102,7 @@ class AuthHttpTest extends TestCase
 
     public function test_login_sets_http_only_token_cookies(): void
     {
-        $role = Role::where('slug', 'customer')->first();
+        $role = Role::query()->where('slug', 'customer')->first();
         User::factory()->create([
             'email' => 'login@example.com',
             'password' => Hash::make('password123'),
@@ -122,14 +127,14 @@ class AuthHttpTest extends TestCase
 
     public function test_user_endpoint_returns_profile_with_bearer_token(): void
     {
-        $role = Role::where('slug', 'customer')->first();
+        $role = Role::query()->where('slug', 'customer')->first();
         $user = User::factory()->create([
             'email' => 'me@example.com',
             'password' => Hash::make('password123'),
             'role_id' => $role->id,
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'me@example.com',
             'password' => 'password123',
         ]);
@@ -142,14 +147,14 @@ class AuthHttpTest extends TestCase
 
     public function test_refresh_issues_new_cookies(): void
     {
-        $role = Role::where('slug', 'customer')->first();
+        $role = Role::query()->where('slug', 'customer')->first();
         User::factory()->create([
             'email' => 'refresh@example.com',
             'password' => Hash::make('password123'),
             'role_id' => $role->id,
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'refresh@example.com',
             'password' => 'password123',
         ]);
@@ -168,14 +173,14 @@ class AuthHttpTest extends TestCase
 
     public function test_logout_revokes_access_token(): void
     {
-        $role = Role::where('slug', 'customer')->first();
+        $role = Role::query()->where('slug', 'customer')->first();
         User::factory()->create([
             'email' => 'out@example.com',
             'password' => Hash::make('password123'),
             'role_id' => $role->id,
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'out@example.com',
             'password' => 'password123',
         ]);
@@ -186,7 +191,7 @@ class AuthHttpTest extends TestCase
             ->postJson('/api/logout')
             ->assertOk();
 
-        $jwt = app(JwtService::class);
+        $jwt = resolve(JwtService::class);
         $decoded = $jwt->decode($tokens['access_token']);
         $this->assertTrue(
             Cache::has("jwt:blacklist:{$decoded->jti}"),
@@ -205,7 +210,7 @@ class AuthHttpTest extends TestCase
     {
         config(['jwt.ttl' => 15, 'jwt.refresh_ttl' => 60 * 60 * 24 * 30]);
 
-        $role = Role::where('slug', 'customer')->first();
+        $role = Role::query()->where('slug', 'customer')->first();
         User::factory()->create([
             'email' => 'ttl@example.com',
             'password' => Hash::make('password123'),
@@ -233,14 +238,14 @@ class AuthHttpTest extends TestCase
 
     public function test_change_password_revokes_current_tokens(): void
     {
-        $role = Role::where('slug', 'customer')->first();
+        $role = Role::query()->where('slug', 'customer')->first();
         User::factory()->create([
             'email' => 'pwd@example.com',
             'password' => Hash::make('old-password'),
             'role_id' => $role->id,
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'pwd@example.com',
             'password' => 'old-password',
         ]);
@@ -256,7 +261,7 @@ class AuthHttpTest extends TestCase
             ->assertCookieExpired('access_token')
             ->assertCookieExpired('refresh_token');
 
-        $jwt = app(JwtService::class);
+        $jwt = resolve(JwtService::class);
         $decoded = $jwt->decode($tokens['access_token']);
         $this->assertTrue(Cache::has("jwt:blacklist:{$decoded->jti}"));
 
@@ -271,7 +276,7 @@ class AuthHttpTest extends TestCase
 
     public function test_profile_update_normalizes_phone_with_spaces(): void
     {
-        $role = Role::where('slug', 'customer')->first();
+        $role = Role::query()->where('slug', 'customer')->first();
         $user = User::factory()->create([
             'email' => 'profile-phone@example.com',
             'password' => Hash::make('password123'),
@@ -279,7 +284,7 @@ class AuthHttpTest extends TestCase
             'number' => '+10000000000',
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'profile-phone@example.com',
             'password' => 'password123',
         ]);
@@ -300,7 +305,7 @@ class AuthHttpTest extends TestCase
     #[DataProvider('invalidRegistrationPhoneProvider')]
     public function test_profile_update_rejects_invalid_phone(string $number): void
     {
-        $role = Role::where('slug', 'customer')->first();
+        $role = Role::query()->where('slug', 'customer')->first();
         User::factory()->create([
             'email' => 'profile-invalid-phone@example.com',
             'password' => Hash::make('password123'),
@@ -308,7 +313,7 @@ class AuthHttpTest extends TestCase
             'number' => '+10000000000',
         ]);
 
-        $tokens = app(AuthService::class)->login([
+        $tokens = resolve(AuthService::class)->login([
             'email' => 'profile-invalid-phone@example.com',
             'password' => 'password123',
         ]);

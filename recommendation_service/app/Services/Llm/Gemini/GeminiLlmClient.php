@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Llm\Gemini;
 
 use App\Services\Llm\Contracts\LlmClient;
@@ -11,7 +13,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
-class GeminiLlmClient implements LlmClient
+final class GeminiLlmClient implements LlmClient
 {
     private const MIN_BUDGET = 0.05;
 

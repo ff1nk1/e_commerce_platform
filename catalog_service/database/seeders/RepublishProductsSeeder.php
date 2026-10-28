@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\Product;
@@ -10,7 +12,7 @@ use Illuminate\Database\Seeder;
  * Публикует product.updated в Kafka для всех товаров
  * (order snapshots, OpenSearch, recommendation product_catalog).
  */
-class RepublishProductsSeeder extends Seeder
+final class RepublishProductsSeeder extends Seeder
 {
     public function run(): void
     {
@@ -23,7 +25,7 @@ class RepublishProductsSeeder extends Seeder
         }
 
         /** @var ProductService $productsService */
-        $productsService = app(ProductService::class);
+        $productsService = resolve(ProductService::class);
 
         foreach ($products as $product) {
             // updateProduct публикует product.updated с актуальным payload.

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Console\Commands\KafkaOutboxWorker;
@@ -12,7 +14,7 @@ use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
 use Tests\Concerns\RequiresStripe;
 
-class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
+final class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
 {
     use RequiresStripe;
 
@@ -39,9 +41,9 @@ class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
         $orderId = (int) $create->json('id');
         $sagaId = Order::query()->findOrFail($orderId)->saga_id;
 
-        app(KafkaOutboxWorker::class)->processBatch();
+        resolve(KafkaOutboxWorker::class)->processBatch();
 
-        app(StockEventsHandler::class)($this->stubConsumerMessage('stock.reserved', [
+        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'status' => 'success',
@@ -57,7 +59,7 @@ class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
         $payment = Payment::query()->findOrFail($paymentId);
         $this->assertNotEmpty($payment->stripe_checkout_session_id);
 
-        $session = app(StripeClient::class)->retrieveCheckoutSession($payment->stripe_checkout_session_id);
+        $session = resolve(StripeClient::class)->retrieveCheckoutSession($payment->stripe_checkout_session_id);
         $this->assertSame($payment->stripe_checkout_session_id, $session['id'] ?? null);
 
         $signed = $this->signStripeWebhookPayload([
@@ -103,13 +105,13 @@ class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
         $this->assertSame('stripe-buyer@example.com', $paid->payload['email'] ?? null);
         $this->assertSame('confirmed', $confirmed->payload['status'] ?? null);
 
-        app(KafkaOutboxWorker::class)->processBatch();
+        resolve(KafkaOutboxWorker::class)->processBatch();
 
-        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId) {
+        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             return ($message->getHeaders()['event-type'] ?? null) === 'order.paid'
                 && (int) ($message->getBody()['order_id'] ?? 0) === $orderId;
         });
-        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId) {
+        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             return ($message->getHeaders()['event-type'] ?? null) === 'order.confirmed'
                 && (int) ($message->getBody()['order_id'] ?? 0) === $orderId;
         });

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers;
 
 use App\Services\Catalog\CatalogApiFreshnessChecker;
@@ -14,14 +16,14 @@ use App\Services\Llm\Gemini\GeminiLlmClient;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 
-class AppServiceProvider extends ServiceProvider
+final class AppServiceProvider extends ServiceProvider
 {
     /**
      * Register any application services.
      */
     public function register(): void
     {
-        $this->app->bind(LlmClient::class, function (): LlmClient {
+        $this->app->bind(function (): LlmClient {
             $driver = (string) config('llm.driver', 'gemini');
 
             return match ($driver) {
@@ -38,19 +40,19 @@ class AppServiceProvider extends ServiceProvider
             };
         });
 
-        $this->app->singleton(SearchFiltersNormalizer::class, function (): SearchFiltersNormalizer {
+        $this->app->singleton(function (): SearchFiltersNormalizer {
             return new SearchFiltersNormalizer(
                 requireInStock: (bool) config('recommendations.require_in_stock', true),
             );
         });
 
-        $this->app->bind(RelevanceGate::class, function (): RelevanceGate {
+        $this->app->bind(function (): RelevanceGate {
             return new CosineDistanceRelevanceGate(
                 maxCosineDistance: (float) config('recommendations.max_cosine_distance', 0.75),
             );
         });
 
-        $this->app->bind(CatalogProductClient::class, function (): CatalogProductClient {
+        $this->app->bind(function (): CatalogProductClient {
             return new HttpCatalogProductClient(
                 baseUrl: (string) config('recommendations.catalog.base_url', 'http://catalog_service_app:8002'),
                 timeout: (int) config('recommendations.catalog.timeout', 5),

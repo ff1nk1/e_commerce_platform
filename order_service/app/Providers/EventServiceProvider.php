@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers;
 
 use App\Events\OrderCancelled;
@@ -12,7 +14,7 @@ use App\Events\StockReleaseRequested;
 use App\Listeners\WriteOutboxableToOutbox;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 
-class EventServiceProvider extends ServiceProvider
+final class EventServiceProvider extends ServiceProvider
 {
     /**
      * @var array<class-string, list<class-string>>

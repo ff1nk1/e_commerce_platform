@@ -1,19 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
-class PayOrderRequest extends FormRequest
+final class PayOrderRequest extends FormRequest
 {
     public const IDEMPOTENCY_KEY_MAX = 128;
-
-    public function authorize(): bool
-    {
-        return true;
-    }
 
     /**
      * @return array<string, ValidationRule|array<mixed>|string>

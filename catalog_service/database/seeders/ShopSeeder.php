@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\Category;
@@ -13,7 +15,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
-class ShopSeeder extends Seeder
+final class ShopSeeder extends Seeder
 {
     /**
      * Run the database seeds.
@@ -23,16 +25,16 @@ class ShopSeeder extends Seeder
         // 1. Очищаем таблицы перед сидированием, чтобы избежать дублей
         // Отключаем проверку внешних ключей на время очистки
         Schema::disableForeignKeyConstraints();
-        Stock::truncate();
-        ProductAttribute::truncate();
-        Product::truncate();
-        Category::truncate();
-        Store::truncate();
+        Stock::query()->truncate();
+        ProductAttribute::query()->truncate();
+        Product::query()->truncate();
+        Category::query()->truncate();
+        Store::query()->truncate();
         Schema::enableForeignKeyConstraints();
 
         // Truncate bypasses CatalogService/ProductService — drop stale Redis tags now.
-        app(CatalogService::class)->clearCategoryCache();
-        app(ProductService::class)->clearProductCache();
+        resolve(CatalogService::class)->clearCategoryCache();
+        resolve(ProductService::class)->clearProductCache();
 
         // 2. Создаем магазины
         $storesData = ['Главный склад', 'Магазин на Ленина', 'ТЦ Галерея', 'Точка выдачи'];
@@ -41,7 +43,7 @@ class ShopSeeder extends Seeder
         foreach ($storesData as $storeName) {
             // Предполагается, что в модели Store есть поле name.
             // Если там другие поля - добавьте их сюда.
-            $stores->push(Store::create([
+            $stores->push(Store::query()->create([
                 'name' => $storeName,
             ]));
         }
@@ -90,9 +92,9 @@ class ShopSeeder extends Seeder
         ];
 
         // Рекурсивная функция для создания категорий и их детей
-        $createCategories = function ($categories, $parentId = null) use (&$createCategories) {
+        $createCategories = function ($categories, $parentId = null) use (&$createCategories): void {
             foreach ($categories as $catData) {
-                $category = Category::create([
+                $category = Category::query()->create([
                     'name' => $catData['name'],
                     'slug' => Str::slug($catData['name']),
                     'parent_id' => $parentId,
@@ -109,12 +111,12 @@ class ShopSeeder extends Seeder
 
         // 4. Генерируем товары для конечных категорий (у которых нет подкатегорий)
         // Товары логичнее привязывать к самым нижним веткам дерева (например, к "Ноутбуки", а не к "Электроника")
-        $leafCategories = Category::doesntHave('children')->get();
+        $leafCategories = Category::query()->doesntHave('children')->get();
 
         foreach ($leafCategories as $category) {
             // Создаем по 5 товаров для каждой конечной категории
             for ($i = 1; $i <= 5; $i++) {
-                Product::create([
+                Product::query()->create([
                     // Привязываем к случайному магазину из созданных ранее
                     'store_id' => $stores->random()->id,
                     'category_id' => $category->id,
@@ -127,7 +129,7 @@ class ShopSeeder extends Seeder
         }
 
         // Drop anything warmed while this seeder wrote via Model::create.
-        app(CatalogService::class)->clearCategoryCache();
-        app(ProductService::class)->clearProductCache();
+        resolve(CatalogService::class)->clearCategoryCache();
+        resolve(ProductService::class)->clearProductCache();
     }
 }

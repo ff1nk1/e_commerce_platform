@@ -1,18 +1,24 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
-class StoreStockRequest extends FormRequest
+final class StoreStockRequest extends FormRequest
 {
     public function authorize(): bool
     {
         return Auth::guard('gateway')->check();
     }
 
+    /**
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
     public function rules(): array
     {
         return [
@@ -29,7 +35,7 @@ class StoreStockRequest extends FormRequest
                     fn ($query) => $query->where('product_id', $this->input('product_id'))
                 ),
             ],
-            'quantity' => 'required|integer|min:0',
+            'quantity' => ['required', 'integer', 'min:0'],
         ];
     }
 }

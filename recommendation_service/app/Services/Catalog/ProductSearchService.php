@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Models\ProductCatalog;
@@ -13,7 +15,7 @@ use App\Support\SqlLike;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
-class ProductSearchService
+final class ProductSearchService
 {
     private const DEFAULT_EMBED_QUERY = 'recommended products';
 
@@ -365,6 +367,9 @@ class ProductSearchService
         }
 
         $rows = $product->attributes ?? [];
+        if (! is_array($rows)) {
+            return false;
+        }
         foreach ($rows as $row) {
             if (! is_array($row)) {
                 continue;

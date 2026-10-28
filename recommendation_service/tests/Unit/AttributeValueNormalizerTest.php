@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Catalog\AttributeValueNormalizer;
 use Tests\TestCase;
 
-class AttributeValueNormalizerTest extends TestCase
+final class AttributeValueNormalizerTest extends TestCase
 {
     public function test_numbers_match_with_inch_marks_from_config(): void
     {

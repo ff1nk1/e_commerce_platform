@@ -1,8 +1,11 @@
-# Root Composer tooling (phpstan / larastan / pint)
+# Per-service Composer vendor (and a leftover root vendor, if present)
 /vendor/
 
 # PHPStan cache
 .phpstan.cache/
+
+# Host binaries downloaded by scripts/lint-all.sh (golangci-lint)
+.tools/
 
 # Env / secrets
 .env
@@ -28,3 +31,4 @@ Thumbs.db
 
 startup
 /local-vm.md
+compose.override.yml

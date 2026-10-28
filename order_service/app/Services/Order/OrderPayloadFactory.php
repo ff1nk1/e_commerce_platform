@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Order;
 
 use App\Models\Order;
 
-class OrderPayloadFactory
+final class OrderPayloadFactory
 {
     /**
      * @param  array<string, mixed>  $extra

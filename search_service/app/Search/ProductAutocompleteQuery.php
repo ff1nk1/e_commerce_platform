@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Search;
 
-class ProductAutocompleteQuery
+final class ProductAutocompleteQuery
 {
     /**
      * @return array{size: int, _source: list<string>, query: array<string, mixed>}

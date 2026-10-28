@@ -1,0 +1,109 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Cannot call method fresh\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/AuthController.php
+
+		-
+			message: '#^Cannot call method loadMissing\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/AuthController.php
+
+		-
+			message: '#^Cannot call method update\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/AuthController.php
+
+		-
+			message: '#^Parameter \#1 \$oldRefreshToken of method App\\Services\\Auth\\AuthService\:\:refreshTokens\(\) expects string\|null, array\|string\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/AuthController.php
+
+		-
+			message: '#^Parameter \#1 \$user of method App\\Services\\Auth\\AuthService\:\:verifyPassword\(\) expects App\\Models\\User, App\\Models\\User\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/AuthController.php
+
+		-
+			message: '#^Cannot access property \$email on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: app/Http/Controllers/GatewayController.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 4
+			path: app/Http/Controllers/GatewayController.php
+
+		-
+			message: '#^Cannot access property \$name on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: app/Http/Controllers/GatewayController.php
+
+		-
+			message: '#^Cannot call method loadMissing\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/GatewayController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\User\>\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Auth/AuthService.php
+
+		-
+			message: '#^Argument of an invalid type list\<string\>\|Redis supplied for foreach, only iterables are supported\.$#'
+			identifier: foreach.nonIterable
+			count: 1
+			path: app/Services/Auth/AuthService.php
+
+		-
+			message: '#^Parameter \#1 \$user of method App\\Services\\Auth\\AuthService\:\:generateTokens\(\) expects App\\Models\\User, App\\Models\\User\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\User\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Auth/AuthService.php
+
+		-
+			message: '#^Method App\\Services\\Auth\\JwtService\:\:userFromRequest\(\) should return App\\Models\\User\|null but returns App\\Models\\User\|Illuminate\\Database\\Eloquent\\Collection\<int, App\\Models\\User\>\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/Auth/JwtService.php
+
+		-
+			message: '#^Parameter \#1 \$token of method App\\Services\\Auth\\JwtService\:\:decode\(\) expects string, array\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/Auth/JwtService.php
+
+		-
+			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: config/filesystems.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\Role\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: database/seeders/DatabaseSeeder.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\Role\|null\.$#'
+			identifier: property.nonObject
+			count: 8
+			path: tests/Feature/AuthHttpTest.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\Role\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/EnsureValidAccessTokenTest.php

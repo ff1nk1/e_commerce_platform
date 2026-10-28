@@ -1,15 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Services\SearchIndexService;
 use Junges\Kafka\Facades\Kafka;
 
-class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
+final class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
 {
     public function test_http_search_publishes_search_performed_to_kafka(): void
     {
-        app(SearchIndexService::class)->indexProduct([
+        resolve(SearchIndexService::class)->indexProduct([
             'id' => 9100,
             'name' => 'Publish Event Laptop',
             'price' => 999.0,
@@ -28,7 +30,7 @@ class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
             ->assertJsonPath('products.total', 1)
             ->assertJsonPath('products.data.0.id', 9100);
 
-        Kafka::assertPublishedOn('search.events', null, function ($message) {
+        Kafka::assertPublishedOn('search.events', null, function ($message): bool {
             $body = $message->getBody();
             $headers = $message->getHeaders();
 
@@ -47,7 +49,7 @@ class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
 
     public function test_http_search_with_skip_analytics_header_still_publishes_flagged_event(): void
     {
-        app(SearchIndexService::class)->indexProduct([
+        resolve(SearchIndexService::class)->indexProduct([
             'id' => 9102,
             'name' => 'Skip Analytics Phone',
             'price' => 10.0,
@@ -60,7 +62,7 @@ class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
             ->getJson('/api/search?q=Skip+Analytics+Phone')
             ->assertOk();
 
-        Kafka::assertPublishedOn('search.events', null, function ($message) {
+        Kafka::assertPublishedOn('search.events', null, function ($message): bool {
             $body = $message->getBody();
             $headers = $message->getHeaders();
 
@@ -73,7 +75,7 @@ class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
 
     public function test_autocomplete_does_not_publish_search_performed(): void
     {
-        app(SearchIndexService::class)->indexProduct([
+        resolve(SearchIndexService::class)->indexProduct([
             'id' => 9101,
             'name' => 'Autocomplete Only',
             'price' => 10.0,

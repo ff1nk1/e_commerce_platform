@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Models\Store;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-class StoreController extends Controller
+final class StoreController extends Controller
 {
     /**
      * List stores for storefront or admin selects.

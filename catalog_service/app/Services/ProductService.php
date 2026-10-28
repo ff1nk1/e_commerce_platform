@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Events\ProductCreated;
@@ -10,7 +12,7 @@ use App\Models\Product;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
-class ProductService
+final class ProductService
 {
     /**
      * @param  array<string, mixed>  $data
@@ -20,7 +22,7 @@ class ProductService
         [$attributes, $data] = $this->extractAttributes($data);
 
         $product = DB::transaction(function () use ($data, $attributes): Product {
-            $product = Product::create($data);
+            $product = Product::query()->create($data);
             $this->syncAttributes($product, $attributes ?? []);
 
             return $product->load(['store', 'category', 'attributes']);
@@ -90,7 +92,7 @@ class ProductService
      * @return array{0: list<array{name: string, value: string}>|null, 1: array<string, mixed>}
      *                                                                                          null attributes = key absent (do not sync)
      */
-    protected function extractAttributes(array $data): array
+    private function extractAttributes(array $data): array
     {
         if (! array_key_exists('attributes', $data)) {
             return [null, $data];
@@ -126,7 +128,7 @@ class ProductService
     /**
      * @param  list<array{name: string, value: string}>  $attributes
      */
-    protected function syncAttributes(Product $product, array $attributes): void
+    private function syncAttributes(Product $product, array $attributes): void
     {
         $product->attributes()->delete();
 

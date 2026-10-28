@@ -1,17 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Kafka\MainHandlers\OrderEventsHandler;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Junges\Kafka\Facades\Kafka;
 
-class KafkaConsumeOrderEvents extends Command
+#[Description('Консьюмер Catalog Service для обработки событий заказов')]
+#[Signature('kafka:consume:order-events')]
+final class KafkaConsumeOrderEvents extends Command
 {
-    protected $signature = 'kafka:consume:order-events';
-
-    protected $description = 'Консьюмер Catalog Service для обработки событий заказов';
-
     public function handle(): int
     {
         $this->info('Запуск консьюмера для топика order.events...');
@@ -20,7 +22,7 @@ class KafkaConsumeOrderEvents extends Command
             ->withBrokers(config('kafka.brokers', 'kafka:29092'))
 
             ->withConsumerGroupId('catalog-service-orders-v1')
-            ->withHandler(app(OrderEventsHandler::class))
+            ->withHandler(resolve(OrderEventsHandler::class))
             ->withAutoCommit()
             ->withOptions([
                 'auto.offset.reset' => 'earliest',

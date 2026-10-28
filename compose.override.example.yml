@@ -1,0 +1,20 @@
+# Copy to compose.override.yml (gitignored). Compose loads that file automatically.
+#
+# VPN (wginno) MTU below 1420 — avoids TLS hangs to external APIs such as Stripe.
+
+networks:
+  php_project_net:
+    driver_opts:
+      com.docker.network.driver.mtu: "1400"
+
+services:
+  php-base:
+    build:
+      args:
+        DEBIAN_MIRROR: mirror.yandex.ru
+
+# Composer mirror (one service directory):
+#   COMPOSER_MIRROR=https://mirrors.aliyun.com/composer/ ../infra/composer-mirror.sh
+#
+# MinIO server and mc are pinned by digest on cr.yandex in catalog_service/compose.yml.
+# Docker Hub no longer publishes minio/minio or minio/mc.

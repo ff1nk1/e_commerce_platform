@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Auth;
 
 use App\Models\User;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Throwable;
 
 class JwtService
@@ -25,9 +27,7 @@ class JwtService
         $ttlMinutes = (int) config('jwt.ttl', 15);
         $this->ttl = $ttlMinutes * 60;
 
-        if ($this->secret === '') {
-            throw new \RuntimeException('JWT_SECRET is not configured.');
-        }
+        throw_if($this->secret === '', \RuntimeException::class, 'JWT_SECRET is not configured.');
     }
 
     /**
@@ -84,9 +84,7 @@ class JwtService
                 return null;
             }
 
-            $user = User::find($payload->sub);
-
-            return $user;
+            return User::query()->find($payload->sub);
         } catch (Throwable $e) {
             return null;
         }
@@ -108,7 +106,7 @@ class JwtService
             }
 
             $remainingTtl = (int) now()->diffInSeconds(
-                Carbon::createFromTimestamp((int) $payload->exp),
+                Date::createFromTimestamp((int) $payload->exp),
                 false
             );
 

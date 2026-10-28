@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\OutboxEvent;
@@ -10,7 +12,7 @@ use Tests\Concerns\BindsInMemoryIdempotency;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
-class OrderCreateOutboxTest extends TestCase
+final class OrderCreateOutboxTest extends TestCase
 {
     use BindsInMemoryIdempotency;
     use BindsInMemorySagaStepGuard;

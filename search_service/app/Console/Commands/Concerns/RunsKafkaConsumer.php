@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands\Concerns;
 
 use Junges\Kafka\Facades\Kafka;
@@ -19,7 +21,7 @@ trait RunsKafkaConsumer
     ): int {
         $this->info($infoMessage);
 
-        $resolved = is_string($handler) ? app($handler) : $handler;
+        $resolved = is_string($handler) ? resolve($handler) : $handler;
 
         $consumer = Kafka::consumer($topics)
             ->withBrokers(config('kafka.brokers', 'kafka:29092'))

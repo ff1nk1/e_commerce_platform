@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Auth;
 
 use App\Events\UserRegistered;
@@ -11,7 +13,7 @@ use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-class AuthService
+final class AuthService
 {
     private const REFRESH_TOKEN_BYTES = 64;
 
@@ -22,13 +24,15 @@ class AuthService
 
     /**
      * Регистрация пользователя
+     *
+     * @param  array<string, mixed>  $userData
      */
     public function register(array $userData): User
     {
         // Password cast on User hashes plain text — do not Hash::make here.
-        $userData['role_id'] = Role::where('slug', 'customer')->valueOrFail('id');
+        $userData['role_id'] = Role::query()->where('slug', 'customer')->valueOrFail('id');
 
-        $user = User::create($userData);
+        $user = User::query()->create($userData);
 
         event(new UserRegistered($user));
 
@@ -37,10 +41,13 @@ class AuthService
 
     /**
      * Проверка данных и генерация пары токенов
+     *
+     * @param  array<string, mixed>  $credentials
+     * @return array<string, string>
      */
     public function login(array $credentials): array
     {
-        $user = User::where('email', $credentials['email'])->first();
+        $user = User::query()->where('email', $credentials['email'])->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
@@ -53,6 +60,8 @@ class AuthService
 
     /**
      * Обновление токенов
+     *
+     * @return array<string, mixed>|null
      */
     public function refreshTokens(?string $oldRefreshToken): ?array
     {
@@ -72,7 +81,7 @@ class AuthService
             return null;
         }
 
-        $user = User::find($userId);
+        $user = User::query()->find($userId);
         if (! $user) {
             Redis::del($oldKey);
             $this->forgetUserRefreshHash((int) $userId, $oldHash);
@@ -85,6 +94,7 @@ class AuthService
         Redis::del($oldKey);
         $this->forgetUserRefreshHash((int) $user->id, $oldHash);
 
+        /** @var array<string, mixed> $tokens */
         $tokens = $this->generateTokens($user);
         $tokens['user'] = $user;
 
@@ -139,9 +149,7 @@ class AuthService
 
     public function verifyPassword(User $user, string $password): User
     {
-        if (! Hash::check($password, $user->password)) {
-            throw new \Exception('Неверный пароль');
-        }
+        throw_unless(Hash::check($password, $user->password), \Exception::class, 'Неверный пароль');
 
         return $user;
     }
@@ -161,6 +169,8 @@ class AuthService
 
     /**
      * Приватный метод для переиспользуемой логики создания токенов
+     *
+     * @return array<string, string>
      */
     private function generateTokens(User $user): array
     {

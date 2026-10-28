@@ -34,7 +34,7 @@ http:
     # Filament CSS/JS/fonts + Livewire 4 hashed modules for catalog_service.
     # Direct to catalog — public static assets, no JWT.
     catalog-filament-assets:
-      rule: Host(`app.localhost`) && (PathPrefix(`/css/filament`) || PathPrefix(`/js/filament`) || PathPrefix(`/fonts/filament`) || PathPrefix(`/livewire-5e33d2ff`))
+      rule: "Host(`app.localhost`) && (PathPrefix(`/css/filament`) || PathPrefix(`/js/filament`) || PathPrefix(`/fonts/filament`) || PathRegexp(`^/livewire-[a-f0-9]+`))"
       entryPoints:
         - websecure
       service: catalog

@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Services\Llm\DTOs\SearchFilters;
 
-class SearchFiltersNormalizer
+final class SearchFiltersNormalizer
 {
     public function __construct(
         private readonly bool $requireInStock = true,

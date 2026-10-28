@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Models\Order;
@@ -13,7 +15,7 @@ use Mockery;
 use Tests\Concerns\BindsFakePaymentGateway;
 use Tests\TestCase;
 
-class ConfirmOrderFromPaymentTest extends TestCase
+final class ConfirmOrderFromPaymentTest extends TestCase
 {
     use BindsFakePaymentGateway;
     use RefreshDatabase;
@@ -28,7 +30,7 @@ class ConfirmOrderFromPaymentTest extends TestCase
     {
         [$order, $payment] = $this->orderAndPayment('pending');
 
-        app(ConfirmOrderFromPayment::class)->fromCheckoutSession([
+        resolve(ConfirmOrderFromPayment::class)->fromCheckoutSession([
             'id' => 'cs_pending',
             'payment_intent' => 'pi_1',
             'payment_status' => 'paid',
@@ -45,7 +47,7 @@ class ConfirmOrderFromPaymentTest extends TestCase
     {
         [$order, $payment] = $this->orderAndPayment('awaiting_payment');
 
-        app(ConfirmOrderFromPayment::class)->fromCheckoutSession([
+        resolve(ConfirmOrderFromPayment::class)->fromCheckoutSession([
             'id' => 'cs_bad_amount',
             'payment_intent' => 'pi_1',
             'payment_status' => 'paid',
@@ -65,10 +67,10 @@ class ConfirmOrderFromPaymentTest extends TestCase
         $stripe = $this->mockPaymentGateway();
         $stripe->shouldReceive('refundPaymentIntent')
             ->once()
-            ->withArgs(fn ($intentId, $amount = null) => $intentId === 'pi_orphan')
+            ->withArgs(fn ($intentId, $amount = null): bool => $intentId === 'pi_orphan')
             ->andReturn(['id' => 're_1']);
 
-        app(ConfirmOrderFromPayment::class)->fromCheckoutSession([
+        resolve(ConfirmOrderFromPayment::class)->fromCheckoutSession([
             'id' => 'cs_orphan',
             'payment_intent' => 'pi_orphan',
             'payment_status' => 'paid',

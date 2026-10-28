@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Indexing\CategoryDocumentWriter;
@@ -9,7 +11,7 @@ use App\Indexing\ProductDocumentWriter;
 /**
  * Facade over index lifecycle and document writers (stable API for handlers / tests).
  */
-class SearchIndexService
+final class SearchIndexService
 {
     public function __construct(
         private readonly OpenSearchIndexManager $indices,

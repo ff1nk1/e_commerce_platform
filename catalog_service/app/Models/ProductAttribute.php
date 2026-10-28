@@ -1,7 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use Database\Factories\ProductAttributeFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,20 +16,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $name
  * @property string $value
  */
-class ProductAttribute extends Model
+#[Fillable([
+    'product_id',
+    'name',
+    'value',
+])]
+final class ProductAttribute extends Model
 {
+    /** @use HasFactory<ProductAttributeFactory> */
     use HasFactory;
-
-    /**
-     * Поля, доступные для массового заполнения (Mass Assignment).
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'product_id',
-        'name',
-        'value',
-    ];
 
     /**
      * Товар, которому принадлежит атрибут.

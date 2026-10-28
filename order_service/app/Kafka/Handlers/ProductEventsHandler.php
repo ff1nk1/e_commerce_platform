@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Kafka\Handlers;
 
 use App\Models\ProductSnapshot;
@@ -7,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
-class ProductEventsHandler
+final class ProductEventsHandler
 {
     public function __invoke(ConsumerMessage $message): void
     {

@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Saga;
 
 use App\Contracts\SagaStepStore;
 use App\Exceptions\SagaStepBusyException;
 use Illuminate\Support\Facades\Log;
 
-class SagaStepRunner
+final class SagaStepRunner
 {
     public function __construct(
         private SagaStepStore $saga,
@@ -35,9 +37,7 @@ class SagaStepRunner
             return;
         }
 
-        if ($decision === 'busy') {
-            throw new SagaStepBusyException("Saga step {$step} is busy for saga {$sagaId}");
-        }
+        throw_if($decision === 'busy', SagaStepBusyException::class, "Saga step {$step} is busy for saga {$sagaId}");
 
         try {
             $outcome = $work();

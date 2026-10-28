@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
@@ -24,7 +26,7 @@ abstract class AbstractKafkaConsumeCommand extends Command
         $consumer = Kafka::consumer([$topic])
             ->withBrokers(config('kafka.brokers', 'kafka:29092'))
             ->withConsumerGroupId($this->groupId())
-            ->withHandler(app($this->handlerClass()))
+            ->withHandler(resolve($this->handlerClass()))
             ->withAutoCommit()
             ->withOptions([
                 'auto.offset.reset' => 'earliest',

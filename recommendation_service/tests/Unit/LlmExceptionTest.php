@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Llm\Exceptions\LlmException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
-class LlmExceptionTest extends TestCase
+final class LlmExceptionTest extends TestCase
 {
     #[DataProvider('userFacingCases')]
     public function test_user_message_and_public_status(

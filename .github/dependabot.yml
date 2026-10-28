@@ -1,0 +1,74 @@
+version: 2
+updates:
+  - package-ecosystem: composer
+    directory: "/auth_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: composer
+    directory: "/catalog_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: composer
+    directory: "/notification_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: composer
+    directory: "/order_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: composer
+    directory: "/search_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: composer
+    directory: "/recommendation_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: "/analytic_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/infra/php-base"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/auth_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/catalog_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/notification_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/order_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/search_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/recommendation_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/analytic_service"
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: "/frontend"
+    schedule:
+      interval: weekly

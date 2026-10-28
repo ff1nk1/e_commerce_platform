@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Services\Catalog\Contracts\CatalogProductClient;
@@ -9,7 +11,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class HttpCatalogProductClient implements CatalogProductClient
+final class HttpCatalogProductClient implements CatalogProductClient
 {
     public function __construct(
         private readonly string $baseUrl,
@@ -30,7 +32,7 @@ class HttpCatalogProductClient implements CatalogProductClient
         $base = rtrim($this->baseUrl, '/');
         $timeout = $this->timeout;
 
-        $responses = Http::pool(fn (Pool $pool) => array_map(
+        $responses = Http::pool(fn (Pool $pool): array => array_map(
             static fn (int $id) => $pool->as((string) $id)
                 ->acceptJson()
                 ->withOptions(['allow_redirects' => false])
@@ -81,9 +83,7 @@ class HttpCatalogProductClient implements CatalogProductClient
             && $notFound === []
             && $failed !== []
             && count($failed) === count($ids);
-        if ($allRequestsFailed) {
-            throw new \RuntimeException('Catalog service unreachable for all product freshness checks');
-        }
+        throw_if($allRequestsFailed, \RuntimeException::class, 'Catalog service unreachable for all product freshness checks');
 
         return new CatalogFetchResult(
             products: $products,

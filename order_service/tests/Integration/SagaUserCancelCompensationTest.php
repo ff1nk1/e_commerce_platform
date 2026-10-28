@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Console\Commands\KafkaOutboxWorker;
@@ -10,7 +12,7 @@ use App\Services\SagaStepGuard;
 use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
 
-class SagaUserCancelCompensationTest extends IntegrationTestCase
+final class SagaUserCancelCompensationTest extends IntegrationTestCase
 {
     public function test_cancel_after_stock_reserved_writes_cancelled_and_release(): void
     {
@@ -31,9 +33,9 @@ class SagaUserCancelCompensationTest extends IntegrationTestCase
         $orderId = (int) $create->json('id');
         $sagaId = Order::query()->findOrFail($orderId)->saga_id;
 
-        app(KafkaOutboxWorker::class)->processBatch();
+        resolve(KafkaOutboxWorker::class)->processBatch();
 
-        app(StockEventsHandler::class)($this->stubConsumerMessage('stock.reserved', [
+        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'status' => 'success',
@@ -47,7 +49,7 @@ class SagaUserCancelCompensationTest extends IntegrationTestCase
 
         $this->assertSame(
             SagaStepGuard::STATUS_DONE,
-            app(SagaStepGuard::class)->get($sagaId, 'stock.release_requested')['status'] ?? null
+            resolve(SagaStepGuard::class)->get($sagaId, 'stock.release_requested')['status'] ?? null
         );
 
         $cancelled = OutboxEvent::query()->where('event_type', 'order.cancelled')->first();
@@ -58,13 +60,13 @@ class SagaUserCancelCompensationTest extends IntegrationTestCase
         $this->assertSame('cancel@example.com', $cancelled->payload['email'] ?? null);
         $this->assertSame($sagaId, $release->payload['saga_id'] ?? null);
 
-        app(KafkaOutboxWorker::class)->processBatch();
+        resolve(KafkaOutboxWorker::class)->processBatch();
 
-        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId) {
+        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             return ($message->getHeaders()['event-type'] ?? null) === 'order.cancelled'
                 && (int) ($message->getBody()['order_id'] ?? 0) === $orderId;
         });
-        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId) {
+        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             return ($message->getHeaders()['event-type'] ?? null) === 'stock.release_requested'
                 && (int) ($message->getBody()['order_id'] ?? 0) === $orderId;
         });

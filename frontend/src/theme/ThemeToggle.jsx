@@ -1,15 +1,15 @@
-import { useTheme } from './useTheme'
+import { useTheme } from "./useTheme";
 
-export default function ThemeToggle({ className = '' }) {
-  const { isDark, toggleTheme } = useTheme()
+export default function ThemeToggle({ className = "" }) {
+  const { isDark, toggleTheme } = useTheme();
 
   return (
     <button
       type="button"
       className={`theme-toggle ${className}`.trim()}
       onClick={toggleTheme}
-      title={isDark ? 'Светлая тема' : 'Тёмная тема'}
-      aria-label={isDark ? 'Включить светлую тему' : 'Включить тёмную тему'}
+      title={isDark ? "Светлая тема" : "Тёмная тема"}
+      aria-label={isDark ? "Включить светлую тему" : "Включить тёмную тему"}
     >
       {isDark ? (
         <svg
@@ -42,5 +42,5 @@ export default function ThemeToggle({ className = '' }) {
         </svg>
       )}
     </button>
-  )
+  );
 }

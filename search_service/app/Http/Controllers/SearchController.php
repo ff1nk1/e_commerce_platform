@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\SearchAutocompleteRequest;
@@ -7,7 +9,7 @@ use App\Http\Requests\SearchProductsRequest;
 use App\Services\ProductSearchService;
 use Illuminate\Http\JsonResponse;
 
-class SearchController extends Controller
+final class SearchController extends Controller
 {
     public function __invoke(SearchProductsRequest $request, ProductSearchService $search): JsonResponse
     {

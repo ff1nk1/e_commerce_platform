@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use Filament\Facades\Filament;
@@ -7,7 +9,7 @@ use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-class AdminCatalogLogoutTest extends TestCase
+final class AdminCatalogLogoutTest extends TestCase
 {
     use RefreshDatabase;
 

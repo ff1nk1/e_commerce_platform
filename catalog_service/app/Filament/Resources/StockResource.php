@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\StockResource\Pages\ManageStocks;
@@ -20,7 +22,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
-class StockResource extends Resource
+final class StockResource extends Resource
 {
     protected static ?string $model = Stock::class;
 
@@ -84,7 +86,7 @@ class StockResource extends Resource
             ])
             ->headerActions([
                 CreateAction::make()
-                    ->using(fn (array $data): Stock => app(StockService::class)->createStock([
+                    ->using(fn (array $data): Stock => resolve(StockService::class)->createStock([
                         'product_id' => (int) $data['product_id'],
                         'store_id' => (int) $data['store_id'],
                         'quantity' => (int) $data['quantity'],
@@ -96,7 +98,7 @@ class StockResource extends Resource
                     ->schema([
                         TextInput::make('quantity')->numeric()->required()->minValue(0),
                     ])
-                    ->using(fn (Stock $record, array $data): Stock => app(StockService::class)->updateQuantity(
+                    ->using(fn (Stock $record, array $data): Stock => resolve(StockService::class)->updateQuantity(
                         $record,
                         (int) $data['quantity']
                     )),

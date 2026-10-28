@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\GatewayController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('guest')->group(function () {
+Route::middleware('guest')->group(function (): void {
     Route::post('/login', [AuthController::class, 'login'])
         ->middleware('throttle:5,1');
     Route::post('/registration', [AuthController::class, 'register'])
@@ -25,7 +27,7 @@ Route::get('/search', [GatewayController::class, 'search']);
 // Recommendations health — public probe
 Route::get('/recommendations/health', [GatewayController::class, 'recommendationsHealth']);
 
-Route::middleware(['ensure.token', 'auth:api'])->group(function () {
+Route::middleware(['ensure.token', 'auth:api'])->group(function (): void {
     Route::get('/user', [AuthController::class, 'getUser']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::patch('/profile', [AuthController::class, 'updateProfile']);
@@ -45,7 +47,7 @@ Route::middleware(['ensure.token', 'auth:api'])->group(function () {
         ->where('path', '.*');
 
     // Notifications + admin orders + analytics — admin + analyst
-    Route::middleware('role:admin,analyst')->group(function () {
+    Route::middleware('role:admin,analyst')->group(function (): void {
         Route::any('/notifications/{path?}', [GatewayController::class, 'notifications'])
             ->where('path', '.*');
 
@@ -58,7 +60,7 @@ Route::middleware(['ensure.token', 'auth:api'])->group(function () {
     });
 
     // Admin zone (catalog CRUD + users)
-    Route::middleware('role:admin')->prefix('admin')->group(function () {
+    Route::middleware('role:admin')->prefix('admin')->group(function (): void {
         Route::get('/users', [AdminController::class, 'index']);
         Route::get('/roles', [AdminController::class, 'getRoles']);
         Route::patch('/users/{id}/role', [AdminController::class, 'changeRole']);

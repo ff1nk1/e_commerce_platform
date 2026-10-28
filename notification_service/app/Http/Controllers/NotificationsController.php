@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\DTO\NotificationFilters;
@@ -9,7 +11,7 @@ use App\Services\EmailLogQueryService;
 use App\Services\MailDeliveryService;
 use Illuminate\Http\JsonResponse;
 
-class NotificationsController extends Controller
+final class NotificationsController extends Controller
 {
     public function __construct(
         private EmailLogQueryService $queryService,
@@ -32,14 +34,14 @@ class NotificationsController extends Controller
 
     public function show(string $id): JsonResponse
     {
-        $notification = EmailLog::findOrFail($id);
+        $notification = EmailLog::query()->findOrFail($id);
 
         return response()->json($notification);
     }
 
     public function resend(string $id): JsonResponse
     {
-        $notification = EmailLog::findOrFail($id);
+        $notification = EmailLog::query()->findOrFail($id);
 
         if ($notification->status !== 'failed') {
             return response()->json([

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Listeners;
 
 use App\Events\CategoryCreated;
@@ -9,7 +11,7 @@ use App\Models\Category;
 use App\Services\Kafka\KafkaPublisher;
 use Illuminate\Support\Facades\Log;
 
-class PublishCategoryToKafka
+final class PublishCategoryToKafka
 {
     public function __construct(
         private KafkaPublisher $kafka,

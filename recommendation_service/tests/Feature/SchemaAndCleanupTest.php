@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Conversation;
@@ -10,7 +12,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
-class SchemaAndCleanupTest extends TestCase
+final class SchemaAndCleanupTest extends TestCase
 {
     use RefreshDatabase;
 

@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
+use App\Services\Catalog\DTOs\SearchHit;
 use App\Services\Catalog\ProductIndexer;
 use App\Services\Catalog\ProductSearchService;
 use App\Services\Llm\Contracts\LlmClient;
@@ -16,7 +19,7 @@ use Tests\TestCase;
  *
  * Run: php artisan test --testsuite=Integration
  */
-class GeminiIntegrationTest extends TestCase
+final class GeminiIntegrationTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -35,12 +38,12 @@ class GeminiIntegrationTest extends TestCase
 
         // Ensure real Gemini client (no FakeLlmClient).
         $this->app->forgetInstance(LlmClient::class);
-        $this->assertInstanceOf(GeminiLlmClient::class, app(LlmClient::class));
+        $this->assertInstanceOf(GeminiLlmClient::class, resolve(LlmClient::class));
     }
 
     public function test_indexer_embeds_product_via_gemini(): void
     {
-        $indexer = app(ProductIndexer::class);
+        $indexer = resolve(ProductIndexer::class);
         $indexer->upsertFromEvent([
             'id' => self::PRODUCT_ID,
             'store_id' => 1,
@@ -70,7 +73,7 @@ class GeminiIntegrationTest extends TestCase
 
     public function test_vector_search_finds_product_via_gemini(): void
     {
-        app(ProductIndexer::class)->upsertFromEvent([
+        resolve(ProductIndexer::class)->upsertFromEvent([
             'id' => self::PRODUCT_ID,
             'store_id' => 1,
             'store' => ['id' => 1, 'name' => 'Main'],
@@ -84,7 +87,7 @@ class GeminiIntegrationTest extends TestCase
         ], reembed: true);
 
         // Distractor with unrelated text so ranking is meaningful.
-        app(ProductIndexer::class)->upsertFromEvent([
+        resolve(ProductIndexer::class)->upsertFromEvent([
             'id' => self::PRODUCT_ID + 1,
             'store_id' => 1,
             'store' => ['id' => 1, 'name' => 'Main'],
@@ -96,12 +99,12 @@ class GeminiIntegrationTest extends TestCase
             'quantity' => 5,
         ], reembed: true);
 
-        $results = app(ProductSearchService::class)->search(
+        $results = resolve(ProductSearchService::class)->search(
             new SearchFilters(query: 'алый бархатный диван для гостиной OrionX'),
             limit: 5,
         );
 
-        $ids = array_map(static fn ($hit): int => (int) $hit->product->product_id, $results);
+        $ids = array_map(static fn (SearchHit $hit): int => (int) $hit->product->product_id, $results);
         $this->assertContains(self::PRODUCT_ID, $ids);
         $this->assertSame(self::PRODUCT_ID, $ids[0] ?? null);
     }
@@ -112,7 +115,7 @@ class GeminiIntegrationTest extends TestCase
         config(['llm.gemini.timeout' => 60]);
         $this->app->forgetInstance(LlmClient::class);
 
-        app(ProductIndexer::class)->upsertFromEvent([
+        resolve(ProductIndexer::class)->upsertFromEvent([
             'id' => self::PRODUCT_ID,
             'store_id' => 1,
             'store' => ['id' => 1, 'name' => 'Main'],
@@ -138,13 +141,15 @@ class GeminiIntegrationTest extends TestCase
         if (in_array($response->status(), [429, 503, 504], true)) {
             $this->markTestSkipped(
                 'Gemini temporarily unavailable ('.$response->status().'): '
-                .(string) $response->json('message')
+                .$response->json('message')
             );
         }
 
         $response->assertOk();
         $this->assertNotEmpty($response->json('answer'));
-        $productIds = collect($response->json('products'))->pluck('product_id')->all();
+        /** @var array<int, array<string, mixed>> $products */
+        $products = $response->json('products') ?? [];
+        $productIds = collect($products)->pluck('product_id')->all();
         $this->assertContains(self::PRODUCT_ID, $productIds);
         $query = mb_strtolower((string) ($response->json('extracted_filters.query') ?? ''));
         $this->assertTrue($query === '' || str_contains($query, 'диван'));

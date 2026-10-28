@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Models\ProductCatalog;
@@ -10,7 +12,7 @@ use App\Services\Catalog\DTOs\SearchHit;
 use RuntimeException;
 use Tests\TestCase;
 
-class CatalogApiFreshnessCheckerTest extends TestCase
+final class CatalogApiFreshnessCheckerTest extends TestCase
 {
     public function test_drops_not_found_and_unpublished(): void
     {

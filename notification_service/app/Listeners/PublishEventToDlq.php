@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Listeners;
 
 use App\Events\KafkaEventMovedToDlq;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Facades\Kafka;
 
-class PublishEventToDlq
+final class PublishEventToDlq
 {
     public function handle(KafkaEventMovedToDlq $event): void
     {

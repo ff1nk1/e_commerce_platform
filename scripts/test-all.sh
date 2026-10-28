@@ -9,27 +9,28 @@
 #   docker compose up -d \
 #     auth_app auth_redis \
 #     catalog_app catalog_redis \
-#     notification_app notification_mongodb notification_mailhog \
+#     notification_app notification_mongodb notification_mailpit \
 #     order_app order_db order_redis \
 #     search_app search_opensearch \
 #     analytic_clickhouse kafka
 #
 # Prerequisites:
 #   - PHP vendor/: auto-installed via Docker composer if missing (or ./scripts/bootstrap.sh)
-#   - order integration: STRIPE_SECRET + STRIPE_WEBHOOK_SECRET in order_service/.env
-#     (real Stripe test-mode API)
-#   - analytic: pulls golang:1.23-bookworm if missing; joins network php_project_net
+#   - Live Stripe and Gemini run only when RUN_LIVE_TESTS=1 (CI: workflow_dispatch).
+#     order: STRIPE_SECRET + STRIPE_WEBHOOK_SECRET in order_service/.env
+#     recommendation: GEMINI_API_KEY in recommendation_service/.env
+#   - analytic: pulls golang:1.27.0-bookworm if missing; joins network php_project_net
 #
 # Short names: auth catalog notification order search analytic recommendation
 
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
+cd "$ROOT" || exit
 
 COMPOSE=(docker compose)
 NETWORK=php_project_net
-GOLANG_IMAGE=golang:1.23-bookworm
+GOLANG_IMAGE=golang:1.27.0-bookworm
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -137,6 +138,17 @@ require_stripe_env() {
   return 0
 }
 
+require_gemini_env() {
+  local envfile="$ROOT/recommendation_service/.env"
+  GEMINI_API_KEY="$(dotenv_get "$envfile" GEMINI_API_KEY)"
+  if [[ -z "$GEMINI_API_KEY" || "$GEMINI_API_KEY" == "your_api_key_here" ]]; then
+    log "${RED}ERROR:${NC} recommendation integration needs a real GEMINI_API_KEY in ${BOLD}recommendation_service/.env${NC}"
+    log "  CI: workflow_dispatch with repository secret GEMINI_API_KEY (see deploy.yml)."
+    return 1
+  fi
+  return 0
+}
+
 run_php_suite() {
   local label="$1"
   local app="$2"
@@ -230,7 +242,7 @@ if should_run catalog; then
   add_need catalog_app catalog_redis
 fi
 if should_run notification; then
-  add_need notification_app notification_mongodb notification_mailhog
+  add_need notification_app notification_mongodb notification_mailpit
 fi
 if should_run order; then
   add_need order_app order_db order_redis
@@ -293,14 +305,19 @@ if should_run order; then
   run_php_suite order order_app php artisan test
   # Inject Stripe secrets at exec time so stale empty container $_SERVER cannot
   # block Laravel (same class of bug as JWT; keys must come from .env / CI).
-  if require_stripe_env; then
-    run_php_suite "order/integration" order_app \
-      -e "STRIPE_SECRET=${STRIPE_SECRET}" \
-      -e "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}" \
-      php artisan test -c phpunit.integration.xml
+  if [[ "${RUN_LIVE_TESTS:-}" == "1" ]]; then
+    if require_stripe_env; then
+      run_php_suite "order/integration" order_app \
+        -e "STRIPE_SECRET=${STRIPE_SECRET}" \
+        -e "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}" \
+        php artisan test -c phpunit.integration.xml
+    else
+      RESULTS+=("FAIL order/integration")
+      FAILED=1
+    fi
   else
-    RESULTS+=("FAIL order/integration")
-    FAILED=1
+    log "${YELLOW}SKIP${NC} order/integration (set RUN_LIVE_TESTS=1 for Stripe)"
+    RESULTS+=("SKIP order/integration")
   fi
 fi
 if should_run search; then
@@ -311,7 +328,20 @@ if should_run analytic; then
   run_analytic
 fi
 if should_run recommendation; then
-  run_php_suite recommendation recommendation_app php artisan test
+  run_php_suite recommendation recommendation_app php artisan test --testsuite=Unit,Feature
+  if [[ "${RUN_LIVE_TESTS:-}" == "1" ]]; then
+    if require_gemini_env; then
+      run_php_suite "recommendation/integration" recommendation_app \
+        -e "GEMINI_API_KEY=${GEMINI_API_KEY}" \
+        php artisan test -c phpunit.integration.xml
+    else
+      RESULTS+=("FAIL recommendation/integration")
+      FAILED=1
+    fi
+  else
+    log "${YELLOW}SKIP${NC} recommendation/integration (set RUN_LIVE_TESTS=1 for Gemini)"
+    RESULTS+=("SKIP recommendation/integration")
+  fi
 fi
 
 TOTAL_END=$(date +%s)
@@ -322,6 +352,8 @@ log "${BOLD}═══ Summary (${TOTAL_ELAPSED}s) ═══${NC}"
 for r in "${RESULTS[@]+"${RESULTS[@]}"}"; do
   if [[ "$r" == PASS* ]]; then
     log "  ${GREEN}${r}${NC}"
+  elif [[ "$r" == SKIP* ]]; then
+    log "  ${YELLOW}${r}${NC}"
   else
     log "  ${RED}${r}${NC}"
   fi

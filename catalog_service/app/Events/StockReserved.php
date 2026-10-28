@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Events;
 
 use Illuminate\Foundation\Events\Dispatchable;
 
-class StockReserved
+final class StockReserved
 {
     use Dispatchable;
 

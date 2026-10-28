@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Order;
@@ -10,7 +12,7 @@ use Illuminate\Support\Str;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
-class OrderShipOutboxTest extends TestCase
+final class OrderShipOutboxTest extends TestCase
 {
     use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
@@ -72,8 +74,7 @@ class OrderShipOutboxTest extends TestCase
             'total_amount' => '1.00',
         ]);
 
-        $this->postJson('/api/admin/orders/'.$order->id.'/ship')
-            ->assertStatus(422);
+        $this->postJson('/api/admin/orders/'.$order->id.'/ship')->assertUnprocessable();
 
         $this->assertSame(0, OutboxEvent::query()->where('event_type', 'order.shipped')->count());
     }

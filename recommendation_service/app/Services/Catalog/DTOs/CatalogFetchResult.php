@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog\DTOs;
 
-readonly class CatalogFetchResult
+final readonly class CatalogFetchResult
 {
     /**
      * @param  array<int, array<string, mixed>>  $products  Successful 2xx payloads keyed by product id

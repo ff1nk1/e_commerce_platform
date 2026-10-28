@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useLoaderData, useSearchParams } from 'react-router-dom'
-import { getSearchAnalytics } from '../api/analytics'
-import AnalyticsDateFilter from './AnalyticsDateFilter'
-import { defaultAnalyticsRange } from './analyticsDates'
-import AnalyticsBarChart from './charts/AnalyticsBarChart'
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLoaderData, useSearchParams } from "react-router-dom";
+import { getSearchAnalytics } from "../api/analytics";
+import AnalyticsDateFilter from "./AnalyticsDateFilter";
+import { defaultAnalyticsRange } from "./analyticsDates";
+import AnalyticsBarChart from "./charts/AnalyticsBarChart";
 
 function formatRate(rate) {
-  if (rate == null || Number.isNaN(Number(rate))) return '—'
-  return `${(Number(rate) * 100).toFixed(1)}%`
+  if (rate == null || Number.isNaN(Number(rate))) return "—";
+  return `${(Number(rate) * 100).toFixed(1)}%`;
 }
 
 function QueryTable({ title, rows, emptyText, isLoading }) {
@@ -30,7 +30,7 @@ function QueryTable({ title, rows, emptyText, isLoading }) {
             <tbody>
               {rows.map((row) => (
                 <tr key={`${row.query}-${row.count}`}>
-                  <td>{row.query || '(empty)'}</td>
+                  <td>{row.query || "(empty)"}</td>
                   <td>{row.count}</td>
                 </tr>
               ))}
@@ -39,54 +39,59 @@ function QueryTable({ title, rows, emptyText, isLoading }) {
         )}
       </div>
     </>
-  )
+  );
 }
 
 export default function AdminAnalyticsSearch() {
-  const initial = useLoaderData()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const defaults = defaultAnalyticsRange()
-  const [data, setData] = useState(initial)
-  const [from, setFrom] = useState(searchParams.get('from') || defaults.from)
-  const [to, setTo] = useState(searchParams.get('to') || defaults.to)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
+  const initial = useLoaderData();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const defaults = defaultAnalyticsRange();
+  const [data, setData] = useState(initial);
+  const [from, setFrom] = useState(searchParams.get("from") || defaults.from);
+  const [to, setTo] = useState(searchParams.get("to") || defaults.to);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!searchParams.get('from') || !searchParams.get('to')) {
-      setSearchParams({ from, to }, { replace: true })
+    if (!searchParams.get("from") || !searchParams.get("to")) {
+      setSearchParams({ from, to }, { replace: true });
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchMetrics = useCallback(async (nextFrom, nextTo) => {
-    setIsLoading(true)
-    setError('')
-    try {
-      const params = { limit: 20 }
-      if (nextFrom) params.from = nextFrom
-      if (nextTo) params.to = nextTo
-      const response = await getSearchAnalytics(params)
-      setData(response.data)
-      const next = {}
-      if (nextFrom) next.from = nextFrom
-      if (nextTo) next.to = nextTo
-      setSearchParams(next, { replace: true })
-    } catch (err) {
-      console.error('Search analytics error:', err)
-      setError(err.response?.data?.error || 'Не удалось загрузить метрики поиска')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [setSearchParams])
+  const fetchMetrics = useCallback(
+    async (nextFrom, nextTo) => {
+      setIsLoading(true);
+      setError("");
+      try {
+        const params = { limit: 20 };
+        if (nextFrom) params.from = nextFrom;
+        if (nextTo) params.to = nextTo;
+        const response = await getSearchAnalytics(params);
+        setData(response.data);
+        const next = {};
+        if (nextFrom) next.from = nextFrom;
+        if (nextTo) next.to = nextTo;
+        setSearchParams(next, { replace: true });
+      } catch (err) {
+        console.error("Search analytics error:", err);
+        setError(
+          err.response?.data?.error || "Не удалось загрузить метрики поиска",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [setSearchParams],
+  );
 
   const popularBars = useMemo(
     () =>
       (data?.popular_queries || []).slice(0, 10).map((row) => ({
-        name: row.query || '(empty)',
+        name: row.query || "(empty)",
         value: Number(row.count) || 0,
       })),
     [data?.popular_queries],
-  )
+  );
 
   return (
     <div>
@@ -99,7 +104,9 @@ export default function AdminAnalyticsSearch() {
         to={to}
         onFromChange={setFrom}
         onToChange={setTo}
-        onApply={(nextFrom, nextTo) => fetchMetrics(nextFrom ?? from, nextTo ?? to)}
+        onApply={(nextFrom, nextTo) =>
+          fetchMetrics(nextFrom ?? from, nextTo ?? to)
+        }
         isLoading={isLoading}
       />
 
@@ -108,15 +115,21 @@ export default function AdminAnalyticsSearch() {
       <div className="analytics-metrics">
         <div className="analytics-metric-card">
           <span className="analytics-metric-label">Всего поисков</span>
-          <strong className="analytics-metric-value">{data?.total_searches ?? 0}</strong>
+          <strong className="analytics-metric-value">
+            {data?.total_searches ?? 0}
+          </strong>
         </div>
         <div className="analytics-metric-card">
           <span className="analytics-metric-label">Без результатов</span>
-          <strong className="analytics-metric-value">{data?.zero_result_count ?? 0}</strong>
+          <strong className="analytics-metric-value">
+            {data?.zero_result_count ?? 0}
+          </strong>
         </div>
         <div className="analytics-metric-card">
           <span className="analytics-metric-label">Доля пустых</span>
-          <strong className="analytics-metric-value">{formatRate(data?.zero_result_rate)}</strong>
+          <strong className="analytics-metric-value">
+            {formatRate(data?.zero_result_rate)}
+          </strong>
         </div>
       </div>
 
@@ -143,5 +156,5 @@ export default function AdminAnalyticsSearch() {
         isLoading={isLoading}
       />
     </div>
-  )
+  );
 }

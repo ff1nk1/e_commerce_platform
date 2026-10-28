@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Kafka\Handlers;
 
 use App\Services\Catalog\ProductIndexer;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
-class StockEventsHandler
+final class StockEventsHandler
 {
     public function __construct(
         private readonly ProductIndexer $indexer,

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Llm\Contracts\LlmClient;
@@ -9,7 +11,7 @@ use App\Services\Llm\Gemini\GeminiLlmClient;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
-class GeminiLlmClientTest extends TestCase
+final class GeminiLlmClientTest extends TestCase
 {
     private function client(int $timeout = 12): GeminiLlmClient
     {
@@ -51,7 +53,7 @@ class GeminiLlmClientTest extends TestCase
         $this->assertCount(768, $embedding);
         $this->assertSame(0.1, $embedding[0]);
 
-        Http::assertSent(function ($request) {
+        Http::assertSent(function (array $request): bool {
             return str_contains($request->url(), 'embedContent')
                 && $request->hasHeader('x-goog-api-key', 'test-key')
                 && ($request['taskType'] ?? null) === 'RETRIEVAL_DOCUMENT'
@@ -82,7 +84,7 @@ class GeminiLlmClientTest extends TestCase
 
         $this->assertSame('Here are some recommendations.', $text);
 
-        Http::assertSent(function ($request) {
+        Http::assertSent(function ($request): bool {
             $body = $request->data();
 
             return str_contains($request->url(), 'generateContent')
@@ -131,7 +133,7 @@ class GeminiLlmClientTest extends TestCase
         $this->assertSame('джинсы', $filters->query);
         $this->assertSame([['name' => 'Цвет', 'value' => 'чёрный']], $filters->attributes);
 
-        Http::assertSent(function ($request) {
+        Http::assertSent(function ($request): bool {
             $body = $request->data();
 
             return ($body['generationConfig']['responseMimeType'] ?? null) === 'application/json'
@@ -243,7 +245,7 @@ class GeminiLlmClientTest extends TestCase
         $this->assertSame(0.2, $embedding[0]);
 
         Http::assertSentCount(2);
-        Http::assertSent(function ($request) {
+        Http::assertSent(function (array $request): bool {
             if (! str_contains($request->url(), 'embedContent')) {
                 return false;
             }
@@ -270,7 +272,7 @@ class GeminiLlmClientTest extends TestCase
 
         $this->client()->extractFilters('jeans');
 
-        Http::assertSent(function ($request) {
+        Http::assertSent(function ($request): bool {
             $body = $request->data();
 
             return ($body['generationConfig']['temperature'] ?? null) === 0

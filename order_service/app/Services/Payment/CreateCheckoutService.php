@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Payment;
 
 use App\Contracts\IdempotencyStore;
@@ -8,11 +10,12 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Stripe\StripeCheckoutSessionParams;
 use App\Services\Stripe\StripeLineItems;
+use Illuminate\Support\Sleep;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
-class CreateCheckoutService
+final class CreateCheckoutService
 {
     private const LOCK_RETRY_ATTEMPTS = 2;
 
@@ -45,7 +48,7 @@ class CreateCheckoutService
 
         if (! $this->idempotency->acquireLock($scopeKey)) {
             for ($attempt = 0; $attempt < self::LOCK_RETRY_ATTEMPTS; $attempt++) {
-                usleep(self::LOCK_RETRY_SLEEP_MICROS);
+                Sleep::usleep(self::LOCK_RETRY_SLEEP_MICROS);
                 $cached = $this->idempotency->get($scopeKey);
                 if ($cached !== null) {
                     /** @var array{checkout_url: string, payment_id: int} $body */
@@ -91,7 +94,7 @@ class CreateCheckoutService
     {
         $order->assertPayable();
 
-        if ($pendingWithSession !== null) {
+        if ($pendingWithSession instanceof Payment) {
             try {
                 $session = $this->stripe->retrieveCheckoutSession($pendingWithSession->stripe_checkout_session_id);
                 $sessionIsReusable = ($session['status'] ?? null) === 'open' && ! empty($session['url']);
@@ -135,9 +138,7 @@ class CreateCheckoutService
         $payment->save();
 
         $url = $session['url'] ?? null;
-        if (! is_string($url) || $url === '') {
-            throw new RuntimeException('Stripe Checkout Session did not return a URL.');
-        }
+        throw_if(! is_string($url) || $url === '', RuntimeException::class, 'Stripe Checkout Session did not return a URL.');
 
         return [
             'checkout_url' => $url,

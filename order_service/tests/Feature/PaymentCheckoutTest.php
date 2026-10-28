@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Domain\OrderStatus;
@@ -11,7 +13,7 @@ use Tests\Concerns\BindsFakePaymentGateway;
 use Tests\Concerns\BindsInMemoryIdempotency;
 use Tests\TestCase;
 
-class PaymentCheckoutTest extends TestCase
+final class PaymentCheckoutTest extends TestCase
 {
     use BindsFakePaymentGateway;
     use BindsInMemoryIdempotency;
@@ -83,8 +85,7 @@ class PaymentCheckoutTest extends TestCase
     {
         $order = $this->createAwaitingPaymentOrder();
 
-        $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7])
-            ->assertStatus(422);
+        $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7])->assertUnprocessable();
     }
 
     public function test_pay_rejects_pending_before_stock_reserved(): void
@@ -98,7 +99,7 @@ class PaymentCheckoutTest extends TestCase
 
         $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7], [
             'Idempotency-Key' => 'pay-pending',
-        ])->assertStatus(422);
+        ])->assertUnprocessable();
     }
 
     private function createAwaitingPaymentOrder(): Order

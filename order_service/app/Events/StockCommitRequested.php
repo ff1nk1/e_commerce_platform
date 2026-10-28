@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Events;
 
 use App\Contracts\Outboxable;
 use Illuminate\Foundation\Events\Dispatchable;
 
-class StockCommitRequested implements Outboxable
+final class StockCommitRequested implements Outboxable
 {
     use Dispatchable;
 

@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\ProductSnapshot;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
-class ProductSnapshotSeeder extends Seeder
+final class ProductSnapshotSeeder extends Seeder
 {
     /**
      * Копирует товары из catalog DB в product_snapshots (id/name/price/store_id).

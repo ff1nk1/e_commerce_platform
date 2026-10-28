@@ -1,16 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\GetUploadUrlRequest;
 use App\Support\MediaPublicUrl;
 use App\Support\MediaUploadPath;
 use Illuminate\Filesystem\AwsS3V3Adapter;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
 
-class UploadController extends Controller
+final class UploadController extends Controller
 {
-    public function getUploadUrl(GetUploadUrlRequest $request)
+    public function getUploadUrl(GetUploadUrlRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $contentType = $validated['content_type'];

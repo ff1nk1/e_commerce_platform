@@ -1,8 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Database\Factories\RoleFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -14,18 +17,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  *
  * @method static RoleFactory factory($count = null, $state = [])
  */
-class Role extends Model
+#[Fillable([
+    'name',
+    'slug',
+])]
+final class Role extends Model
 {
     /** @use HasFactory<RoleFactory> */
     use HasFactory;
-
-    /**
-     * @var list<string>
-     */
-    protected $fillable = [
-        'name',
-        'slug',
-    ];
 
     /**
      * @return HasMany<User, $this>

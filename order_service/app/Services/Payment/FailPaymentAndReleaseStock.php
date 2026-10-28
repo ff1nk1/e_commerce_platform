@@ -1,13 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Payment;
 
 use App\Models\Order;
+use App\Models\Payment;
 use App\Services\Order\RequestStockRelease;
 use App\Services\Stripe\StripePaymentResolver;
 use Illuminate\Support\Facades\DB;
 
-class FailPaymentAndReleaseStock
+final class FailPaymentAndReleaseStock
 {
     public function __construct(
         private RequestStockRelease $stockRelease,
@@ -20,9 +23,9 @@ class FailPaymentAndReleaseStock
     {
         $releaseOrder = null;
 
-        DB::transaction(function () use ($session, &$releaseOrder) {
+        DB::transaction(function () use ($session, &$releaseOrder): void {
             $payment = StripePaymentResolver::lockForSession($session);
-            if ($payment === null || $payment->status !== 'pending') {
+            if (! $payment instanceof Payment || $payment->status !== 'pending') {
                 return;
             }
 
@@ -37,7 +40,7 @@ class FailPaymentAndReleaseStock
             $releaseOrder = $this->applyFail($order);
         });
 
-        if ($releaseOrder !== null) {
+        if ($releaseOrder instanceof Order) {
             $this->stockRelease->recordSagaStep($releaseOrder);
         }
     }

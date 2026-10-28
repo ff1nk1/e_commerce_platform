@@ -1,0 +1,37 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Property App\\Models\\EmailLog\:\:\$collection is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: app/Models/EmailLog.php
+
+		-
+			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: config/filesystems.php
+
+		-
+			message: '#^Static property Database\\Factories\\UserFactory\:\:\$password \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: database/factories/UserFactory.php
+
+		-
+			message: '#^Cannot access property \$retries on App\\Models\\EmailLog\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/NotificationsApiTest.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between 1 and 1 will always evaluate to true\.$#'
+			identifier: identical.alwaysTrue
+			count: 2
+			path: tests/Unit/NotificationTest.php
+
+		-
+			message: '#^Unreachable statement \- code above always terminates\.$#'
+			identifier: deadCode.unreachable
+			count: 2
+			path: tests/Unit/NotificationTest.php

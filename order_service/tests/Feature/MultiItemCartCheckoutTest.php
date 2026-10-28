@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Order;
@@ -12,7 +14,7 @@ use Tests\Concerns\BindsInMemoryIdempotency;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
-class MultiItemCartCheckoutTest extends TestCase
+final class MultiItemCartCheckoutTest extends TestCase
 {
     use BindsFakePaymentGateway;
     use BindsInMemoryIdempotency;
@@ -87,7 +89,7 @@ class MultiItemCartCheckoutTest extends TestCase
         $stripe = $this->mockPaymentGateway();
         $stripe->shouldReceive('createCheckoutSession')
             ->once()
-            ->andReturnUsing(function (array $params) use (&$capturedLineItems) {
+            ->andReturnUsing(function (array $params) use (&$capturedLineItems): array {
                 $capturedLineItems = $params['line_items'] ?? null;
 
                 return [

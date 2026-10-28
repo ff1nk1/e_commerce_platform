@@ -1,8 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Concerns;
 
 use App\Services\SearchIndexService;
+use Illuminate\Support\Env;
+use Illuminate\Support\Facades\Request;
 use OpenSearch\Client;
 use Throwable;
 
@@ -31,13 +35,11 @@ trait UsesOpenSearch
 
     protected function recreateSearchIndices(): void
     {
-        $productsIndex = $_ENV['OPENSEARCH_PRODUCTS_INDEX']
-            ?? $_SERVER['OPENSEARCH_PRODUCTS_INDEX']
-            ?? getenv('OPENSEARCH_PRODUCTS_INDEX')
+        $productsIndex = Env::get('OPENSEARCH_PRODUCTS_INDEX', Request::server('OPENSEARCH_PRODUCTS_INDEX')
+        ?? getenv('OPENSEARCH_PRODUCTS_INDEX'))
             ?: 'products_test';
-        $categoriesIndex = $_ENV['OPENSEARCH_CATEGORIES_INDEX']
-            ?? $_SERVER['OPENSEARCH_CATEGORIES_INDEX']
-            ?? getenv('OPENSEARCH_CATEGORIES_INDEX')
+        $categoriesIndex = Env::get('OPENSEARCH_CATEGORIES_INDEX', Request::server('OPENSEARCH_CATEGORIES_INDEX')
+        ?? getenv('OPENSEARCH_CATEGORIES_INDEX'))
             ?: 'categories_test';
 
         config([
@@ -48,7 +50,7 @@ trait UsesOpenSearch
         // Client is a singleton — rebuild if hosts changed in tests.
         $this->app->forgetInstance(Client::class);
 
-        app(SearchIndexService::class)->recreateIndices();
+        resolve(SearchIndexService::class)->recreateIndices();
     }
 
     /**

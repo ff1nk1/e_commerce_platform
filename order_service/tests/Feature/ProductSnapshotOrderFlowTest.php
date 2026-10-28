@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Contracts\IdempotencyStore;
@@ -14,7 +16,7 @@ use Mockery\MockInterface;
 use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
-class ProductSnapshotOrderFlowTest extends TestCase
+final class ProductSnapshotOrderFlowTest extends TestCase
 {
     use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
@@ -37,7 +39,7 @@ class ProductSnapshotOrderFlowTest extends TestCase
 
         $this->expectException(ValidationException::class);
 
-        app(OrderService::class)->create(1, 'a@example.com', 'A', [
+        resolve(OrderService::class)->create(1, 'a@example.com', 'A', [
             ['product_id' => 136, 'quantity' => 1],
         ], 'idem-missing-snapshot');
     }
@@ -62,7 +64,7 @@ class ProductSnapshotOrderFlowTest extends TestCase
 
         $this->bindScopedIdempotencyMock(expectPut: true);
 
-        $result = app(OrderService::class)->create(7, 'user7@example.com', 'User Seven', [
+        $result = resolve(OrderService::class)->create(7, 'user7@example.com', 'User Seven', [
             ['product_id' => 136, 'quantity' => 2],
         ], 'idem-after-snapshot');
 
@@ -123,7 +125,7 @@ class ProductSnapshotOrderFlowTest extends TestCase
         $idempotency->shouldReceive('scopeKey')->andReturnUsing(
             fn (string $op, int $userId, string $key, ?int $resourceId = null): string => implode(':', array_filter(
                 ['order', 'idempotency', $op, (string) $userId, $resourceId !== null ? (string) $resourceId : null, $key],
-                static fn ($v) => $v !== null
+                static fn (?string $v): bool => $v !== null
             ))
         );
         $idempotency->shouldReceive('get')->andReturn(null);

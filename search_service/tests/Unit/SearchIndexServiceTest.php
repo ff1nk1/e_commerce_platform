@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\SearchIndexService;
@@ -10,7 +12,7 @@ use OpenSearch\Namespaces\IndicesNamespace;
 use Tests\Concerns\CapturesOpenSearchRequests;
 use Tests\TestCase;
 
-class SearchIndexServiceTest extends TestCase
+final class SearchIndexServiceTest extends TestCase
 {
     use CapturesOpenSearchRequests;
 
@@ -24,7 +26,7 @@ class SearchIndexServiceTest extends TestCase
     {
         $this->mockOpenSearchClient();
 
-        app(SearchIndexService::class)->indexProduct([
+        resolve(SearchIndexService::class)->indexProduct([
             'id' => 10,
             'name' => 'Phone',
             'store_id' => 7,
@@ -70,7 +72,7 @@ class SearchIndexServiceTest extends TestCase
             return $params['index'] === 'products' && $params['id'] === '10';
         }))->andReturn(['result' => 'updated']);
 
-        app(SearchIndexService::class)->indexProduct([
+        resolve(SearchIndexService::class)->indexProduct([
             'id' => 10,
             'name' => 'Updated',
             'store_id' => 1,
@@ -89,7 +91,7 @@ class SearchIndexServiceTest extends TestCase
     {
         $this->mockOpenSearchClient();
 
-        app(SearchIndexService::class)->indexProduct([
+        resolve(SearchIndexService::class)->indexProduct([
             'id' => 0,
             'name' => 'Nope',
             'store_id' => 1,
@@ -100,19 +102,17 @@ class SearchIndexServiceTest extends TestCase
 
     public function test_delete_product_swallows_missing_404(): void
     {
-        $this->expectNotToPerformAssertions();
-
         $client = $this->mockOpenSearchClient();
         $client->shouldReceive('delete')->once()->andThrow(new Missing404Exception('not found'));
 
-        app(SearchIndexService::class)->deleteProduct(99);
+        resolve(SearchIndexService::class)->deleteProduct(99);
     }
 
     public function test_index_category_document_shape(): void
     {
         $this->mockOpenSearchClient();
 
-        app(SearchIndexService::class)->indexCategory([
+        resolve(SearchIndexService::class)->indexCategory([
             'id' => 5,
             'parent_id' => 1,
             'name' => 'Phones',
@@ -132,12 +132,10 @@ class SearchIndexServiceTest extends TestCase
 
     public function test_delete_category_swallows_not_found_message(): void
     {
-        $this->expectNotToPerformAssertions();
-
         $client = $this->mockOpenSearchClient();
         $client->shouldReceive('delete')->once()->andThrow(new \RuntimeException('index_not_found_exception 404'));
 
-        app(SearchIndexService::class)->deleteCategory(5);
+        resolve(SearchIndexService::class)->deleteCategory(5);
     }
 
     public function test_sync_category_name_on_products_builds_update_by_query(): void
@@ -154,7 +152,7 @@ class SearchIndexServiceTest extends TestCase
             return true;
         }))->andReturn(['updated' => 2]);
 
-        app(SearchIndexService::class)->syncCategoryNameOnProducts(3, 'New Name');
+        resolve(SearchIndexService::class)->syncCategoryNameOnProducts(3, 'New Name');
     }
 
     public function test_update_product_stock_skips_missing_product(): void
@@ -168,7 +166,7 @@ class SearchIndexServiceTest extends TestCase
         $client->shouldNotReceive('update');
         $this->app->instance(Client::class, $client);
 
-        app(SearchIndexService::class)->updateProductStock(44, 5);
+        resolve(SearchIndexService::class)->updateProductStock(44, 5);
     }
 
     public function test_update_product_stock_sets_in_stock_false_for_zero_qty(): void
@@ -187,7 +185,7 @@ class SearchIndexServiceTest extends TestCase
         }))->andReturn(['result' => 'updated']);
         $this->app->instance(Client::class, $client);
 
-        app(SearchIndexService::class)->updateProductStock(44, 0);
+        resolve(SearchIndexService::class)->updateProductStock(44, 0);
     }
 
     public function test_ensure_indices_creates_missing_once(): void
@@ -200,7 +198,7 @@ class SearchIndexServiceTest extends TestCase
         $client->shouldReceive('indices')->andReturn($indices);
         $this->app->instance(Client::class, $client);
 
-        $service = app(SearchIndexService::class);
+        $service = resolve(SearchIndexService::class);
         $service->ensureIndices();
         $service->ensureIndices(); // second call must be no-op (in-process flag)
     }
@@ -215,14 +213,14 @@ class SearchIndexServiceTest extends TestCase
         $client->shouldReceive('indices')->andReturn($indices);
         $this->app->instance(Client::class, $client);
 
-        app(SearchIndexService::class)->ensureIndices();
+        resolve(SearchIndexService::class)->ensureIndices();
     }
 
     public function test_non_array_attributes_normalize_to_empty(): void
     {
         $this->mockOpenSearchClient();
 
-        app(SearchIndexService::class)->indexProduct([
+        resolve(SearchIndexService::class)->indexProduct([
             'id' => 1,
             'name' => 'X',
             'store_id' => 1,

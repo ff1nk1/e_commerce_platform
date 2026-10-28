@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\CategoryResource\Pages\ManageCategories;
@@ -16,7 +18,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
-class CategoryResource extends Resource
+final class CategoryResource extends Resource
 {
     protected static ?string $model = Category::class;
 
@@ -47,14 +49,14 @@ class CategoryResource extends Resource
             ])
             ->headerActions([
                 CreateAction::make()
-                    ->using(fn (array $data): Category => app(CatalogService::class)->createCategory($data)),
+                    ->using(fn (array $data): Category => resolve(CatalogService::class)->createCategory($data)),
             ])
             ->recordActions([
                 EditAction::make()
-                    ->using(fn (Category $record, array $data): Category => app(CatalogService::class)->updateCategory($record, $data)),
+                    ->using(fn (Category $record, array $data): Category => resolve(CatalogService::class)->updateCategory($record, $data)),
                 DeleteAction::make()
                     ->using(function (Category $record): bool {
-                        return app(CatalogService::class)->deleteCategory($record);
+                        return resolve(CatalogService::class)->deleteCategory($record);
                     }),
             ]);
     }

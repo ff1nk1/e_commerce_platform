@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use App\Models\Role;
@@ -7,7 +9,7 @@ use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
-class DatabaseSeeder extends Seeder
+final class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
@@ -18,7 +20,7 @@ class DatabaseSeeder extends Seeder
             AdminSeeder::class,
         ]);
 
-        $customerRole = Role::where('slug', 'customer')->first();
+        $customerRole = Role::query()->where('slug', 'customer')->first();
         User::factory(10)->create([
             'role_id' => $customerRole->id,
         ]);

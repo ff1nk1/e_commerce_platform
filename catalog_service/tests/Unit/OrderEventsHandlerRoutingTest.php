@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Kafka\Handlers\OrderCreatedHandler;
@@ -10,7 +12,7 @@ use Mockery;
 use Mockery\MockInterface;
 use Tests\TestCase;
 
-class OrderEventsHandlerRoutingTest extends TestCase
+final class OrderEventsHandlerRoutingTest extends TestCase
 {
     protected function tearDown(): void
     {

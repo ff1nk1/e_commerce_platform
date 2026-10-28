@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Gateway\ProxyService;
@@ -8,7 +10,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
-class ProxyHtmlMultipartTest extends TestCase
+final class ProxyHtmlMultipartTest extends TestCase
 {
     public function test_forward_html_rebuilds_multipart_when_files_present(): void
     {
@@ -30,7 +32,7 @@ class ProxyHtmlMultipartTest extends TestCase
             ],
         );
 
-        $response = app(ProxyService::class)->forwardHtml(
+        $response = resolve(ProxyService::class)->forwardHtml(
             $request,
             'http://catalog.test',
             '/admin-catalog/livewire/upload-file',
@@ -44,7 +46,7 @@ class ProxyHtmlMultipartTest extends TestCase
 
         $this->assertSame(200, $response->getStatusCode());
 
-        Http::assertSent(function ($httpRequest) {
+        Http::assertSent(function ($httpRequest): bool {
             if (! str_contains($httpRequest->url(), '/admin-catalog/livewire/upload-file')) {
                 return false;
             }
@@ -83,7 +85,7 @@ class ProxyHtmlMultipartTest extends TestCase
             $payload,
         );
 
-        $response = app(ProxyService::class)->forwardHtml(
+        $response = resolve(ProxyService::class)->forwardHtml(
             $request,
             'http://catalog.test',
             '/admin-catalog/livewire/update',
@@ -95,7 +97,7 @@ class ProxyHtmlMultipartTest extends TestCase
 
         $this->assertSame(200, $response->getStatusCode());
 
-        Http::assertSent(function ($httpRequest) use ($payload) {
+        Http::assertSent(function ($httpRequest) use ($payload): bool {
             return str_contains($httpRequest->url(), '/admin-catalog/livewire/update')
                 && $httpRequest->body() === $payload;
         });
@@ -124,14 +126,14 @@ class ProxyHtmlMultipartTest extends TestCase
             ],
         );
 
-        app(ProxyService::class)->forwardHtml(
+        resolve(ProxyService::class)->forwardHtml(
             $request,
             'http://catalog.test',
             '/admin-catalog',
             ['id' => 1, 'role' => 'admin'],
         );
 
-        Http::assertSent(function ($httpRequest) {
+        Http::assertSent(function ($httpRequest): bool {
             $cookie = $httpRequest->header('Cookie')[0] ?? '';
 
             return str_contains($httpRequest->url(), '/admin-catalog')

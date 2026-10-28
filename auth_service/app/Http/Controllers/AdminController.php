@@ -1,15 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ChangeRoleRequest;
 use App\Models\Role;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-class AdminController extends Controller
+final class AdminController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
         $query = User::with('role');
 
@@ -23,14 +26,14 @@ class AdminController extends Controller
     }
 
     // Добавим метод для получения списка ролей для фронтенда
-    public function getRoles()
+    public function getRoles(): JsonResponse
     {
         return response()->json(Role::all());
     }
 
-    public function changeRole(ChangeRoleRequest $request, $id)
+    public function changeRole(ChangeRoleRequest $request, int $id): JsonResponse
     {
-        $user = User::findOrFail($id);
+        $user = User::query()->findOrFail($id);
         $user->role_id = $request->validated()['role_id'];
         $user->save();
 

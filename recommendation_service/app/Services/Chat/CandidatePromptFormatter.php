@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Chat;
 
 final class CandidatePromptFormatter
@@ -62,6 +64,6 @@ final class CandidatePromptFormatter
             $parts[] = $name.': '.$value;
         }
 
-        return $parts === [] ? '' : implode('; ', $parts);
+        return implode('; ', $parts);
     }
 }

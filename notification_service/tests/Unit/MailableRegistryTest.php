@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Mail\MailableRegistry;
@@ -8,7 +10,7 @@ use App\Mail\WelcomeMail;
 use InvalidArgumentException;
 use Tests\TestCase;
 
-class MailableRegistryTest extends TestCase
+final class MailableRegistryTest extends TestCase
 {
     public function test_make_returns_welcome_mail_for_user_registered(): void
     {

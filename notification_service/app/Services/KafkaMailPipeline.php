@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Events\KafkaEventMovedToDlq;
@@ -8,7 +10,7 @@ use App\Support\KafkaMailMessageId;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
-class KafkaMailPipeline
+final class KafkaMailPipeline
 {
     public function __construct(
         private MailDeliveryService $delivery,

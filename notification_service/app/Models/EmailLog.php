@@ -1,8 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Database\Factories\EmailLogFactory;
+use Illuminate\Database\Eloquent\Attributes\Connection;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use MongoDB\Laravel\Eloquent\Model;
 
@@ -22,27 +26,25 @@ use MongoDB\Laravel\Eloquent\Model;
  *
  * @method static EmailLogFactory factory($count = null, $state = [])
  */
-class EmailLog extends Model
+#[Connection('mongodb')]
+#[Fillable([
+    'message_id',
+    'email',
+    'payload',
+    'status',
+    'retries',
+    'moved_to_dlq',
+    'error_message',
+    'name',
+    'time',
+    'event_type',
+])]
+final class EmailLog extends Model
 {
     /** @use HasFactory<EmailLogFactory> */
     use HasFactory;
 
-    protected $connection = 'mongodb';
-
-    protected $collection = 'email_logs';
-
-    protected $fillable = [
-        'message_id',
-        'email',
-        'payload',
-        'status',
-        'retries',
-        'moved_to_dlq',
-        'error_message',
-        'name',
-        'time',
-        'event_type',
-    ];
+    private string $collection = 'email_logs';
 
     /**
      * @return array<string, string>

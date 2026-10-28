@@ -1,0 +1,7 @@
+# Shared PHPStan/Larastan settings. Each service includes this file and
+# its own vendor/larastan extension (paths in an include are relative to
+# the file that contains the include).
+parameters:
+    level: 8
+    parallel:
+        maximumNumberOfProcesses: 1

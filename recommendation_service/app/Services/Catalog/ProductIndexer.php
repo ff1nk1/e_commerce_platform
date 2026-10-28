@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Models\ProductCatalog;
@@ -8,7 +10,7 @@ use App\Support\PgVectorLiteral;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class ProductIndexer
+final class ProductIndexer
 {
     public function __construct(
         private readonly LlmClient $llm,
@@ -22,18 +24,14 @@ class ProductIndexer
     public function upsertFromEvent(array $data, bool $reembed = true): ProductCatalog
     {
         $productId = (int) ($data['id'] ?? $data['product_id'] ?? 0);
-        if ($productId <= 0) {
-            throw new \InvalidArgumentException('product event missing id');
-        }
+        throw_if($productId <= 0, \InvalidArgumentException::class, 'product event missing id');
 
-        $resolvedStoreId = (int) ($data['store_id'] ?? data_get($data, 'store.id') ?? 0);
-        $rawStoreName = data_get($data, 'store.name')
-            ?? ($data['store_name'] ?? null);
+        $resolvedStoreId = (int) ($data['store_id'] ?? data_get($data, 'store.id', 0));
+        $rawStoreName = data_get($data, 'store.name', $data['store_name'] ?? null);
         $resolvedStoreName = $rawStoreName !== null ? (string) $rawStoreName : null;
         $rawCategoryId = $data['category_id'] ?? data_get($data, 'category.id');
         $resolvedCategoryId = $rawCategoryId !== null ? (int) $rawCategoryId : null;
-        $rawCategoryName = data_get($data, 'category.name')
-            ?? ($data['category_name'] ?? null);
+        $rawCategoryName = data_get($data, 'category.name', $data['category_name'] ?? null);
         $resolvedCategoryName = $rawCategoryName !== null ? (string) $rawCategoryName : null;
 
         $attributes = $data['attributes'] ?? [];

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Llm\Contracts;
 
 use App\Services\Llm\DTOs\ChatMessage;

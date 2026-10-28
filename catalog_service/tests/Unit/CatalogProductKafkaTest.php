@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Models\Category;
@@ -12,7 +14,7 @@ use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Facades\Kafka;
 use Tests\TestCase;
 
-class CatalogProductKafkaTest extends TestCase
+final class CatalogProductKafkaTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -20,12 +22,12 @@ class CatalogProductKafkaTest extends TestCase
     {
         Kafka::fake();
 
-        $category = app(CatalogService::class)->createCategory([
+        $category = resolve(CatalogService::class)->createCategory([
             'name' => 'Laptops',
             'slug' => 'laptops',
         ]);
 
-        Kafka::assertPublishedOn('category.created', null, function ($message) use ($category) {
+        Kafka::assertPublishedOn('category.created', null, function ($message) use ($category): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -44,9 +46,9 @@ class CatalogProductKafkaTest extends TestCase
         Kafka::fake();
 
         $category = Category::factory()->create(['name' => 'Old', 'slug' => 'old']);
-        app(CatalogService::class)->updateCategory($category, ['name' => 'New']);
+        resolve(CatalogService::class)->updateCategory($category, ['name' => 'New']);
 
-        Kafka::assertPublishedOn('category.updated', null, function ($message) use ($category) {
+        Kafka::assertPublishedOn('category.updated', null, function ($message) use ($category): bool {
             $body = $message->getBody();
 
             return ($message->getHeaders()['event-type'] ?? null) === 'category.updated'
@@ -66,7 +68,7 @@ class CatalogProductKafkaTest extends TestCase
             'parent_id' => $parent->id,
         ]);
 
-        app(CatalogService::class)->deleteCategory($parent);
+        resolve(CatalogService::class)->deleteCategory($parent);
 
         Kafka::assertPublishedOn('category.updated');
         Kafka::assertPublishedOn('category.deleted');
@@ -82,14 +84,14 @@ class CatalogProductKafkaTest extends TestCase
         $store = Store::factory()->create();
         $category = Category::factory()->create();
 
-        $product = app(ProductService::class)->createProduct([
+        $product = resolve(ProductService::class)->createProduct([
             'store_id' => $store->id,
             'category_id' => $category->id,
             'name' => 'Phone',
             'price' => 199.99,
         ]);
 
-        Kafka::assertPublishedOn('product.created', null, function ($message) use ($product) {
+        Kafka::assertPublishedOn('product.created', null, function ($message) use ($product): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -109,9 +111,9 @@ class CatalogProductKafkaTest extends TestCase
         Kafka::fake();
 
         $product = Product::factory()->create(['name' => 'Old phone']);
-        app(ProductService::class)->updateProduct($product, ['name' => 'New phone']);
+        resolve(ProductService::class)->updateProduct($product, ['name' => 'New phone']);
 
-        Kafka::assertPublishedOn('product.updated', null, function ($message) use ($product) {
+        Kafka::assertPublishedOn('product.updated', null, function ($message) use ($product): bool {
             $body = $message->getBody();
 
             return ($message->getHeaders()['event-type'] ?? null) === 'product.updated'
@@ -126,9 +128,9 @@ class CatalogProductKafkaTest extends TestCase
 
         $product = Product::factory()->create();
         $productId = $product->id;
-        app(ProductService::class)->deleteProduct($product);
+        resolve(ProductService::class)->deleteProduct($product);
 
-        Kafka::assertPublishedOn('product.deleted', null, function ($message) use ($productId) {
+        Kafka::assertPublishedOn('product.deleted', null, function ($message) use ($productId): bool {
             return ($message->getBody()['data']['id'] ?? null) === $productId;
         });
 
@@ -146,7 +148,7 @@ class CatalogProductKafkaTest extends TestCase
         $store = Store::factory()->create();
         $category = Category::factory()->create();
 
-        $product = app(ProductService::class)->createProduct([
+        $product = resolve(ProductService::class)->createProduct([
             'store_id' => $store->id,
             'category_id' => $category->id,
             'name' => 'Resilient phone',
@@ -160,7 +162,7 @@ class CatalogProductKafkaTest extends TestCase
 
         $logSpy->shouldHaveReceived('error')
             ->once()
-            ->withArgs(function ($message, $context) use ($product) {
+            ->withArgs(function ($message, array $context) use ($product): bool {
                 return $message === 'Kafka publish failed on product.created'
                     && ($context['product_id'] ?? null) === $product->id;
             });
@@ -191,13 +193,16 @@ class CatalogProductKafkaTest extends TestCase
             'value' => 'Blue',
         ]);
 
-        $unpublished = app(ProductService::class)->togglePublished($product);
+        $unpublished = resolve(ProductService::class)->togglePublished($product);
 
         $this->assertFalse($unpublished->is_published);
-        Kafka::assertPublishedOn('product.unpublished', null, function ($message) use ($product) {
+        Kafka::assertPublishedOn('product.unpublished', null, function ($message) use ($product): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
             $data = $body['data'] ?? [];
+            $rawAttributes = is_array($data) && is_array($data['attributes'] ?? null) ? $data['attributes'] : [];
+            /** @var array<int, array<string, mixed>> $attributes */
+            $attributes = $rawAttributes;
 
             return ($headers['event-type'] ?? null) === 'product.unpublished'
                 && ($headers['source'] ?? null) === 'catalog-service'
@@ -207,17 +212,17 @@ class CatalogProductKafkaTest extends TestCase
                 && ($data['name'] ?? null) === 'AI Phone'
                 && ($data['description'] ?? null) === 'A phone for embeddings'
                 && ($data['store_id'] ?? null) === $product->store_id
-                && collect($data['attributes'] ?? [])->contains(
+                && collect($attributes)->contains(
                     fn (array $attr): bool => ($attr['name'] ?? null) === 'Color'
                         && ($attr['value'] ?? null) === 'Blue'
                 )
                 && (string) $message->getKey() === (string) $product->id;
         });
 
-        $published = app(ProductService::class)->togglePublished($unpublished);
+        $published = resolve(ProductService::class)->togglePublished($unpublished);
 
         $this->assertTrue($published->is_published);
-        Kafka::assertPublishedOn('product.published', null, function ($message) use ($product) {
+        Kafka::assertPublishedOn('product.published', null, function ($message) use ($product): bool {
             $body = $message->getBody();
             $data = $body['data'] ?? [];
 

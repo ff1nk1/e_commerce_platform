@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Models\Role;
@@ -15,11 +17,11 @@ use Illuminate\Support\Facades\Config;
 use Mockery\MockInterface;
 use Tests\TestCase;
 
-class JwtServiceTest extends TestCase
+final class JwtServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected JwtService $jwtService;
+    private JwtService $jwtService;
 
     protected function setUp(): void
     {
@@ -29,7 +31,7 @@ class JwtServiceTest extends TestCase
         Config::set('jwt.algorithm', 'HS256');
         Config::set('jwt.ttl', 15);
 
-        $this->jwtService = app(JwtService::class);
+        $this->jwtService = resolve(JwtService::class);
     }
 
     public function test_create_access_token_contains_expected_claims(): void
@@ -91,14 +93,14 @@ class JwtServiceTest extends TestCase
         $request = Request::create('/api/test', 'GET');
         $request->headers->set('Authorization', "Bearer {$token}");
 
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($payload) {
+        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($payload): void {
             $mock->shouldReceive('isJwtBlacklisted')
                 ->once()
                 ->with($payload->jti)
                 ->andReturn(false);
         });
 
-        $result = app(JwtService::class)->userFromRequest($request);
+        $result = resolve(JwtService::class)->userFromRequest($request);
 
         $this->assertNotNull($result);
         $this->assertEquals($user->id, $result->id);
@@ -113,13 +115,13 @@ class JwtServiceTest extends TestCase
         $request = Request::create('/api/test', 'GET');
         $request->cookies->set('access_token', $token);
 
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) {
+        $this->mock(TokenBlacklistService::class, function (MockInterface $mock): void {
             $mock->shouldReceive('isJwtBlacklisted')
                 ->once()
                 ->andReturn(false);
         });
 
-        $result = app(JwtService::class)->userFromRequest($request);
+        $result = resolve(JwtService::class)->userFromRequest($request);
 
         $this->assertNotNull($result);
         $this->assertEquals($user->id, $result->id);
@@ -134,11 +136,11 @@ class JwtServiceTest extends TestCase
         $request = Request::create('/api/test', 'GET');
         $request->headers->set('Authorization', "Bearer {$token}");
 
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) {
+        $this->mock(TokenBlacklistService::class, function (MockInterface $mock): void {
             $mock->shouldReceive('isJwtBlacklisted')->once()->andReturn(true);
         });
 
-        $this->assertNull(app(JwtService::class)->userFromRequest($request));
+        $this->assertNull(resolve(JwtService::class)->userFromRequest($request));
     }
 
     public function test_revoke_token_writes_jti_to_redis_blacklist(): void
@@ -148,23 +150,23 @@ class JwtServiceTest extends TestCase
         $token = $this->jwtService->createAccessToken($user);
         $payload = $this->jwtService->decode($token);
 
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($payload) {
+        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($payload): void {
             $mock->shouldReceive('blacklistJwt')
                 ->once()
-                ->withArgs(function (string $jti, int $ttl) use ($payload) {
+                ->withArgs(function (string $jti, int $ttl) use ($payload): bool {
                     return $jti === $payload->jti && $ttl > 0;
                 });
         });
 
-        app(JwtService::class)->revokeToken($token);
+        resolve(JwtService::class)->revokeToken($token);
     }
 
     public function test_revoke_token_is_noop_for_invalid_token(): void
     {
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) {
+        $this->mock(TokenBlacklistService::class, function (MockInterface $mock): void {
             $mock->shouldReceive('blacklistJwt')->never();
         });
 
-        app(JwtService::class)->revokeToken('not-a-jwt');
+        resolve(JwtService::class)->revokeToken('not-a-jwt');
     }
 }

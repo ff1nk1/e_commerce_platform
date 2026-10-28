@@ -1,19 +1,26 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Models\ProductCatalog;
 
-class ProductTextBuilder
+final class ProductTextBuilder
 {
     public function fromModel(ProductCatalog $product): string
     {
+        $attributes = $product->attributes;
+        if (! is_array($attributes)) {
+            $attributes = [];
+        }
+
         return $this->fromParts(
-            storeName: (string) ($product->store_name ?? ''),
             name: (string) ($product->name ?? ''),
             description: (string) ($product->description ?? ''),
             categoryName: (string) ($product->category_name ?? ''),
-            attributes: $product->attributes ?? [],
+            attributes: $attributes,
+            storeName: (string) ($product->store_name ?? ''),
         );
     }
 

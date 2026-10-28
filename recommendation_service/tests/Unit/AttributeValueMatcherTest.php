@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Catalog\AttributeValueMatcher;
 use App\Services\Catalog\ValueMatchStrategyResolver;
 use Tests\TestCase;
 
-class AttributeValueMatcherTest extends TestCase
+final class AttributeValueMatcherTest extends TestCase
 {
     public function test_numeric_matches_inch_variants_via_config_strip(): void
     {

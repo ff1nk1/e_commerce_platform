@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\IdempotencyService;
@@ -7,7 +9,7 @@ use Illuminate\Support\Str;
 use Tests\Concerns\UsesRedis;
 use Tests\TestCase;
 
-class IdempotencyServiceTest extends TestCase
+final class IdempotencyServiceTest extends TestCase
 {
     use UsesRedis;
 

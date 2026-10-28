@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Models\Role;
@@ -9,7 +11,7 @@ use Illuminate\Support\Str;
 /**
  * @extends Factory<Role>
  */
-class RoleFactory extends Factory
+final class RoleFactory extends Factory
 {
     protected $model = Role::class;
 
@@ -18,7 +20,7 @@ class RoleFactory extends Factory
      */
     public function definition(): array
     {
-        $roleName = $this->faker->randomElement(['analyst', 'customer', 'admin']);
+        $roleName = fake()->randomElement(['analyst', 'customer', 'admin']);
 
         return [
             'name' => $roleName,

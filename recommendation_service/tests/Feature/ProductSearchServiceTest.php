@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\ProductCatalog;
@@ -12,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Fakes\FakeLlmClient;
 use Tests\TestCase;
 
-class ProductSearchServiceTest extends TestCase
+final class ProductSearchServiceTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -25,15 +27,15 @@ class ProductSearchServiceTest extends TestCase
     {
         parent::setUp();
         $this->app->instance(LlmClient::class, new FakeLlmClient);
-        $this->search = app(ProductSearchService::class);
+        $this->search = resolve(ProductSearchService::class);
         $this->queryVector = array_fill(0, 768, 0.01);
     }
 
     public function test_excludes_unpublished_and_null_embedding(): void
     {
-        $this->insertProduct(1, 'Visible', embedding: true, published: true);
-        $this->insertProduct(2, 'Draft', embedding: true, published: false);
-        $this->insertProduct(3, 'No Embed', embedding: false, published: true);
+        $this->insertProduct(1, 'Visible', published: true, embedding: true);
+        $this->insertProduct(2, 'Draft', published: false, embedding: true);
+        $this->insertProduct(3, 'No Embed', published: true, embedding: false);
 
         $results = $this->search->search(
             new SearchFilters(query: 'Visible'),

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ListOrdersRequest;
@@ -10,7 +12,7 @@ use App\Services\OrderService;
 use App\Services\PaymentService;
 use Illuminate\Http\JsonResponse;
 
-class OrderController extends Controller
+final class OrderController extends Controller
 {
     public function __construct(
         private OrderService $orders,

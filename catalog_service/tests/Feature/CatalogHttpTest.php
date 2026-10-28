@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Category;
@@ -10,7 +12,7 @@ use App\Models\Store;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-class CatalogHttpTest extends TestCase
+final class CatalogHttpTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -149,6 +151,6 @@ class CatalogHttpTest extends TestCase
             ->assertJsonPath('stock.quantity', 20)
             ->assertJsonPath('stock.available', 20);
 
-        $this->assertSame(2, OutboxEvent::where('event_type', 'stock.changed')->count());
+        $this->assertSame(2, OutboxEvent::query()->where('event_type', 'stock.changed')->count());
     }
 }

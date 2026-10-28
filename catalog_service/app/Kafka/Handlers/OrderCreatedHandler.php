@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Kafka\Handlers;
 
 use App\Services\Saga\SagaStepRunner;
@@ -28,7 +30,7 @@ class OrderCreatedHandler
         Log::info('Получено сообщение order.created:', ['body' => $message->getBody()]);
 
         $parsed = StockSagaMessage::tryFrom($message);
-        if ($parsed === null) {
+        if (! $parsed instanceof StockSagaMessage) {
             $payload = $message->getBody();
             if (! is_array($payload)) {
                 Log::warning('Получено невалидное событие order.created', ['payload' => $payload]);
@@ -58,7 +60,7 @@ class OrderCreatedHandler
         $sagaId = $parsed->sagaId;
 
         try {
-            $this->sagaRunner->run($sagaId, 'stock.reserve', function () use ($orderId, $items, $sagaId) {
+            $this->sagaRunner->run($sagaId, 'stock.reserve', function () use ($orderId, $items, $sagaId): array {
                 $result = $this->reservations->reserve($orderId, $items, $sagaId);
 
                 if ($result['outcome'] === 'reservation_failed') {

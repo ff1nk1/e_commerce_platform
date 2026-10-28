@@ -1,46 +1,35 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use Database\Factories\StockFactory;
+use Illuminate\Database\Eloquent\Attributes\Appends;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Stock extends Model
+#[Appends([
+    'available',
+])]
+#[Fillable([
+    'product_id',
+    'store_id',
+    'quantity',
+    'reserved',
+])]
+final class Stock extends Model
 {
+    /** @use HasFactory<StockFactory> */
     use HasFactory;
 
     /**
-     * Атрибуты, доступные для массового заполнения.
-     *
-     * @var list<string>
-     */
-    protected $fillable = [
-        'product_id',
-        'store_id',
-        'quantity',
-        'reserved',
-    ];
-
-    /**
-     * Приведение типов атрибутов.
-     *
-     * @var array<string, string>
-     */
-    protected $casts = [
-        'quantity' => 'integer',
-        'reserved' => 'integer',
-    ];
-
-    /**
-     * @var list<string>
-     */
-    protected $appends = [
-        'available',
-    ];
-
-    /**
      * Получить товар, к которому относится этот остаток.
+     *
+     * @return BelongsTo<Product, $this>
      */
     public function product(): BelongsTo
     {
@@ -49,6 +38,8 @@ class Stock extends Model
 
     /**
      * Получить магазин (склад), на котором числится остаток.
+     *
+     * @return BelongsTo<Store, $this>
      */
     public function store(): BelongsTo
     {
@@ -59,8 +50,23 @@ class Stock extends Model
      * Виртуальный атрибут для получения доступного остатка (свободного для резерва).
      * Доступен через $stock->available
      */
-    public function getAvailableAttribute(): int
+    protected function available(): Attribute
     {
-        return $this->quantity - $this->reserved;
+        return Attribute::make(get: function (): int|float {
+            return $this->quantity - $this->reserved;
+        });
+    }
+
+    /**
+     * Приведение типов атрибутов.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'quantity' => 'integer',
+            'reserved' => 'integer',
+        ];
     }
 }

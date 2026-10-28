@@ -1,0 +1,5 @@
+# Apt package versions float with the pinned base image. Pinning them
+# here would fail the next Debian security rebuild.
+ignored:
+  - DL3008
+failure-threshold: warning

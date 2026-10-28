@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Llm\Exceptions;
 
 use RuntimeException;
 use Throwable;
 
-class LlmException extends RuntimeException
+final class LlmException extends RuntimeException
 {
     public const KIND_HTTP = 'http';
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\StockEventsHandler;
@@ -19,7 +21,7 @@ use Tests\TestCase;
  * Simulates: order created → catalog cannot reserve → stock.reservation_failed → order cancelled.
  * Pay must stay blocked; no Stripe redirect path.
  */
-class InsufficientStockSagaTest extends TestCase
+final class InsufficientStockSagaTest extends TestCase
 {
     use BindsFakePaymentGateway;
     use BindsInMemoryIdempotency;
@@ -67,7 +69,7 @@ class InsufficientStockSagaTest extends TestCase
             'event_type' => 'order.created',
         ]);
 
-        app(StockEventsHandler::class)($this->stockMessage('stock.reservation_failed', [
+        resolve(StockEventsHandler::class)($this->stockMessage('stock.reservation_failed', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'reason' => 'Not enough stock',
@@ -94,7 +96,7 @@ class InsufficientStockSagaTest extends TestCase
             'user_id' => 11,
         ], [
             'Idempotency-Key' => 'scarce-pay-1',
-        ])->assertStatus(422)
+        ])->assertUnprocessable()
             ->assertJsonValidationErrors(['status']);
     }
 
@@ -120,7 +122,7 @@ class InsufficientStockSagaTest extends TestCase
         $orderId = (int) $create->json('id');
         $sagaId = (string) Order::query()->findOrFail($orderId)->saga_id;
 
-        app(StockEventsHandler::class)($this->stockMessage('stock.reserved', [
+        resolve(StockEventsHandler::class)($this->stockMessage('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'status' => 'success',
@@ -142,6 +144,9 @@ class InsufficientStockSagaTest extends TestCase
         ])->assertOk()->assertJsonPath('checkout_url', 'https://checkout.stripe.com/c/pay/cs_ok');
     }
 
+    /**
+     * @param  array<string, mixed>  $body
+     */
     private function stockMessage(string $eventType, array $body): ConsumerMessage&MockInterface
     {
         /** @var ConsumerMessage&MockInterface $message */

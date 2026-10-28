@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Fakes;
 
 use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\DTOs\SearchFilters;
 
-class FakeLlmClient implements LlmClient
+final class FakeLlmClient implements LlmClient
 {
     public string $lastChatAnswer = 'Here are some products you might like.';
 

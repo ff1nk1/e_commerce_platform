@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Console\Commands\KafkaOutboxWorker;
@@ -10,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
 use Junges\Kafka\Facades\Kafka;
 use Tests\TestCase;
 
-class KafkaOutboxWorkerTest extends TestCase
+final class KafkaOutboxWorkerTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -24,10 +26,10 @@ class KafkaOutboxWorkerTest extends TestCase
             'payload' => ['order_id' => 1, 'items' => []],
         ]);
 
-        $this->assertSame(1, app(KafkaOutboxWorker::class)->processBatch());
+        $this->assertSame(1, resolve(KafkaOutboxWorker::class)->processBatch());
         $this->assertDatabaseMissing('outbox_events', ['id' => $event->id]);
 
-        Kafka::assertPublishedOn('order.events', null, function ($message) {
+        Kafka::assertPublishedOn('order.events', null, function ($message): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -41,14 +43,14 @@ class KafkaOutboxWorkerTest extends TestCase
     {
         Kafka::fake();
 
-        app(OutboxWriter::class)->write('order.events', 'order.paid', [
+        resolve(OutboxWriter::class)->write('order.events', 'order.paid', [
             'order_id' => 99,
             'email' => 'a@example.com',
         ]);
 
-        $this->assertSame(1, app(KafkaOutboxWorker::class)->processBatch());
+        $this->assertSame(1, resolve(KafkaOutboxWorker::class)->processBatch());
 
-        Kafka::assertPublishedOn('order.events', null, function ($message) {
+        Kafka::assertPublishedOn('order.events', null, function ($message): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -64,7 +66,7 @@ class KafkaOutboxWorkerTest extends TestCase
 
         Schema::dropIfExists('outbox_events');
 
-        $this->assertSame(0, app(KafkaOutboxWorker::class)->processBatch());
+        $this->assertSame(0, resolve(KafkaOutboxWorker::class)->processBatch());
         Kafka::assertNothingPublished();
     }
 }

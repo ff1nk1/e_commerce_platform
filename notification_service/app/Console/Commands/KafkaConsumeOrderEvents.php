@@ -1,15 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Kafka\Handlers\OrderEventsHandler;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 
-class KafkaConsumeOrderEvents extends AbstractKafkaConsumeCommand
+#[Description('Консьюмер для топика order.events')]
+#[Signature('kafka:consume:order-events')]
+final class KafkaConsumeOrderEvents extends AbstractKafkaConsumeCommand
 {
-    protected $signature = 'kafka:consume:order-events';
-
-    protected $description = 'Консьюмер для топика order.events';
-
     protected function topic(): string
     {
         return (string) config('kafka.topics.order_events', 'order.events');

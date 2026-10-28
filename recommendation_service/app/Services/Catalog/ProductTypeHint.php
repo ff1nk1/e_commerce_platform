@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Support\RuText;
@@ -7,7 +9,7 @@ use App\Support\RuText;
 /**
  * Cheap product-type hint before LLM extract (keywords + sticky filters).
  */
-class ProductTypeHint
+final class ProductTypeHint
 {
     /**
      * @param  array<string, mixed>|null  $previousFilters

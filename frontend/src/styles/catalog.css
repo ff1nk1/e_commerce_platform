@@ -127,7 +127,9 @@
   border: 1px solid var(--color-border);
   border-radius: 12px;
   overflow: hidden;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
 .product-card:hover {
@@ -181,15 +183,15 @@
   .catalog-card {
     padding: 20px;
   }
-  
+
   .filters-wrapper {
     flex-direction: column;
   }
-  
+
   .filter-input {
     width: 100%;
   }
-  
+
   .products-grid {
     grid-template-columns: 1fr;
   }
@@ -435,7 +437,7 @@
 }
 
 .facet-group-summary::before {
-  content: '';
+  content: "";
   width: 0.45em;
   height: 0.45em;
   border-right: 1.5px solid currentColor;

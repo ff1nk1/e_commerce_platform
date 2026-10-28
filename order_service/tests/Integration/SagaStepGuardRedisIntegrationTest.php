@@ -1,15 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Services\SagaStepGuard;
 use Illuminate\Support\Str;
 
-class SagaStepGuardRedisIntegrationTest extends IntegrationTestCase
+final class SagaStepGuardRedisIntegrationTest extends IntegrationTestCase
 {
     public function test_run_put_done_then_replay_skips(): void
     {
-        $guard = app(SagaStepGuard::class);
+        $guard = resolve(SagaStepGuard::class);
         $sagaId = (string) Str::uuid();
         $step = 'stock.reserved';
 
@@ -23,7 +25,7 @@ class SagaStepGuardRedisIntegrationTest extends IntegrationTestCase
 
     public function test_busy_when_another_worker_holds_lock(): void
     {
-        $guard = app(SagaStepGuard::class);
+        $guard = resolve(SagaStepGuard::class);
         $sagaId = (string) Str::uuid();
         $step = 'stock.reservation_failed';
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Indexing\Concerns;
 
 use OpenSearch\Client;

@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Catalog\ProductTypeHint;
 use Tests\TestCase;
 
-class ProductTypeHintTest extends TestCase
+final class ProductTypeHintTest extends TestCase
 {
     public function test_detects_phone_keywords(): void
     {

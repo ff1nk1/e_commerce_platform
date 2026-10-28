@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class SearchProductsRequest extends FormRequest
+final class SearchProductsRequest extends FormRequest
 {
     public const MAX_PAGE = 200;
 
@@ -20,11 +22,6 @@ class SearchProductsRequest extends FormRequest
     public const MAX_PER_PAGE = 50;
 
     public const DEFAULT_PER_PAGE = 20;
-
-    public function authorize(): bool
-    {
-        return true;
-    }
 
     /**
      * @return array<string, mixed>
@@ -75,7 +72,7 @@ class SearchProductsRequest extends FormRequest
         if (! is_array($rawCategoryIds)) {
             $rawCategoryIds = $rawCategoryIds === null || $rawCategoryIds === '' ? [] : [$rawCategoryIds];
         }
-        $nonEmptyCategoryIds = array_filter($rawCategoryIds, fn ($v) => $v !== null && $v !== '');
+        $nonEmptyCategoryIds = array_filter($rawCategoryIds, fn ($v): bool => $v !== null && $v !== '');
         $intCategoryIds = array_map('intval', $nonEmptyCategoryIds);
         $uniqueCategoryIds = array_values(array_unique($intCategoryIds));
         $categoryIds = array_slice($uniqueCategoryIds, 0, self::MAX_CATEGORY_IDS);

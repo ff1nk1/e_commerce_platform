@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Console\Commands\KafkaOutboxWorker;
@@ -7,7 +9,7 @@ use App\Models\OutboxEvent;
 use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
 
-class KafkaOutboxRoundTripTest extends IntegrationTestCase
+final class KafkaOutboxRoundTripTest extends IntegrationTestCase
 {
     public function test_outbox_worker_publishes_order_created_to_kafka(): void
     {
@@ -23,10 +25,10 @@ class KafkaOutboxRoundTripTest extends IntegrationTestCase
         $orderId = (int) $create->json('id');
 
         $this->assertSame(1, OutboxEvent::query()->where('event_type', 'order.created')->count());
-        $this->assertSame(1, app(KafkaOutboxWorker::class)->processBatch());
+        $this->assertSame(1, resolve(KafkaOutboxWorker::class)->processBatch());
         $this->assertSame(0, OutboxEvent::query()->count());
 
-        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId) {
+        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 

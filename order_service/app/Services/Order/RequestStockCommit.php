@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Order;
 
 use App\Contracts\SagaStepStore;
 use App\Events\StockCommitRequested;
 use App\Models\Order;
 
-class RequestStockCommit
+final class RequestStockCommit
 {
     public function __construct(
         private OrderPayloadFactory $payloads,

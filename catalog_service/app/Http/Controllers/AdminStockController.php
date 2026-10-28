@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreStockRequest;
@@ -9,7 +11,7 @@ use App\Services\StockService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-class AdminStockController extends Controller
+final class AdminStockController extends Controller
 {
     public function __construct(
         private StockService $stockService
@@ -24,11 +26,11 @@ class AdminStockController extends Controller
 
         $query = Stock::with(['product', 'store']);
 
-        $query->when($request->filled('store_id'), function ($q) use ($request) {
+        $query->when($request->filled('store_id'), function ($q) use ($request): void {
             $q->where('store_id', (int) $request->input('store_id'));
         });
 
-        $query->when($request->filled('product_id'), function ($q) use ($request) {
+        $query->when($request->filled('product_id'), function ($q) use ($request): void {
             $q->where('product_id', (int) $request->input('product_id'));
         });
 

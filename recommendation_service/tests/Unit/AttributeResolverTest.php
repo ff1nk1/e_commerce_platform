@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Catalog\AttributeResolver;
 use Tests\TestCase;
 
-class AttributeResolverTest extends TestCase
+final class AttributeResolverTest extends TestCase
 {
     public function test_resolves_diagonal_to_screen_in_phone_vocab(): void
     {

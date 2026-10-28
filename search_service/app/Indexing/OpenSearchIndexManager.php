@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Indexing;
 
 use OpenSearch\Client;
 use Throwable;
 
-class OpenSearchIndexManager
+final class OpenSearchIndexManager
 {
     private bool $indicesEnsured = false;
 
@@ -73,7 +75,7 @@ class OpenSearchIndexManager
     private function nameExists(string $name): bool
     {
         try {
-            return (bool) $this->client->indices()->exists(['index' => $name]);
+            return $this->client->indices()->exists(['index' => $name]);
         } catch (Throwable) {
             return false;
         }
@@ -102,9 +104,7 @@ class OpenSearchIndexManager
             $this->client->indices()->delete(['index' => $name]);
         } catch (Throwable $e) {
             $message = strtolower($e->getMessage());
-            if (! str_contains($message, 'not_found') && ! str_contains($message, '404')) {
-                throw $e;
-            }
+            throw_if(! str_contains($message, 'not_found') && ! str_contains($message, '404'), $e);
         }
     }
 

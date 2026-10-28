@@ -1,12 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
-class GetUploadUrlRequest extends FormRequest
+final class GetUploadUrlRequest extends FormRequest
 {
     public const ALLOWED_CONTENT_TYPES = [
         'image/jpeg',
@@ -27,6 +30,9 @@ class GetUploadUrlRequest extends FormRequest
         return Auth::guard('gateway')->check();
     }
 
+    /**
+     * @return array<string, ValidationRule|array<mixed>|string>
+     */
     public function rules(): array
     {
         return [

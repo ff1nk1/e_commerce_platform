@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Middleware;
 
 use Closure;
@@ -9,7 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Prefer gateway-injected X-User-Id over body/query user_id when present.
  */
-class ResolveGatewayUserId
+final class ResolveGatewayUserId
 {
     public function handle(Request $request, Closure $next): Response
     {

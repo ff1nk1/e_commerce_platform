@@ -39,4 +39,4 @@ Read-only агрегаты для админки: регистрации, вор
 ./scripts/lint-all.sh analytic
 ```
 
-Линт на хосте: Go 1.23+ и golangci-lint v1.64. `test-all.sh` гоняет `go test` в Docker-сети с ClickHouse.
+Линт на хосте: Go 1.27.0 и golangci-lint v2.15. `test-all.sh` гоняет `go test` в Docker-сети с ClickHouse.

@@ -273,7 +273,7 @@ func (s *Store) UsersMetrics(ctx context.Context, from, to *time.Time) (UsersMet
 	if err != nil {
 		return out, fmt.Errorf("growth query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var cumulative uint64
 	out.Growth = make([]DayCount, 0)
@@ -337,7 +337,7 @@ func (s *Store) OrdersMetrics(ctx context.Context, from, to *time.Time) (OrdersM
 	if err != nil {
 		return out, fmt.Errorf("revenue by day: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out.Revenue.ByDay = make([]RevenueDay, 0)
 	for rows.Next() {
@@ -424,7 +424,7 @@ func (s *Store) listDimensionOptions(ctx context.Context, dim Dimension) ([]Dime
 	if err != nil {
 		return nil, fmt.Errorf("%s options: %w", dim.IDCol, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := make([]DimensionOption, 0)
 	for rows.Next() {
@@ -498,7 +498,7 @@ func (s *Store) dimensionRanking(ctx context.Context, dim Dimension, from, to *t
 	if err != nil {
 		return nil, fmt.Errorf("%s ranking: %w", dim.IDCol, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := make([]DimensionBreakdown, 0)
 	for rows.Next() {
@@ -597,7 +597,7 @@ func (s *Store) topQueries(ctx context.Context, from, to *time.Time, zeroOnly bo
 	if err != nil {
 		return nil, fmt.Errorf("top queries: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := make([]QueryCount, 0)
 	for rows.Next() {

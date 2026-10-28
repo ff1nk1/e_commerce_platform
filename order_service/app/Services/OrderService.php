@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\Order;
@@ -13,7 +15,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 /**
  * Facade over order use-cases for HTTP controllers and Kafka handlers.
  */
-class OrderService
+final class OrderService
 {
     public function __construct(
         private CreateOrderService $create,
@@ -23,16 +25,26 @@ class OrderService
         private OrderPayloadFactory $payloads,
     ) {}
 
+    /**
+     * @param  list<array{product_id: int, quantity: int}>  $items
+     * @return array{status: int, body: array<string, mixed>}
+     */
     public function create(int $userId, string $email, string $name, array $items, string $idempotencyKey): array
     {
         return $this->create->execute($userId, $email, $name, $items, $idempotencyKey);
     }
 
+    /**
+     * @return LengthAwarePaginator<int, Order>
+     */
     public function listForUser(int $userId, int $perPage = 15): LengthAwarePaginator
     {
         return $this->query->listForUser($userId, $perPage);
     }
 
+    /**
+     * @return LengthAwarePaginator<int, Order>
+     */
     public function listAll(int $perPage = 15): LengthAwarePaginator
     {
         return $this->query->listAll($perPage);
@@ -58,6 +70,9 @@ class OrderService
         return $this->ship->forAdmin($orderId);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function serializeOrder(Order $order): array
     {
         return $this->query->serialize($order);

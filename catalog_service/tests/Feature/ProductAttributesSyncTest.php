@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Models\Category;
@@ -11,7 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Junges\Kafka\Facades\Kafka;
 use Tests\TestCase;
 
-class ProductAttributesSyncTest extends TestCase
+final class ProductAttributesSyncTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -22,7 +24,7 @@ class ProductAttributesSyncTest extends TestCase
         $store = Store::factory()->create();
         $category = Category::factory()->create();
 
-        $product = app(ProductService::class)->createProduct([
+        $product = resolve(ProductService::class)->createProduct([
             'store_id' => $store->id,
             'category_id' => $category->id,
             'name' => 'Phone',
@@ -45,13 +47,13 @@ class ProductAttributesSyncTest extends TestCase
         ]);
         $this->assertSame(2, ProductAttribute::query()->where('product_id', $product->id)->count());
 
-        Kafka::assertPublishedOn('product.created', null, function ($message) use ($product) {
+        Kafka::assertPublishedOn('product.created', null, function ($message) use ($product): bool {
             $attrs = $message->getBody()['data']['attributes'] ?? null;
             if (! is_array($attrs)) {
                 return false;
             }
 
-            $pairs = collect($attrs)->map(fn ($a) => ($a['name'] ?? '').':'.($a['value'] ?? ''))->all();
+            $pairs = collect($attrs)->map(fn ($a): string => ($a['name'] ?? '').':'.($a['value'] ?? ''))->all();
 
             return ($message->getBody()['data']['id'] ?? null) === $product->id
                 && in_array('Color:Black', $pairs, true)
@@ -70,7 +72,7 @@ class ProductAttributesSyncTest extends TestCase
             'value' => 'Gone',
         ]);
 
-        app(ProductService::class)->updateProduct($product, [
+        resolve(ProductService::class)->updateProduct($product, [
             'name' => $product->name,
             'attributes' => [
                 ['name' => 'Color', 'value' => 'Red'],
@@ -88,7 +90,7 @@ class ProductAttributesSyncTest extends TestCase
         ]);
         $this->assertSame(1, ProductAttribute::query()->where('product_id', $product->id)->count());
 
-        Kafka::assertPublishedOn('product.updated', null, function ($message) {
+        Kafka::assertPublishedOn('product.updated', null, function ($message): bool {
             $attrs = $message->getBody()['data']['attributes'] ?? [];
 
             return count($attrs) === 1

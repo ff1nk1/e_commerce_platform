@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\ProductEventsHandler;
@@ -10,7 +12,7 @@ use OpenSearch\Client;
 use OpenSearch\Namespaces\IndicesNamespace;
 use Tests\TestCase;
 
-class ProductEventsHandlerTest extends TestCase
+final class ProductEventsHandlerTest extends TestCase
 {
     protected function tearDown(): void
     {
@@ -205,6 +207,9 @@ class ProductEventsHandlerTest extends TestCase
         return $client;
     }
 
+    /**
+     * @param  array<string, mixed>  $body
+     */
     private function consumerMessage(?string $eventType, array $body): ConsumerMessage&MockInterface
     {
         $headers = $eventType === null ? [] : ['event-type' => $eventType];

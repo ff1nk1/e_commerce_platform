@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Order;
 
 use App\Contracts\PaymentGateway;
@@ -11,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
-class CancelOrderService
+final class CancelOrderService
 {
     public function __construct(
         private OrderPayloadFactory $payloads,
@@ -31,9 +33,7 @@ class CancelOrderService
                 ->lockForUpdate()
                 ->first();
 
-            if ($order === null) {
-                throw new NotFoundHttpException('Order not found.');
-            }
+            throw_if($order === null, NotFoundHttpException::class, 'Order not found.');
 
             $order->assertCancellable();
 

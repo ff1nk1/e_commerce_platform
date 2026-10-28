@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\Catalog\AttributeNameNormalizer;
 use PHPUnit\Framework\TestCase;
 
-class AttributeNameNormalizerTest extends TestCase
+final class AttributeNameNormalizerTest extends TestCase
 {
     public function test_aliases_map_to_canonical(): void
     {

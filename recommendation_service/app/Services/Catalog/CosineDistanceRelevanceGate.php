@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Services\Catalog\Contracts\RelevanceGate;
 use App\Services\Catalog\DTOs\SearchHit;
 
-class CosineDistanceRelevanceGate implements RelevanceGate
+final class CosineDistanceRelevanceGate implements RelevanceGate
 {
     public function __construct(
         private readonly float $maxCosineDistance,

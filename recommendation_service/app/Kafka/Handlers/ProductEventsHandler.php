@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Kafka\Handlers;
 
 use App\Models\ProductCatalog;
@@ -7,7 +9,7 @@ use App\Services\Catalog\ProductIndexer;
 use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Contracts\ConsumerMessage;
 
-class ProductEventsHandler
+final class ProductEventsHandler
 {
     public const ALLOWED_TYPES = [
         'product.created',

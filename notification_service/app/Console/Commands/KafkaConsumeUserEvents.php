@@ -1,15 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Kafka\Handlers\UserEventsHandler;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 
-class KafkaConsumeUserEvents extends AbstractKafkaConsumeCommand
+#[Description('Консьюмер для топика user.events')]
+#[Signature('kafka:consume:user-events')]
+final class KafkaConsumeUserEvents extends AbstractKafkaConsumeCommand
 {
-    protected $signature = 'kafka:consume:user-events';
-
-    protected $description = 'Консьюмер для топика user.events';
-
     protected function topic(): string
     {
         return (string) config('kafka.topics.user_events', 'user.events');

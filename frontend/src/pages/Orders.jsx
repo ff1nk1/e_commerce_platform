@@ -1,34 +1,53 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { getOrders } from '../api/orders'
-import '../styles/orders.css'
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { getOrders } from "../api/orders";
+import "../styles/orders.css";
 
 export default function Orders() {
-  const [orders, setOrders] = useState([])
-  const [page, setPage] = useState(1)
-  const [lastPage, setLastPage] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [orders, setOrders] = useState([]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const fetchOrders = useCallback(async (targetPage = 1) => {
-    setLoading(true)
-    setError('')
+    setLoading(true);
+    setError("");
     try {
-      const { data } = await getOrders({ page: targetPage })
-      setOrders(data.data || [])
-      setPage(data.current_page || 1)
-      setLastPage(data.last_page || 1)
+      const { data } = await getOrders({ page: targetPage });
+      setOrders(data.data || []);
+      setPage(data.current_page || 1);
+      setLastPage(data.last_page || 1);
     } catch (err) {
-      console.error(err)
-      setError('Не удалось загрузить заказы.')
+      console.error(err);
+      setError("Не удалось загрузить заказы.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    fetchOrders(1)
-  }, [fetchOrders])
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await getOrders({ page: 1 });
+        if (cancelled) return;
+        setOrders(data.data || []);
+        setPage(data.current_page || 1);
+        setLastPage(data.last_page || 1);
+      } catch (err) {
+        if (cancelled) return;
+        console.error(err);
+        setError("Не удалось загрузить заказы.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="orders-page">
@@ -45,7 +64,9 @@ export default function Orders() {
             <div className="status-message">Загрузка...</div>
           ) : orders.length === 0 ? (
             <div className="orders-empty">
-              Заказов пока нет. Добавьте товары в <Link to="/cart">корзину</Link> или оформите заказ со страницы товара.
+              Заказов пока нет. Добавьте товары в{" "}
+              <Link to="/cart">корзину</Link> или оформите заказ со страницы
+              товара.
             </div>
           ) : (
             <ul className="orders-list">
@@ -54,18 +75,25 @@ export default function Orders() {
                   <Link to={`/orders/${order.id}`}>
                     <div className="order-item-row">
                       <strong>Заказ #{order.id}</strong>
-                      <span className={`order-status ${order.status}`}>{order.status}</span>
+                      <span className={`order-status ${order.status}`}>
+                        {order.status}
+                      </span>
                     </div>
                     <div className="order-item-row">
                       <span>{order.total_amount} ₽</span>
-                      <span>{order.created_at ? new Date(order.created_at).toLocaleString() : ''}</span>
+                      <span>
+                        {order.created_at
+                          ? new Date(order.created_at).toLocaleString()
+                          : ""}
+                      </span>
                     </div>
                     {(order.items || []).length > 0 && (
                       <ul className="order-item-lines">
                         {(order.items || []).map((item) => (
                           <li key={item.id} className="order-item-line">
                             <span>
-                              {item.product_snapshot?.name || `Товар #${item.product_id}`}
+                              {item.product_snapshot?.name ||
+                                `Товар #${item.product_id}`}
                             </span>
                             <span>
                               {item.quantity} × {item.unit_price} ₽
@@ -104,5 +132,5 @@ export default function Orders() {
         </div>
       </div>
     </div>
-  )
+  );
 }

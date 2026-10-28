@@ -1,48 +1,54 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useLoaderData, useSearchParams } from 'react-router-dom'
-import { getUsersAnalytics } from '../api/analytics'
-import AnalyticsDateFilter from './AnalyticsDateFilter'
-import { defaultAnalyticsRange } from './analyticsDates'
-import AnalyticsLineChart from './charts/AnalyticsLineChart'
+import { useCallback, useEffect, useState } from "react";
+import { useLoaderData, useSearchParams } from "react-router-dom";
+import { getUsersAnalytics } from "../api/analytics";
+import AnalyticsDateFilter from "./AnalyticsDateFilter";
+import { defaultAnalyticsRange } from "./analyticsDates";
+import AnalyticsLineChart from "./charts/AnalyticsLineChart";
 
 export default function AdminAnalyticsUsers() {
-  const initial = useLoaderData()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const defaults = defaultAnalyticsRange()
-  const [data, setData] = useState(initial)
-  const [from, setFrom] = useState(searchParams.get('from') || defaults.from)
-  const [to, setTo] = useState(searchParams.get('to') || defaults.to)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
+  const initial = useLoaderData();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const defaults = defaultAnalyticsRange();
+  const [data, setData] = useState(initial);
+  const [from, setFrom] = useState(searchParams.get("from") || defaults.from);
+  const [to, setTo] = useState(searchParams.get("to") || defaults.to);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!searchParams.get('from') || !searchParams.get('to')) {
-      setSearchParams({ from, to }, { replace: true })
+    if (!searchParams.get("from") || !searchParams.get("to")) {
+      setSearchParams({ from, to }, { replace: true });
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchMetrics = useCallback(async (nextFrom, nextTo) => {
-    setIsLoading(true)
-    setError('')
-    try {
-      const params = {}
-      if (nextFrom) params.from = nextFrom
-      if (nextTo) params.to = nextTo
-      const response = await getUsersAnalytics(params)
-      setData(response.data)
-      const next = {}
-      if (nextFrom) next.from = nextFrom
-      if (nextTo) next.to = nextTo
-      setSearchParams(next, { replace: true })
-    } catch (err) {
-      console.error('Users analytics error:', err)
-      setError(err.response?.data?.error || 'Не удалось загрузить метрики пользователей')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [setSearchParams])
+  const fetchMetrics = useCallback(
+    async (nextFrom, nextTo) => {
+      setIsLoading(true);
+      setError("");
+      try {
+        const params = {};
+        if (nextFrom) params.from = nextFrom;
+        if (nextTo) params.to = nextTo;
+        const response = await getUsersAnalytics(params);
+        setData(response.data);
+        const next = {};
+        if (nextFrom) next.from = nextFrom;
+        if (nextTo) next.to = nextTo;
+        setSearchParams(next, { replace: true });
+      } catch (err) {
+        console.error("Users analytics error:", err);
+        setError(
+          err.response?.data?.error ||
+            "Не удалось загрузить метрики пользователей",
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [setSearchParams],
+  );
 
-  const growth = data?.growth || []
+  const growth = data?.growth || [];
 
   return (
     <div>
@@ -55,7 +61,9 @@ export default function AdminAnalyticsUsers() {
         to={to}
         onFromChange={setFrom}
         onToChange={setTo}
-        onApply={(nextFrom, nextTo) => fetchMetrics(nextFrom ?? from, nextTo ?? to)}
+        onApply={(nextFrom, nextTo) =>
+          fetchMetrics(nextFrom ?? from, nextTo ?? to)
+        }
         isLoading={isLoading}
       />
 
@@ -64,7 +72,9 @@ export default function AdminAnalyticsUsers() {
       <div className="analytics-metrics">
         <div className="analytics-metric-card">
           <span className="analytics-metric-label">Всего пользователей</span>
-          <strong className="analytics-metric-value">{data?.total_users ?? 0}</strong>
+          <strong className="analytics-metric-value">
+            {data?.total_users ?? 0}
+          </strong>
         </div>
       </div>
 
@@ -74,12 +84,12 @@ export default function AdminAnalyticsUsers() {
         isLoading={isLoading}
         emptyText="Нет данных о регистрациях"
         series={[
-          { dataKey: 'count', name: 'Новых', stroke: '#2563eb' },
+          { dataKey: "count", name: "Новых", stroke: "#2563eb" },
           {
-            dataKey: 'cumulative',
-            name: 'Накопительно',
-            stroke: '#94a3b8',
-            strokeDasharray: '4 4',
+            dataKey: "cumulative",
+            name: "Накопительно",
+            stroke: "#94a3b8",
+            strokeDasharray: "4 4",
             strokeWidth: 1.5,
           },
         ]}
@@ -112,5 +122,5 @@ export default function AdminAnalyticsUsers() {
         )}
       </div>
     </div>
-  )
+  );
 }

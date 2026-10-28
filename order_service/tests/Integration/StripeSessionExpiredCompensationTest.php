@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Integration;
 
 use App\Console\Commands\KafkaOutboxWorker;
@@ -13,7 +15,7 @@ use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
 use Tests\Concerns\RequiresStripe;
 
-class StripeSessionExpiredCompensationTest extends IntegrationTestCase
+final class StripeSessionExpiredCompensationTest extends IntegrationTestCase
 {
     use RequiresStripe;
 
@@ -39,9 +41,9 @@ class StripeSessionExpiredCompensationTest extends IntegrationTestCase
         $orderId = (int) $create->json('id');
         $sagaId = Order::query()->findOrFail($orderId)->saga_id;
 
-        app(KafkaOutboxWorker::class)->processBatch();
+        resolve(KafkaOutboxWorker::class)->processBatch();
 
-        app(StockEventsHandler::class)($this->stubConsumerMessage('stock.reserved', [
+        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'status' => 'success',
@@ -54,7 +56,7 @@ class StripeSessionExpiredCompensationTest extends IntegrationTestCase
         $paymentId = (int) $pay->json('payment_id');
         $payment = Payment::query()->findOrFail($paymentId);
 
-        app(StripeClient::class)->retrieveCheckoutSession($payment->stripe_checkout_session_id);
+        resolve(StripeClient::class)->retrieveCheckoutSession($payment->stripe_checkout_session_id);
 
         $signed = $this->signStripeWebhookPayload([
             'id' => 'evt_expire_'.Str::uuid(),
@@ -88,7 +90,7 @@ class StripeSessionExpiredCompensationTest extends IntegrationTestCase
 
         $this->assertSame(
             SagaStepGuard::STATUS_DONE,
-            app(SagaStepGuard::class)->get($sagaId, 'stock.release_requested')['status'] ?? null
+            resolve(SagaStepGuard::class)->get($sagaId, 'stock.release_requested')['status'] ?? null
         );
 
         $release = OutboxEvent::query()->where('event_type', 'stock.release_requested')->first();
@@ -98,9 +100,9 @@ class StripeSessionExpiredCompensationTest extends IntegrationTestCase
             ['product_id' => 505, 'store_id' => 2, 'quantity' => 1],
         ], $release->payload['items'] ?? null);
 
-        app(KafkaOutboxWorker::class)->processBatch();
+        resolve(KafkaOutboxWorker::class)->processBatch();
 
-        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId) {
+        Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             return ($message->getHeaders()['event-type'] ?? null) === 'stock.release_requested'
                 && (int) ($message->getBody()['order_id'] ?? 0) === $orderId;
         });

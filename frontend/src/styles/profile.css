@@ -183,7 +183,7 @@
 }
 
 .profile-card {
-  position: relative;   /* чтобы кнопка позиционировалась относительно карточки */
+  position: relative; /* чтобы кнопка позиционировалась относительно карточки */
 }
 
 .logout-button {
@@ -202,10 +202,13 @@
   background: var(--color-bg-hover);
   color: var(--color-danger-solid);
   border: 1px solid var(--color-border);
-  border-radius: 8px;   /* скруглённые углы */
+  border-radius: 8px; /* скруглённые углы */
 
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .logout-button:hover {

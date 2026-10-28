@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Concerns;
 
 use Mockery;
@@ -43,7 +45,7 @@ trait CapturesOpenSearchRequests
 
         $client->shouldReceive('index')
             ->zeroOrMoreTimes()
-            ->andReturnUsing(function (array $params) {
+            ->andReturnUsing(function (array $params): array {
                 $this->capturedIndexRequests[] = $params;
 
                 return ['result' => 'created'];
@@ -61,6 +63,7 @@ trait CapturesOpenSearchRequests
     }
 
     /**
+     * @param  array<string, mixed>  $aggregationOverrides
      * @return array<string, mixed>
      */
     protected function emptySearchResponse(array $aggregationOverrides = []): array
@@ -117,10 +120,19 @@ trait CapturesOpenSearchRequests
         ], $overrides);
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     protected function lastSearchBody(): array
     {
         $this->assertNotEmpty($this->capturedSearchRequests, 'Expected at least one OpenSearch search call');
 
-        return $this->capturedSearchRequests[array_key_last($this->capturedSearchRequests)]['body'] ?? [];
+        $body = $this->capturedSearchRequests[array_key_last($this->capturedSearchRequests)]['body'] ?? [];
+        if (! is_array($body)) {
+            return [];
+        }
+
+        /** @var array<string, mixed> $body */
+        return $body;
     }
 }

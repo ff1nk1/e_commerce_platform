@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Concerns;
 
 use App\Contracts\IdempotencyStore;
@@ -8,7 +10,7 @@ use Mockery;
 
 trait BindsInMemoryIdempotency
 {
-    /** @var array<string, array{status: int, body: array}> */
+    /** @var array<string, array{status: int, body: array<string, mixed>}> */
     private array $idempotencyStore = [];
 
     protected function bindInMemoryIdempotency(): void
@@ -32,7 +34,8 @@ trait BindsInMemoryIdempotency
         });
         $idem->shouldReceive('acquireLock')->andReturn(true);
         $idem->shouldReceive('releaseLock')->andReturnNull();
-        $idem->shouldReceive('put')->andReturnUsing(function (string $key, int $status, array $body) use (&$store) {
+        $idem->shouldReceive('put')->andReturnUsing(function (string $key, int $status, array $body) use (&$store): void {
+            /** @var array<string, mixed> $body */
             $store[$key] = ['status' => $status, 'body' => $body];
         });
 

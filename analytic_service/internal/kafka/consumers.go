@@ -79,7 +79,6 @@ func (c *Consumers) Run(ctx context.Context) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 	for _, sub := range subs {
-		sub := sub
 		g.Go(func() error {
 			return c.runReader(ctx, sub.GroupID, sub.Topics, sub.Handle)
 		})
@@ -108,7 +107,7 @@ func (c *Consumers) runReader(ctx context.Context, groupID string, topics []stri
 	}
 
 	r := kafka.NewReader(cfg)
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	c.log.Info("kafka consumer started", "group", groupID, "topics", topics)
 
@@ -167,7 +166,7 @@ func (c *Consumers) handleUser(ctx context.Context, msg kafka.Message) error {
 		RegisteredAt: registeredAt,
 		KafkaProvenance: store.KafkaProvenance{
 			KafkaTopic:     msg.Topic,
-			KafkaPartition: int32(msg.Partition),
+			KafkaPartition: kafkaPartition(msg.Partition),
 			KafkaOffset:    msg.Offset,
 		},
 	}
@@ -230,7 +229,7 @@ func (c *Consumers) handleProduct(ctx context.Context, msg kafka.Message) error 
 		CategorySlug: categorySlug,
 		KafkaProvenance: store.KafkaProvenance{
 			KafkaTopic:     msg.Topic,
-			KafkaPartition: int32(msg.Partition),
+			KafkaPartition: kafkaPartition(msg.Partition),
 			KafkaOffset:    msg.Offset,
 		},
 	})
@@ -274,7 +273,7 @@ func (c *Consumers) handleOrder(ctx context.Context, msg kafka.Message) error {
 		OccurredAt:  occurredAt,
 		KafkaProvenance: store.KafkaProvenance{
 			KafkaTopic:     msg.Topic,
-			KafkaPartition: int32(msg.Partition),
+			KafkaPartition: kafkaPartition(msg.Partition),
 			KafkaOffset:    msg.Offset,
 		},
 	}
@@ -361,7 +360,7 @@ func (c *Consumers) insertOrderLineItems(ctx context.Context, msg kafka.Message,
 			OccurredAt:   ts,
 			KafkaProvenance: store.KafkaProvenance{
 				KafkaTopic:     msg.Topic,
-				KafkaPartition: int32(msg.Partition),
+				KafkaPartition: kafkaPartition(msg.Partition),
 				KafkaOffset:    msg.Offset,
 			},
 		})
@@ -411,7 +410,7 @@ func (c *Consumers) handleSearch(ctx context.Context, msg kafka.Message) error {
 		OccurredAt:   searchOccurredAt,
 		KafkaProvenance: store.KafkaProvenance{
 			KafkaTopic:     msg.Topic,
-			KafkaPartition: int32(msg.Partition),
+			KafkaPartition: kafkaPartition(msg.Partition),
 			KafkaOffset:    msg.Offset,
 		},
 	}

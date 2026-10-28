@@ -1,15 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use App\Models\OutboxEvent;
 use App\Support\KafkaOutboxHeaders;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Sleep;
 use Junges\Kafka\Facades\Kafka;
 
-class KafkaOutboxWorker extends Command
+#[Description('Читает события из таблицы outbox_events и отправляет их в Kafka')]
+#[Signature('kafka:outbox:work')]
+final class KafkaOutboxWorker extends Command
 {
     private const IDLE_SLEEP_SECONDS = 5;
 
@@ -17,29 +24,21 @@ class KafkaOutboxWorker extends Command
 
     private const BATCH_LIMIT = 50;
 
-    protected $signature = 'kafka:outbox:work';
-
-    protected $description = 'Читает события из таблицы outbox_events и отправляет их в Kafka';
+    private bool $keepRunning = true;
 
     public function handle(): int
     {
         $this->info('Запуск Outbox Worker (order-service)...');
 
-        while ($this->shouldKeepRunning()) {
+        while ($this->keepRunning) {
             $processed = $this->processBatch();
 
             if ($processed === 0) {
-                sleep(self::IDLE_SLEEP_SECONDS);
+                Sleep::sleep(self::IDLE_SLEEP_SECONDS);
             }
         }
 
         return self::SUCCESS;
-    }
-
-    /** @phpstan-impure */
-    private function shouldKeepRunning(): bool
-    {
-        return true;
     }
 
     public function processBatch(): int
@@ -48,7 +47,7 @@ class KafkaOutboxWorker extends Command
             return 0;
         }
 
-        $events = OutboxEvent::query()->orderBy('created_at', 'asc')->limit(self::BATCH_LIMIT)->get();
+        $events = OutboxEvent::query()->oldest()->limit(self::BATCH_LIMIT)->get();
 
         if ($events->isEmpty()) {
             return 0;
@@ -88,7 +87,7 @@ class KafkaOutboxWorker extends Command
                 ]);
 
                 if (! app()->environment('testing')) {
-                    sleep(self::ERROR_SLEEP_SECONDS);
+                    Sleep::sleep(self::ERROR_SLEEP_SECONDS);
                 }
                 break;
             }

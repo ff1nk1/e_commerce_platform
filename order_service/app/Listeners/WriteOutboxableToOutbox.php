@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Listeners;
 
 use App\Contracts\Outboxable;
 use App\Services\OutboxWriter;
 
-class WriteOutboxableToOutbox
+final class WriteOutboxableToOutbox
 {
     public function __construct(
         private OutboxWriter $outbox,

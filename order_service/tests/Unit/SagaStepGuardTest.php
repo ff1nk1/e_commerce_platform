@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Services\SagaStepGuard;
@@ -7,7 +9,7 @@ use Illuminate\Support\Str;
 use Tests\Concerns\UsesRedis;
 use Tests\TestCase;
 
-class SagaStepGuardTest extends TestCase
+final class SagaStepGuardTest extends TestCase
 {
     use UsesRedis;
 

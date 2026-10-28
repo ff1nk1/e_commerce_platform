@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog\DTOs;
 
-readonly class SearchResult
+final readonly class SearchResult
 {
     /**
      * @param  list<SearchHit>  $hits

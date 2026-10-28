@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Catalog;
 
 use App\Support\RuText;
@@ -7,7 +9,7 @@ use App\Support\RuText;
 /**
  * Resolve extracted attribute names against a scoped catalog vocabulary.
  */
-class AttributeResolver
+final class AttributeResolver
 {
     private const MIN_FUZZY_MATCH_PERCENT = 80;
 

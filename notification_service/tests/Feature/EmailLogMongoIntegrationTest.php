@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Feature;
 
 use App\Mail\MailableRegistry;
@@ -11,12 +13,12 @@ use Mockery;
 use Mockery\MockInterface;
 use Tests\TestCase;
 
-class EmailLogMongoIntegrationTest extends TestCase
+final class EmailLogMongoIntegrationTest extends TestCase
 {
     protected function setUp(): void
     {
         parent::setUp();
-        EmailLog::truncate();
+        EmailLog::query()->truncate();
     }
 
     protected function tearDown(): void
@@ -29,7 +31,7 @@ class EmailLogMongoIntegrationTest extends TestCase
     {
         Mail::fake();
 
-        $result = app(MailDeliveryService::class)->sendMailWithRetry([
+        $result = resolve(MailDeliveryService::class)->sendMailWithRetry([
             'email' => 'mongo_user@example.com',
             'name' => 'Mongo Test User',
         ], 'user.registered');
@@ -73,7 +75,7 @@ class EmailLogMongoIntegrationTest extends TestCase
             'event_type' => 'user.registered',
         ]);
 
-        $result = app(MailDeliveryService::class)->resend($logInMongo);
+        $result = resolve(MailDeliveryService::class)->resend($logInMongo);
 
         $this->assertFalse($result);
 

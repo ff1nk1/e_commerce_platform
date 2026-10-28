@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Kafka\Handlers;
 
 use App\Services\Saga\SagaStepRunner;
@@ -20,7 +22,7 @@ class StockReleaseHandler
     public function __invoke(ConsumerMessage $message): void
     {
         $parsed = StockSagaMessage::tryFrom($message);
-        if ($parsed === null) {
+        if (! $parsed instanceof StockSagaMessage) {
             $payload = $message->getBody();
             if (! is_array($payload)) {
                 Log::warning('Получено невалидное событие stock.release_requested', ['payload' => $payload]);
@@ -49,7 +51,7 @@ class StockReleaseHandler
         $items = $parsed->items;
         $sagaId = $parsed->sagaId;
 
-        $this->sagaRunner->run($sagaId, 'stock.release', function () use ($orderId, $items, $sagaId) {
+        $this->sagaRunner->run($sagaId, 'stock.release', function () use ($orderId, $items, $sagaId): ?array {
             if ($this->saga->isCompleted($sagaId, 'stock.commit')) {
                 Log::info('stock.release skipped: stock.commit already completed', [
                     'order_id' => $orderId,
@@ -62,7 +64,7 @@ class StockReleaseHandler
                 ];
             }
 
-            $released = $this->reservations->release($orderId, $items, $sagaId);
+            $released = $this->reservations->release($orderId, $items);
 
             if (! $released) {
                 return null;

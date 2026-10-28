@@ -1,17 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Models\Conversation;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use PHPUnit\Framework\TestCase;
 
-class ConversationTtlTest extends TestCase
+final class ConversationTtlTest extends TestCase
 {
     public function test_idle_cap_wins_when_shorter_than_hard(): void
     {
-        $created = Carbon::parse('2026-01-01 12:00:00');
-        $activity = Carbon::parse('2026-01-01 12:00:00');
+        $created = Date::parse('2026-01-01 12:00:00');
+        $activity = Date::parse('2026-01-01 12:00:00');
 
         $expires = Conversation::computeExpiresAt($created, $activity);
 
@@ -20,8 +22,8 @@ class ConversationTtlTest extends TestCase
 
     public function test_hard_cap_wins_near_end_of_life(): void
     {
-        $created = Carbon::parse('2026-01-01 00:00:00');
-        $activity = Carbon::parse('2026-01-01 23:50:00');
+        $created = Date::parse('2026-01-01 00:00:00');
+        $activity = Date::parse('2026-01-01 23:50:00');
 
         $expires = Conversation::computeExpiresAt($created, $activity);
 

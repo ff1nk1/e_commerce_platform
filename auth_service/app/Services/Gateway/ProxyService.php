@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Gateway;
 
 use Illuminate\Http\Client\PendingRequest;
@@ -9,7 +11,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\HttpFoundation\Response;
 
-class ProxyService
+final class ProxyService
 {
     /** @var list<string> */
     private const JSON_FORWARD_HEADERS = ['Content-Type', 'Idempotency-Key'];
@@ -67,10 +69,8 @@ class ProxyService
     /**
      * Forward the incoming request to an internal microservice and return its response.
      *
-     * @param  array{id: int, email?: string|null, name?: string|null}|null  $injectUser
-     *                                                                                    When set, merges user_id (and email/name when present) into query and JSON body.
-     * @param  array{id: int, role: string, name?: string, email?: string}|null  $identity
-     *                                                                                      When set, sends X-User-* from the gateway user. Client headers are not copied.
+     * @param  array{id: int, email?: string|null, name?: string|null}|null  $injectUser  When set, merges user_id (and email/name when present) into query and JSON body.
+     * @param  array{id: int, role: string, name?: string, email?: string}|null  $identity  When set, sends X-User-* from the gateway user. Client headers are not copied.
      */
     public function forward(
         Request $request,
@@ -393,7 +393,7 @@ class ProxyService
      */
     private function nonEmptyHeaders(array $headers): array
     {
-        return array_filter($headers, fn ($value) => $value !== null && $value !== '');
+        return array_filter($headers, fn (?string $value): bool => $value !== null && $value !== '');
     }
 
     private function htmlResponse(HttpResponse $upstream): Response

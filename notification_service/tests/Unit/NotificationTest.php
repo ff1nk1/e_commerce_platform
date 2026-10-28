@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Unit;
 
 use App\Mail\MailableRegistry;
@@ -13,7 +15,7 @@ use Mockery;
 use Mockery\MockInterface;
 use Tests\TestCase;
 
-class NotificationTest extends TestCase
+final class NotificationTest extends TestCase
 {
     protected function tearDown(): void
     {
@@ -32,11 +34,11 @@ class NotificationTest extends TestCase
             'event_type' => 'user.registered',
         ]);
 
-        $result = app(MailDeliveryService::class)->resend($notification);
+        $result = resolve(MailDeliveryService::class)->resend($notification);
 
         $this->assertTrue($result);
 
-        Mail::assertSent(WelcomeMail::class, function ($mail) use ($notification) {
+        Mail::assertSent(WelcomeMail::class, function ($mail) use ($notification): bool {
             $hasCorrectTo = $mail->hasTo($notification->email);
             $hasCorrectPayload =
                 isset($mail->payload['email']) && $mail->payload['email'] === $notification->email &&
@@ -72,7 +74,7 @@ class NotificationTest extends TestCase
             'event_type' => 'user.registered',
         ]);
 
-        $result = app(MailDeliveryService::class)->resend($notification);
+        $result = resolve(MailDeliveryService::class)->resend($notification);
 
         $this->assertFalse($result);
 
@@ -88,11 +90,9 @@ class NotificationTest extends TestCase
         $callCount = 0;
         $pendingMailMock->shouldReceive('send')
             ->twice()
-            ->andReturnUsing(function () use (&$callCount) {
+            ->andReturnUsing(function () use (&$callCount): true {
                 $callCount++;
-                if ($callCount === 1) {
-                    throw new \Exception('SMTP timeout');
-                }
+                throw_if($callCount === 1, \Exception::class, 'SMTP timeout');
 
                 return true;
             });
@@ -113,7 +113,7 @@ class NotificationTest extends TestCase
             ],
         ]);
 
-        $result = app(MailDeliveryService::class)->resend($notification);
+        $result = resolve(MailDeliveryService::class)->resend($notification);
 
         $this->assertTrue($result);
         $notification->refresh();
@@ -141,7 +141,7 @@ class NotificationTest extends TestCase
         Mail::fake();
         $logSpy = Log::spy();
 
-        $result = app(MailDeliveryService::class)->sendMailWithRetry(
+        $result = resolve(MailDeliveryService::class)->sendMailWithRetry(
             ['email' => 'test@example.com', 'name' => 'John'],
             'user.registered',
         );
@@ -157,7 +157,7 @@ class NotificationTest extends TestCase
 
         $logSpy->shouldHaveReceived('info')
             ->once()
-            ->withArgs(function ($msg) {
+            ->withArgs(function ($msg): bool {
                 return str_contains($msg, '[KAFKA УСПЕХ]');
             });
     }
@@ -169,11 +169,9 @@ class NotificationTest extends TestCase
         $callCount = 0;
         $pendingMailMock->shouldReceive('send')
             ->twice()
-            ->andReturnUsing(function () use (&$callCount) {
+            ->andReturnUsing(function () use (&$callCount): true {
                 $callCount++;
-                if ($callCount === 1) {
-                    throw new \Exception('SMTP timeout');
-                }
+                throw_if($callCount === 1, \Exception::class, 'SMTP timeout');
 
                 return true;
             });
@@ -262,7 +260,7 @@ class NotificationTest extends TestCase
         $service->shouldAllowMockingProtectedMethods();
         $service->shouldReceive('sleepInTest')
             ->times($maxRetries - 1)
-            ->andReturnUsing(function (int $seconds) use (&$sleeps) {
+            ->andReturnUsing(function (int $seconds) use (&$sleeps): void {
                 $sleeps[] = $seconds;
             });
 

@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Http\Requests\AdminListOrdersRequest;
 use App\Services\OrderService;
 use Illuminate\Http\JsonResponse;
 
-class AdminOrderController extends Controller
+final class AdminOrderController extends Controller
 {
     public function __construct(
         private OrderService $orders

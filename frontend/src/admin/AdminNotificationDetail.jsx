@@ -1,51 +1,52 @@
-import { useState } from 'react'
-import { Link, useLoaderData } from 'react-router-dom'
-import { getNotification, resendNotification } from '../api/notifications'
+import { useState } from "react";
+import { Link, useLoaderData } from "react-router-dom";
+import { getNotification, resendNotification } from "../api/notifications";
 
 export default function AdminNotificationDetail() {
-  const initial = useLoaderData()
-  const [notification, setNotification] = useState(initial)
-  const [isResending, setIsResending] = useState(false)
-  const [resendStatus, setResendStatus] = useState(null)
+  const initial = useLoaderData();
+  const [notification, setNotification] = useState(initial);
+  const [isResending, setIsResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState(null);
 
-  const notificationId = notification._id || notification.id
-  const canResend = notification.status === 'failed'
+  const notificationId = notification._id || notification.id;
+  const canResend = notification.status === "failed";
 
   const handleResend = async () => {
-    if (!canResend) return
-    setIsResending(true)
+    if (!canResend) return;
+    setIsResending(true);
     setResendStatus({
-      type: 'pending',
-      message: 'Отправка с ретраями… это может занять несколько секунд',
-    })
+      type: "pending",
+      message: "Отправка с ретраями… это может занять несколько секунд",
+    });
 
     try {
-      const response = await resendNotification(notificationId)
-      const data = response.data?.data
-      if (data) setNotification(data)
-      const retries = data?.retries ?? '—'
+      const response = await resendNotification(notificationId);
+      const data = response.data?.data;
+      if (data) setNotification(data);
+      const retries = data?.retries ?? "—";
       setResendStatus({
-        type: 'success',
+        type: "success",
         message: response.data?.message
           ? `${response.data.message} (попыток: ${retries})`
           : `Уведомление отправлено (попыток: ${retries})`,
-      })
+      });
     } catch (error) {
-      console.error('Resend error:', error)
+      console.error("Resend error:", error);
       setResendStatus({
-        type: 'error',
-        message: error.response?.data?.message || 'Не удалось отправить повторно.',
-      })
+        type: "error",
+        message:
+          error.response?.data?.message || "Не удалось отправить повторно.",
+      });
       try {
-        const refreshed = await getNotification(notificationId)
-        setNotification(refreshed.data?.data || refreshed.data)
+        const refreshed = await getNotification(notificationId);
+        setNotification(refreshed.data?.data || refreshed.data);
       } catch {
         // keep current snapshot
       }
     } finally {
-      setIsResending(false)
+      setIsResending(false);
     }
-  }
+  };
 
   return (
     <div>
@@ -59,7 +60,7 @@ export default function AdminNotificationDetail() {
               disabled={isResending}
               className="btn btn-primary resend-btn"
             >
-              {isResending ? 'Отправка...' : 'Отправить ещё раз'}
+              {isResending ? "Отправка..." : "Отправить ещё раз"}
             </button>
           )}
           <Link to="/admin/notifications" className="btn btn-secondary">
@@ -80,15 +81,18 @@ export default function AdminNotificationDetail() {
         </div>
 
         <div className="detail-row">
-          <strong>Message ID:</strong> <span>{notification.message_id || '—'}</span>
+          <strong>Message ID:</strong>{" "}
+          <span>{notification.message_id || "—"}</span>
         </div>
 
         <div className="detail-row">
-          <strong>Событие:</strong> <span>{notification.event_type || '—'}</span>
+          <strong>Событие:</strong>{" "}
+          <span>{notification.event_type || "—"}</span>
         </div>
 
         <div className="detail-row">
-          <strong>Имя получателя:</strong> <span>{notification.name || '—'}</span>
+          <strong>Имя получателя:</strong>{" "}
+          <span>{notification.name || "—"}</span>
         </div>
 
         <div className="detail-row">
@@ -96,27 +100,27 @@ export default function AdminNotificationDetail() {
         </div>
 
         <div className="detail-row">
-          <strong>Статус:</strong>{' '}
+          <strong>Статус:</strong>{" "}
           <span className={`status-badge status-${notification.status}`}>
             {notification.status}
           </span>
         </div>
 
         <div className="detail-row">
-          <strong>Попыток отправки (Retries):</strong>{' '}
+          <strong>Попыток отправки (Retries):</strong>{" "}
           <span>{notification.retries ?? 0}</span>
         </div>
 
         <div className="detail-row">
-          <strong>Отправлено в DLQ:</strong>{' '}
+          <strong>Отправлено в DLQ:</strong>{" "}
           <span className="dlq-status">
-            {notification.moved_to_dlq ? 'Да (Ошибка)' : 'Нет'}
+            {notification.moved_to_dlq ? "Да (Ошибка)" : "Нет"}
           </span>
         </div>
 
         <div className="detail-row">
-          <strong>Время:</strong>{' '}
-          <span>{notification.time || notification.created_at || '—'}</span>
+          <strong>Время:</strong>{" "}
+          <span>{notification.time || notification.created_at || "—"}</span>
         </div>
 
         {notification.error_message && (
@@ -134,5 +138,5 @@ export default function AdminNotificationDetail() {
         </div>
       </div>
     </div>
-  )
+  );
 }

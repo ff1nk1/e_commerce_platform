@@ -33,25 +33,125 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.27.0"
           cache-dependency-path: analytic_service/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install golangci-lint
         run: |
           curl -sSfL -o /tmp/golangci-lint.tar.gz \
-            https://github.com/golangci/golangci-lint/releases/download/v1.64.8/golangci-lint-1.64.8-linux-amd64.tar.gz
+            https://github.com/golangci/golangci-lint/releases/download/v2.15.0/golangci-lint-2.15.0-linux-amd64.tar.gz
           sudo tar -C /usr/local/bin --strip-components=1 -xzf /tmp/golangci-lint.tar.gz \
-            golangci-lint-1.64.8-linux-amd64/golangci-lint
+            golangci-lint-2.15.0-linux-amd64/golangci-lint
           golangci-lint version
 
-      - name: Install root lint tooling
-        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Install shellcheck, hadolint, and actionlint
+        run: |
+          curl -sSfL -o /tmp/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-Linux-x86_64
+          sudo install -m 755 /tmp/hadolint /usr/local/bin/hadolint
+          curl -sSfL -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          sudo tar -C /usr/local/bin -xzf /tmp/actionlint.tar.gz actionlint
+          curl -sSfL -o /tmp/shellcheck.tar.xz \
+            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          sudo tar -C /usr/local/bin --strip-components=1 -xJf /tmp/shellcheck.tar.xz \
+            shellcheck-v0.11.0/shellcheck
+
+      - name: shellcheck, hadolint, actionlint
+        run: |
+          shellcheck -S warning \
+            scripts/*.sh \
+            infra/*.sh \
+            infra/php-base/entrypoint-http.sh \
+            order_service/bin/stripe-listen.sh
+          hadolint \
+            auth_service/Dockerfile \
+            catalog_service/Dockerfile \
+            notification_service/Dockerfile \
+            order_service/Dockerfile \
+            recommendation_service/Dockerfile \
+            search_service/Dockerfile \
+            analytic_service/Dockerfile \
+            frontend/Dockerfile \
+            infra/php-base/Dockerfile
+          actionlint
 
       - name: Run lint-all
         run: ./scripts/lint-all.sh --no-fix
 
+      - name: Composer audit
+        run: |
+          set -euo pipefail
+          for dir in auth_service catalog_service notification_service order_service search_service recommendation_service; do
+            echo "composer audit ${dir}"
+            (cd "$dir" && composer audit --no-interaction --locked)
+          done
+
+      - name: Frontend lint, audit, and build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run lint
+          npm run format:check
+          npm run build
+
   test:
     name: Tests (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          docker system prune -af
+
+      - name: Bootstrap (.env + vendor via Docker)
+        run: ./scripts/bootstrap.sh
+
+      - name: Inject JWT secret for auth
+        run: |
+          if [[ -z "${JWT_SECRET}" ]]; then
+            echo "::error::Set repository secret JWT_SECRET."
+            exit 1
+          fi
+          sed -i "s|^JWT_SECRET=.*|JWT_SECRET=${JWT_SECRET}|" auth_service/.env
+
+      - name: Start services required by test-all
+        run: |
+          # --force-recreate so auth picks up the injected JWT
+          # (--wait blocks until healthchecks pass; no fixed sleep).
+          docker compose up -d --wait --force-recreate \
+            auth_app auth_redis \
+            catalog_app catalog_redis \
+            notification_app notification_mongodb notification_mailpit \
+            order_app order_db order_redis \
+            search_app search_opensearch \
+            analytic_clickhouse kafka \
+            recommendation_app recommendation_db
+
+      - name: Run test-all
+        run: ./scripts/test-all.sh
+
+      - name: Dump compose status on failure
+        if: failure()
+        run: docker compose ps -a
+
+  test-live:
+    name: Tests (Stripe + Gemini)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -98,22 +198,17 @@ jobs:
 
       - name: Start services required by test-all
         run: |
-          # --force-recreate so auth/order/recommendation pick up injected secrets
-          # in process env (compose does not refresh env_file on a plain up -d).
-          docker compose up -d --force-recreate \
+          docker compose up -d --wait --force-recreate \
             auth_app auth_redis \
             catalog_app catalog_redis \
-            notification_app notification_mongodb notification_mailhog \
+            notification_app notification_mongodb notification_mailpit \
             order_app order_db order_redis \
             search_app search_opensearch \
             analytic_clickhouse kafka \
             recommendation_app recommendation_db
 
-      - name: Wait for containers
-        run: sleep 90
-
-      - name: Run test-all
-        run: ./scripts/test-all.sh
+      - name: Run test-all including live Stripe and Gemini
+        run: RUN_LIVE_TESTS=1 ./scripts/test-all.sh
 
       - name: Dump compose status on failure
         if: failure()

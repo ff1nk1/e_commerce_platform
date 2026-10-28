@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Listeners;
 
 use App\Events\StockReservationFailed;
 use App\Services\OutboxWriter;
 
-class WriteStockReservationFailedOutbox
+final class WriteStockReservationFailedOutbox
 {
     public function __construct(
         private OutboxWriter $outbox,

@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tests\Fakes;
 
 use Junges\Kafka\Contracts\ConsumerMessage;
 
-class FakeConsumerMessage implements ConsumerMessage
+final class FakeConsumerMessage implements ConsumerMessage
 {
     /**
      * @param  array<string, mixed>  $body
@@ -27,12 +29,15 @@ class FakeConsumerMessage implements ConsumerMessage
         return $this->topicName;
     }
 
-    public function getPartition(): ?int
+    public function getPartition(): int
     {
         return 0;
     }
 
-    public function getHeaders(): ?array
+    /**
+     * @return array<string, mixed>
+     */
+    public function getHeaders(): array
     {
         return $this->headers;
     }
@@ -47,12 +52,12 @@ class FakeConsumerMessage implements ConsumerMessage
         return $this->body;
     }
 
-    public function getOffset(): ?int
+    public function getOffset(): int
     {
         return 0;
     }
 
-    public function getTimestamp(): ?int
+    public function getTimestamp(): int
     {
         return now()->getTimestamp();
     }
