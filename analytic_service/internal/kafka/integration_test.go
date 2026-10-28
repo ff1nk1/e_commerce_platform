@@ -4,6 +4,7 @@ package kafka
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
@@ -26,10 +27,24 @@ func pingKafka(t *testing.T, brokers []string) {
 
 func writeAndHandle(t *testing.T, brokers []string, topic string, msg kafka.Message, handle func(context.Context, kafka.Message) error) {
 	t.Helper()
+
+	conn, err := kafka.Dial("tcp", brokers[0])
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	err = conn.CreateTopics(kafka.TopicConfig{
+		Topic:             topic,
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+	})
+	if err != nil && !errors.Is(err, kafka.TopicAlreadyExists) {
+		require.NoError(t, err)
+	}
+
 	w := &kafka.Writer{
-		Addr:     kafka.TCP(brokers...),
-		Topic:    topic,
-		Balancer: &kafka.LeastBytes{},
+		Addr:                   kafka.TCP(brokers...),
+		Topic:                  topic,
+		Balancer:               &kafka.LeastBytes{},
+		AllowAutoTopicCreation: true,
 	}
 	t.Cleanup(func() { _ = w.Close() })
 
