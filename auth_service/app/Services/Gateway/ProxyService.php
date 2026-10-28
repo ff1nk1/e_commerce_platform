@@ -70,7 +70,7 @@ class ProxyService
      * @param  array{id: int, email?: string|null, name?: string|null}|null  $injectUser
      *                                                                                    When set, merges user_id (and email/name when present) into query and JSON body.
      * @param  array{id: int, role: string, name?: string, email?: string}|null  $identity
-     *                                                                                    When set, sends X-User-* from the gateway user. Client headers are not copied.
+     *                                                                                      When set, sends X-User-* from the gateway user. Client headers are not copied.
      */
     public function forward(
         Request $request,

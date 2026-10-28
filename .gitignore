@@ -27,3 +27,4 @@ Thumbs.db
 .phpstan.cache.local/
 
 startup
+/local-vm.md
