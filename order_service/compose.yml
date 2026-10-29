@@ -204,6 +204,34 @@ services:
     networks:
       - php_project_net
 
+  order_scheduler:
+    image: order_service:local
+    pull_policy: never
+    container_name: order_scheduler
+    restart: unless-stopped
+    command: php artisan schedule:work
+    volumes:
+      - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
+    env_file:
+      - .env
+    environment:
+      DB_HOST: order_service_db
+      DB_PORT: 5432
+      REDIS_HOST: order_service_redis
+      REDIS_PORT: 6379
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CACHE_DRIVER: array
+    depends_on:
+      order_app:
+        condition: service_healthy
+      order_db:
+        condition: service_healthy
+      order_redis:
+        condition: service_healthy
+    networks:
+      - php_project_net
+
 volumes:
   order_pgdata:
   order_redisdata:

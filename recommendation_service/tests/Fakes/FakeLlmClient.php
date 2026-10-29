@@ -30,6 +30,13 @@ final class FakeLlmClient implements LlmClient
 
     public ?string $lastChatSystemPrompt = null;
 
+    /**
+     * When set, replaces the default embedding vector. May throw.
+     *
+     * @var (\Closure(string, string): list<float>)|null
+     */
+    public ?\Closure $embedHandler = null;
+
     public function __construct()
     {
         $this->filters = new SearchFilters(query: 'sneakers');
@@ -38,6 +45,10 @@ final class FakeLlmClient implements LlmClient
     public function embed(string $text, string $taskType = 'RETRIEVAL_DOCUMENT'): array
     {
         $this->embedCalls++;
+
+        if ($this->embedHandler instanceof \Closure) {
+            return ($this->embedHandler)($text, $taskType);
+        }
 
         return array_fill(0, 768, 0.01);
     }

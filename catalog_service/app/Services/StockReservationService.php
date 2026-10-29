@@ -7,7 +7,11 @@ namespace App\Services;
 use App\Events\StockChanged;
 use App\Events\StockReservationFailed;
 use App\Events\StockReserved;
+use App\Exceptions\DuplicateStockReservationException;
+use App\Exceptions\InsufficientStockReservationException;
+use App\Exceptions\MissingStockReservationException;
 use App\Models\Stock;
+use App\Models\StockReservation;
 use App\Services\Stock\StockItemNormalizer;
 use Closure;
 use Illuminate\Database\Connection;
@@ -21,7 +25,7 @@ final class StockReservationService
     ) {}
 
     /**
-     * Reserve stock for an order by increasing `reserved` (physical `quantity` unchanged).
+     * Reserve stock for an order by recording a held ledger row and increasing `reserved`.
      *
      * @param  list<array<string, mixed>>  $items
      * @return array{outcome: 'reserved'|'reservation_failed', order_id: int|string}
@@ -36,6 +40,8 @@ final class StockReservationService
         }
 
         return $this->withinTransaction(function () use ($orderId, $normalized, $sagaId): array {
+            $orderKey = $this->orderKey($orderId);
+
             /** @var list<array{0: Stock, 1: int}> $toReserve */
             $toReserve = [];
 
@@ -45,9 +51,7 @@ final class StockReservationService
                     ->lockForUpdate()
                     ->first();
 
-                $stockMissing = ! $stock;
-                $hasEnoughStock = $stock && $stock->available >= $item['quantity'];
-                if ($stockMissing || ! $hasEnoughStock) {
+                if (! $stock instanceof Stock || $stock->available < $item['quantity']) {
                     $this->emitReservationFailed($orderId, $sagaId, 'Not enough stock');
 
                     return ['outcome' => 'reservation_failed', 'order_id' => $orderId];
@@ -59,6 +63,27 @@ final class StockReservationService
             $stockChangedEvents = [];
 
             foreach ($toReserve as [$stock, $quantity]) {
+                $existing = StockReservation::query()
+                    ->where('order_id', $orderKey)
+                    ->where('product_id', $stock->product_id)
+                    ->where('store_id', $stock->store_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($existing instanceof StockReservation) {
+                    throw new DuplicateStockReservationException(
+                        "Reservation already exists for order {$orderKey}, product {$stock->product_id}, store {$stock->store_id}."
+                    );
+                }
+
+                StockReservation::query()->create([
+                    'order_id' => $orderKey,
+                    'product_id' => $stock->product_id,
+                    'store_id' => $stock->store_id,
+                    'quantity' => $quantity,
+                    'status' => StockReservation::STATUS_HELD,
+                ]);
+
                 $stock->reserved += $quantity;
                 $stock->save();
                 $stockChangedEvents[] = $this->stockChangedPayload($stock);
@@ -85,10 +110,10 @@ final class StockReservationService
     }
 
     /**
-     * Release previously reserved stock by decreasing `reserved`.
+     * Release a held reservation for this order.
      *
      * @param  list<array<string, mixed>>  $items
-     * @return bool true when items were valid and processed (even if some rows missing)
+     * @return bool true when items were valid and processed
      */
     public function release(int|string $orderId, array $items): bool
     {
@@ -103,19 +128,7 @@ final class StockReservationService
             $stockChangedEvents = [];
 
             foreach ($normalized as $item) {
-                $stock = Stock::query()->where('product_id', $item['product_id'])
-                    ->where('store_id', $item['store_id'])
-                    ->lockForUpdate()
-                    ->first();
-
-                if (! $stock) {
-                    continue;
-                }
-
-                $remainingReserved = max(0, $stock->reserved - $item['quantity']);
-                $stock->reserved = $remainingReserved;
-                $stock->save();
-
+                $stock = $this->settleHeld($orderId, $item, StockReservation::STATUS_RELEASED, false);
                 $stockChangedEvents[] = $this->stockChangedPayload($stock);
             }
 
@@ -130,7 +143,7 @@ final class StockReservationService
     }
 
     /**
-     * Finalize a paid order: decrease physical quantity and clear the reservation hold.
+     * Finalize a paid order: decrease physical quantity and mark the reservation committed.
      *
      * @param  list<array<string, mixed>>  $items
      * @return bool true when items were valid and processed
@@ -148,36 +161,7 @@ final class StockReservationService
             $stockChangedEvents = [];
 
             foreach ($normalized as $item) {
-                $stock = Stock::query()->where('product_id', $item['product_id'])
-                    ->where('store_id', $item['store_id'])
-                    ->lockForUpdate()
-                    ->first();
-
-                if (! $stock) {
-                    continue;
-                }
-
-                $qty = $item['quantity'];
-                $debit = min($stock->reserved, $qty);
-                if ($debit < $qty) {
-                    Log::warning('stock.commit under-reserved; debiting only held qty', [
-                        'order_id' => $orderId,
-                        'product_id' => $item['product_id'],
-                        'store_id' => $item['store_id'],
-                        'reserved' => $stock->reserved,
-                        'requested' => $qty,
-                        'debit' => $debit,
-                    ]);
-                }
-
-                if ($debit === 0) {
-                    continue;
-                }
-
-                $stock->quantity -= $debit;
-                $stock->reserved -= $debit;
-                $stock->save();
-
+                $stock = $this->settleHeld($orderId, $item, StockReservation::STATUS_COMMITTED, true);
                 $stockChangedEvents[] = $this->stockChangedPayload($stock);
             }
 
@@ -189,6 +173,73 @@ final class StockReservationService
         });
 
         return true;
+    }
+
+    /**
+     * @param  array{product_id: int, store_id: int, quantity: int}  $item
+     */
+    private function settleHeld(int|string $orderId, array $item, string $nextStatus, bool $decrementQuantity): Stock
+    {
+        $orderKey = $this->orderKey($orderId);
+        $productId = $item['product_id'];
+        $storeId = $item['store_id'];
+        $requested = $item['quantity'];
+
+        $stock = Stock::query()
+            ->where('product_id', $productId)
+            ->where('store_id', $storeId)
+            ->lockForUpdate()
+            ->first();
+
+        $reservation = StockReservation::query()
+            ->where('order_id', $orderKey)
+            ->where('product_id', $productId)
+            ->where('store_id', $storeId)
+            ->where('status', StockReservation::STATUS_HELD)
+            ->lockForUpdate()
+            ->first();
+
+        throw_if(
+            ! $stock instanceof Stock || ! $reservation instanceof StockReservation,
+            MissingStockReservationException::class,
+            "No held reservation for order {$orderKey}, product {$productId}, store {$storeId}."
+        );
+
+        if ($reservation->quantity !== $requested || $stock->reserved < $requested) {
+            throw new InsufficientStockReservationException(
+                "Held {$reservation->quantity} (counter {$stock->reserved}) for order {$orderKey}, requested {$requested}."
+            );
+        }
+
+        if ($decrementQuantity && $stock->quantity < $requested) {
+            throw new InsufficientStockReservationException(
+                "Physical quantity {$stock->quantity} is below commit of {$requested} for order {$orderKey}."
+            );
+        }
+
+        $reservation->status = $nextStatus;
+        $reservation->save();
+
+        if ($decrementQuantity) {
+            $stock->quantity -= $requested;
+        }
+        $stock->reserved -= $requested;
+        $stock->save();
+
+        return $stock;
+    }
+
+    private function orderKey(int|string $orderId): int
+    {
+        if (is_int($orderId) && $orderId >= 1) {
+            return $orderId;
+        }
+
+        if (is_string($orderId) && ctype_digit($orderId) && (int) $orderId >= 1) {
+            return (int) $orderId;
+        }
+
+        throw new MissingStockReservationException('Order id is not a positive integer.');
     }
 
     /**

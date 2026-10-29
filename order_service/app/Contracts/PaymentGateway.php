@@ -10,7 +10,7 @@ interface PaymentGateway
      * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      */
-    public function createCheckoutSession(array $params): array;
+    public function createCheckoutSession(array $params, string $idempotencyKey): array;
 
     /**
      * @return array<string, mixed>
@@ -20,7 +20,7 @@ interface PaymentGateway
     /**
      * @return array<string, mixed>
      */
-    public function expireCheckoutSession(string $sessionId): array;
+    public function expireCheckoutSession(string $sessionId, string $idempotencyKey): array;
 
     /**
      * @return array{id: string, type: string, data: array{object: array<string, mixed>}}
@@ -30,5 +30,5 @@ interface PaymentGateway
     /**
      * @return array<string, mixed>
      */
-    public function refundPaymentIntent(string $paymentIntentId, ?int $amountMinor = null): array;
+    public function refundPaymentIntent(string $paymentIntentId, ?int $amountMinor, string $idempotencyKey): array;
 }

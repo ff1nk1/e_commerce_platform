@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('recommendations')->group(function (): void {
     Route::get('/health', HealthController::class);
-    Route::post('/chat', ChatController::class);
+    Route::post('/chat', ChatController::class)->middleware('throttle:chat');
     Route::get('/conversations/{id}', [ConversationController::class, 'show']);
     Route::delete('/conversations/{id}', [ConversationController::class, 'destroy']);
     Route::post('/reindex', ReindexController::class);

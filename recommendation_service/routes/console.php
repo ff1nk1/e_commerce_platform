@@ -13,3 +13,7 @@ Artisan::command('inspire', function (): void {
 Schedule::command('conversations:cleanup')
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('embeddings:sweep-missing')
+    ->hourly()
+    ->withoutOverlapping();

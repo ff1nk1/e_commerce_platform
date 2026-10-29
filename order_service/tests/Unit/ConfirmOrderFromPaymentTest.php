@@ -9,6 +9,8 @@ use App\Models\Payment;
 use App\Models\ProductSnapshot;
 use App\Services\Payment\ConfirmOrderFromPayment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Mockery;
 use Shop\Messaging\OutboxQueue;
@@ -60,28 +62,40 @@ final class ConfirmOrderFromPaymentTest extends TestCase
         $this->assertSame('pending', $payment->fresh()->status);
     }
 
-    public function test_refunds_when_order_already_cancelled(): void
+    public function test_queues_refund_when_order_already_cancelled(): void
     {
         [$order, $payment] = $this->orderAndPayment('cancelled');
 
         $stripe = $this->mockPaymentGateway();
-        $stripe->shouldReceive('refundPaymentIntent')
-            ->once()
-            ->withArgs(fn ($intentId, $amount = null): bool => $intentId === 'pi_orphan')
-            ->andReturn(['id' => 're_1']);
+        $stripe->shouldNotReceive('refundPaymentIntent');
 
-        resolve(ConfirmOrderFromPayment::class)->fromCheckoutSession([
-            'id' => 'cs_orphan',
-            'payment_intent' => 'pi_orphan',
-            'payment_status' => 'paid',
-            'amount_total' => 5000,
-            'currency' => 'rub',
-            'metadata' => ['payment_id' => (string) $payment->id],
-        ]);
+        $this->deliverPaidSession($payment, 'cs_orphan', 'pi_orphan');
 
         $this->assertSame('cancelled', $order->fresh()->status->value);
-        $this->assertSame('succeeded', $payment->fresh()->status);
+        $this->assertSame('refund_pending', $payment->fresh()->status);
+        $this->assertSame('pi_orphan', $this->reloadedPayment($payment)->stripe_payment_intent_id);
         $this->assertSame(0, OutboxQueue::count('order.confirmed'));
+        $this->assertSame(1, $this->inboxMessagesContaining('pi_orphan'));
+
+        $this->deliverPaidSession($payment, 'cs_orphan', 'pi_orphan');
+        $this->assertSame(1, $this->inboxMessagesContaining('pi_orphan'));
+    }
+
+    public function test_queues_refund_when_order_already_confirmed(): void
+    {
+        [$order, $payment] = $this->orderAndPayment('confirmed');
+
+        $stripe = $this->mockPaymentGateway();
+        $stripe->shouldNotReceive('refundPaymentIntent');
+
+        $this->deliverPaidSession($payment, 'cs_second', 'pi_second');
+
+        $reloadedOrder = $this->reloadedOrder($order);
+        $reloadedPayment = $this->reloadedPayment($payment);
+        $this->assertSame('confirmed', $reloadedOrder->status->value);
+        $this->assertSame('refund_pending', $reloadedPayment->status);
+        $this->assertSame(0, OutboxQueue::count('order.confirmed'));
+        $this->assertSame(1, $this->inboxMessagesContaining('pi_second'));
     }
 
     /**
@@ -118,5 +132,46 @@ final class ConfirmOrderFromPaymentTest extends TestCase
         ]);
 
         return [$order, $payment];
+    }
+
+    private function reloadedOrder(Order $order): Order
+    {
+        $fresh = $order->fresh();
+        throw_unless($fresh instanceof Order, \RuntimeException::class, 'Order missing after reload.');
+
+        return $fresh;
+    }
+
+    private function reloadedPayment(Payment $payment): Payment
+    {
+        $fresh = $payment->fresh();
+        throw_unless($fresh instanceof Payment, \RuntimeException::class, 'Payment missing after reload.');
+
+        return $fresh;
+    }
+
+    private function deliverPaidSession(Payment $payment, string $sessionId, string $paymentIntentId): void
+    {
+        resolve(ConfirmOrderFromPayment::class)->fromCheckoutSession([
+            'id' => $sessionId,
+            'payment_intent' => $paymentIntentId,
+            'payment_status' => 'paid',
+            'amount_total' => 5000,
+            'currency' => 'rub',
+            'metadata' => ['payment_id' => (string) $payment->id],
+        ]);
+    }
+
+    private function inboxMessagesContaining(string $needle): int
+    {
+        if (! Schema::hasTable('enqueue')) {
+            return 0;
+        }
+
+        return DB::table('enqueue')
+            ->where('queue', 'inbox')
+            ->get()
+            ->filter(static fn (object $row): bool => str_contains((string) $row->body, $needle))
+            ->count();
     }
 }

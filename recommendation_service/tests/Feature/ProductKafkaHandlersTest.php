@@ -10,7 +10,9 @@ use App\Messaging\CatalogStockChanged;
 use App\Messaging\ProductLifecycle;
 use App\Models\ProductCatalog;
 use App\Services\Llm\Contracts\LlmClient;
+use App\Services\Llm\Exceptions\LlmException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Shop\Messaging\InboundEnvelope;
@@ -379,6 +381,52 @@ final class ProductKafkaHandlersTest extends TestCase
             ->assertOk()
             ->assertJsonPath('products.0.product_id', 100)
             ->assertJsonPath('products.0.path', '/products/100');
+    }
+
+    public function test_embed_failure_leaves_null_embedding_and_rethrows(): void
+    {
+        $logged = false;
+        Log::listen(function (MessageLogged $event) use (&$logged): void {
+            if ($event->level !== 'error' || $event->message !== 'ProductIndexer: failed to generate embedding') {
+                return;
+            }
+
+            $logged = true;
+            $this->assertSame(501, $event->context['product_id'] ?? null);
+            $this->assertSame(503, $event->context['status'] ?? null);
+        });
+
+        $this->llm->embedHandler = static function (string $text, string $taskType): array {
+            throw LlmException::http('Gemini embed failed (503): unavailable', 503);
+        };
+
+        try {
+            resolve(ProductEventsHandler::class)->onInbound($this->product(
+                body: [
+                    'event' => 'product.created',
+                    'data' => [
+                        'id' => 501,
+                        'store_id' => 1,
+                        'name' => 'Unembedded Phone',
+                        'price' => 10,
+                        'is_published' => true,
+                    ],
+                ],
+                headers: ['event-type' => 'product.created'],
+            ));
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertSame(503, $e->statusCode());
+        }
+
+        $this->assertTrue($logged);
+        $this->assertDatabaseHas('product_catalog', [
+            'product_id' => 501,
+            'name' => 'Unembedded Phone',
+        ]);
+        $this->assertNull(
+            DB::table('product_catalog')->where('product_id', 501)->value('embedding')
+        );
     }
 
     /**

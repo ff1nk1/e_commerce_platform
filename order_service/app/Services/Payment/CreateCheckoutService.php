@@ -9,6 +9,7 @@ use App\Contracts\PaymentGateway;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Stripe\StripeCheckoutSessionParams;
+use App\Services\Stripe\StripeIdempotencyKey;
 use App\Services\Stripe\StripeLineItems;
 use Illuminate\Support\Sleep;
 use Illuminate\Validation\ValidationException;
@@ -126,7 +127,8 @@ final class CreateCheckoutService
         }
 
         $session = $this->stripe->createCheckoutSession(
-            StripeCheckoutSessionParams::forPayment($order, $payment, $lineItems)
+            StripeCheckoutSessionParams::forPayment($order, $payment, $lineItems),
+            StripeIdempotencyKey::forOrder($order->id, 'checkout', (string) $payment->id),
         );
 
         $paymentIntentId = is_string($session['payment_intent'] ?? null)

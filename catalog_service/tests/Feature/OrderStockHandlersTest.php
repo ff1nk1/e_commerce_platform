@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Exceptions\DuplicateStockReservationException;
+use App\Exceptions\InsufficientStockReservationException;
+use App\Exceptions\MissingStockReservationException;
 use App\Exceptions\SagaStepBusyException;
 use App\Kafka\Handlers\OrderCreatedHandler;
 use App\Kafka\Handlers\StockCommitHandler;
@@ -14,11 +17,13 @@ use App\Messaging\StockCommitRequested;
 use App\Messaging\StockReleaseRequested;
 use App\Models\Product;
 use App\Models\Stock;
+use App\Models\StockReservation;
 use App\Models\Store;
 use App\Services\StockReservationService;
 use Ecotone\Modelling\EventBus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Mockery;
 use Shop\Messaging\InboundEnvelope;
@@ -63,6 +68,13 @@ final class OrderStockHandlersTest extends TestCase
         $this->assertEquals(10, $fresh->quantity);
         $this->assertEquals(3, $fresh->reserved);
         $this->assertEquals(7, $fresh->available);
+        $this->assertDatabaseHas('stock_reservations', [
+            'order_id' => 1001,
+            'product_id' => $product->id,
+            'store_id' => $store->id,
+            'quantity' => 3,
+            'status' => StockReservation::STATUS_HELD,
+        ]);
         $stored = OutboxQueue::first('stock.reserved');
         $this->assertNotNull($stored);
         $this->assertSame('stock.events', $stored->topic);
@@ -119,6 +131,7 @@ final class OrderStockHandlersTest extends TestCase
             'quantity' => 10,
             'reserved' => 4,
         ]);
+        $this->holdForOrder(1003, $product->id, $store->id, 2);
 
         $message = $this->consumerMessage('stock.release_requested', [
             'saga_id' => (string) Str::uuid(),
@@ -135,12 +148,17 @@ final class OrderStockHandlersTest extends TestCase
         $fresh = $stock->fresh();
         $this->assertEquals(10, $fresh->quantity);
         $this->assertEquals(2, $fresh->reserved);
+        $this->assertDatabaseHas('stock_reservations', [
+            'order_id' => 1003,
+            'product_id' => $product->id,
+            'status' => StockReservation::STATUS_RELEASED,
+        ]);
         $changed = OutboxQueue::first('stock.changed');
         $this->assertNotNull($changed);
         $this->assertSame(8, $changed->payload['quantity']);
     }
 
-    public function test_stock_release_skips_missing_stock_rows(): void
+    public function test_stock_release_missing_reservation_throws(): void
     {
         $message = $this->consumerMessage('stock.release_requested', [
             'saga_id' => (string) Str::uuid(),
@@ -152,7 +170,11 @@ final class OrderStockHandlersTest extends TestCase
             ]],
         ]);
 
-        resolve(StockReleaseHandler::class)->onInbound($message);
+        try {
+            resolve(StockReleaseHandler::class)->onInbound($message);
+            $this->fail('Expected a missing reservation to throw.');
+        } catch (MissingStockReservationException) {
+        }
 
         $this->assertSame(0, OutboxQueue::count());
     }
@@ -257,6 +279,18 @@ final class OrderStockHandlersTest extends TestCase
         $this->assertEquals(2, $stockA->fresh()->reserved);
         $this->assertEquals(8, $stockB->fresh()->quantity);
         $this->assertEquals(3, $stockB->fresh()->reserved);
+        $this->assertDatabaseHas('stock_reservations', [
+            'order_id' => 2001,
+            'product_id' => $productA->id,
+            'quantity' => 2,
+            'status' => StockReservation::STATUS_HELD,
+        ]);
+        $this->assertDatabaseHas('stock_reservations', [
+            'order_id' => 2001,
+            'product_id' => $productB->id,
+            'quantity' => 3,
+            'status' => StockReservation::STATUS_HELD,
+        ]);
 
         $reserved = OutboxQueue::first('stock.reserved');
         $this->assertNotNull($reserved);
@@ -397,6 +431,7 @@ final class OrderStockHandlersTest extends TestCase
             'quantity' => 10,
             'reserved' => 3,
         ]);
+        $this->holdForOrder(4001, $product->id, $store->id, 3);
         $sagaId = (string) Str::uuid();
 
         resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
@@ -413,6 +448,11 @@ final class OrderStockHandlersTest extends TestCase
         $this->assertEquals(7, $fresh->quantity);
         $this->assertEquals(0, $fresh->reserved);
         $this->assertEquals(7, $fresh->available);
+        $this->assertDatabaseHas('stock_reservations', [
+            'order_id' => 4001,
+            'status' => StockReservation::STATUS_COMMITTED,
+            'quantity' => 3,
+        ]);
         $stored = OutboxQueue::first('stock.changed');
         $this->assertNotNull($stored);
         $this->assertSame('catalog.events', $stored->topic);
@@ -471,6 +511,7 @@ final class OrderStockHandlersTest extends TestCase
             'quantity' => 10,
             'reserved' => 4,
         ]);
+        $this->holdForOrder(3003, $product->id, $store->id, 2);
         $sagaId = (string) Str::uuid();
 
         $message = $this->consumerMessage('stock.release_requested', [
@@ -584,7 +625,7 @@ final class OrderStockHandlersTest extends TestCase
         $this->assertSame('skipped_after_commit', $this->stepResult($sagaId, 'stock.release')['outcome'] ?? null);
     }
 
-    public function test_commit_with_zero_reserved_does_not_change_quantity(): void
+    public function test_commit_without_reservation_throws_and_leaves_quantity(): void
     {
         $store = Store::factory()->create();
         $product = Product::factory()->create(['store_id' => $store->id]);
@@ -596,21 +637,90 @@ final class OrderStockHandlersTest extends TestCase
         ]);
         $sagaId = (string) Str::uuid();
 
-        resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
-            'saga_id' => $sagaId,
-            'order_id' => 5003,
-            'items' => [[
-                'product_id' => $product->id,
-                'store_id' => $store->id,
-                'quantity' => 3,
-            ]],
-        ]));
+        try {
+            resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
+                'saga_id' => $sagaId,
+                'order_id' => 5003,
+                'items' => [[
+                    'product_id' => $product->id,
+                    'store_id' => $store->id,
+                    'quantity' => 3,
+                ]],
+            ]));
+            $this->fail('Expected a missing reservation to throw.');
+        } catch (MissingStockReservationException) {
+        }
 
         $fresh = $stock->fresh();
         $this->assertEquals(10, $fresh->quantity);
         $this->assertEquals(0, $fresh->reserved);
         $this->assertSame(0, OutboxQueue::count('stock.changed'));
-        $this->assertSame('done', $this->stepStatus($sagaId, 'stock.commit'));
+        $this->assertNull($this->stepStatus($sagaId, 'stock.commit'));
+    }
+
+    public function test_commit_above_held_quantity_throws(): void
+    {
+        $store = Store::factory()->create();
+        $product = Product::factory()->create(['store_id' => $store->id]);
+        $stock = Stock::factory()->create([
+            'product_id' => $product->id,
+            'store_id' => $store->id,
+            'quantity' => 10,
+            'reserved' => 1,
+        ]);
+        $this->holdForOrder(5005, $product->id, $store->id, 1);
+
+        try {
+            resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
+                'saga_id' => (string) Str::uuid(),
+                'order_id' => 5005,
+                'items' => [[
+                    'product_id' => $product->id,
+                    'store_id' => $store->id,
+                    'quantity' => 3,
+                ]],
+            ]));
+            $this->fail('Expected an under-held reservation to throw.');
+        } catch (InsufficientStockReservationException) {
+        }
+
+        $fresh = $stock->fresh();
+        throw_unless($fresh instanceof Stock, \RuntimeException::class, 'Stock row disappeared.');
+        $this->assertEquals(10, $fresh->quantity);
+        $this->assertEquals(1, $fresh->reserved);
+        $this->assertDatabaseHas('stock_reservations', [
+            'order_id' => 5005,
+            'status' => StockReservation::STATUS_HELD,
+            'quantity' => 1,
+        ]);
+    }
+
+    public function test_second_reserve_for_same_order_line_throws(): void
+    {
+        $store = Store::factory()->create();
+        $product = Product::factory()->create(['store_id' => $store->id]);
+        Stock::factory()->create([
+            'product_id' => $product->id,
+            'store_id' => $store->id,
+            'quantity' => 10,
+            'reserved' => 0,
+        ]);
+        $items = [[
+            'product_id' => $product->id,
+            'store_id' => $store->id,
+            'quantity' => 2,
+        ]];
+        $service = resolve(StockReservationService::class);
+        $service->reserve(42, $items, (string) Str::uuid());
+
+        try {
+            $service->reserve(42, $items, (string) Str::uuid());
+            $this->fail('Expected a duplicate reservation to throw.');
+        } catch (DuplicateStockReservationException) {
+        }
+
+        $this->assertSame(1, StockReservation::query()->where('order_id', 42)->count());
+        $this->assertEquals(2, Stock::query()->where('product_id', $product->id)->value('reserved'));
     }
 
     public function test_handlers_without_saga_id_do_not_mutate_stock(): void
@@ -690,6 +800,17 @@ final class OrderStockHandlersTest extends TestCase
         }
     }
 
+    private function holdForOrder(int $orderId, int $productId, int $storeId, int $quantity): void
+    {
+        StockReservation::query()->create([
+            'order_id' => $orderId,
+            'product_id' => $productId,
+            'store_id' => $storeId,
+            'quantity' => $quantity,
+            'status' => StockReservation::STATUS_HELD,
+        ]);
+    }
+
     private function stepStatus(string $sagaId, string $step): ?string
     {
         $status = $this->stepDocument($sagaId)['steps'][$step]['status'] ?? null;
@@ -712,6 +833,10 @@ final class OrderStockHandlersTest extends TestCase
      */
     private function stepDocument(string $sagaId): array
     {
+        if (! Schema::hasTable('ecotone_document_store')) {
+            return [];
+        }
+
         $document = DB::table('ecotone_document_store')->where('document_id', $sagaId)->value('document');
         if (! is_string($document) || $document === '') {
             return [];

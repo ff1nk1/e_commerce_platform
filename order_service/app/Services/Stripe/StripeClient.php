@@ -21,9 +21,9 @@ class StripeClient implements PaymentGateway
 {
     private const SIGNATURE_TOLERANCE_SECONDS = 300;
 
-    public function createCheckoutSession(array $params): array
+    public function createCheckoutSession(array $params, string $idempotencyKey): array
     {
-        return $this->request('post', 'checkout/sessions', $params);
+        return $this->request('post', 'checkout/sessions', $params, $idempotencyKey);
     }
 
     public function retrieveCheckoutSession(string $sessionId): array
@@ -31,19 +31,19 @@ class StripeClient implements PaymentGateway
         return $this->request('get', 'checkout/sessions/'.$sessionId);
     }
 
-    public function expireCheckoutSession(string $sessionId): array
+    public function expireCheckoutSession(string $sessionId, string $idempotencyKey): array
     {
-        return $this->request('post', 'checkout/sessions/'.$sessionId.'/expire');
+        return $this->request('post', 'checkout/sessions/'.$sessionId.'/expire', [], $idempotencyKey);
     }
 
-    public function refundPaymentIntent(string $paymentIntentId, ?int $amountMinor = null): array
+    public function refundPaymentIntent(string $paymentIntentId, ?int $amountMinor, string $idempotencyKey): array
     {
         $params = ['payment_intent' => $paymentIntentId];
         if ($amountMinor !== null) {
             $params['amount'] = $amountMinor;
         }
 
-        return $this->request('post', 'refunds', $params);
+        return $this->request('post', 'refunds', $params, $idempotencyKey);
     }
 
     /**
@@ -72,7 +72,7 @@ class StripeClient implements PaymentGateway
      * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      */
-    private function request(string $method, string $path, array $params = []): array
+    private function request(string $method, string $path, array $params = [], ?string $idempotencyKey = null): array
     {
         $secret = (string) config('services.stripe.secret');
         throw_if($secret === '', RuntimeException::class, 'STRIPE_SECRET is not configured.');
@@ -81,6 +81,15 @@ class StripeClient implements PaymentGateway
             ->acceptJson()
             ->asForm()
             ->timeout(30);
+
+        if ($method !== 'get') {
+            throw_if(
+                $idempotencyKey === null || $idempotencyKey === '',
+                RuntimeException::class,
+                'Stripe mutating request requires an Idempotency-Key.',
+            );
+            $pending = $pending->withHeaders(['Idempotency-Key' => $idempotencyKey]);
+        }
 
         try {
             $response = $method === 'get'

@@ -13,6 +13,9 @@ return [
         'embedding_dimensions' => (int) env('GEMINI_EMBEDDING_DIMENSIONS', 768),
         // Per HTTP call + shared chat budget (extract+embed+chat), seconds.
         'timeout' => (int) env('GEMINI_TIMEOUT', 25),
+        // Indexing embeds only (chat turns keep a single attempt inside the budget).
+        'embed_retry_times' => (int) env('GEMINI_EMBED_RETRY_TIMES', 3),
+        'embed_retry_sleep_ms' => (int) env('GEMINI_EMBED_RETRY_SLEEP_MS', 200),
     ],
 
 ];

@@ -14,6 +14,9 @@ use App\Services\Catalog\HttpCatalogProductClient;
 use App\Services\Catalog\SearchFiltersNormalizer;
 use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\Gemini\GeminiLlmClient;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 use Shop\Messaging\InboundEventFactory;
@@ -38,6 +41,8 @@ final class AppServiceProvider extends ServiceProvider
                     temperature: (float) config('llm.gemini.temperature', 0.3),
                     embeddingDimensions: (int) config('llm.gemini.embedding_dimensions', 768),
                     timeout: max(1, (int) config('llm.gemini.timeout', 25)),
+                    embedRetryTimes: max(1, (int) config('llm.gemini.embed_retry_times', 3)),
+                    embedRetrySleepMs: max(0, (int) config('llm.gemini.embed_retry_sleep_ms', 200)),
                 ),
                 default => throw new InvalidArgumentException("Unsupported LLM_DRIVER [{$driver}]"),
             };
@@ -70,6 +75,20 @@ final class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        RateLimiter::for('chat', function (Request $request) {
+            $max = max(1, (int) config('recommendations.chat_per_minute', 5));
+            $userId = $request->input('user_id');
+            $key = is_string($userId) && $userId !== ''
+                ? 'user:'.$userId
+                : 'ip:'.($request->ip() ?: 'unknown');
+
+            return Limit::perMinute($max)
+                ->by($key)
+                ->response(function (Request $request, array $headers) {
+                    return response()->json([
+                        'message' => 'Слишком много запросов. Попробуйте через минуту.',
+                    ], 429, $headers);
+                });
+        });
     }
 }

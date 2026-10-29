@@ -686,6 +686,43 @@ final class RecommendationsApiTest extends TestCase
             ->assertJsonPath('indexed', 0);
     }
 
+    public function test_reindex_continues_when_one_embed_fails(): void
+    {
+        ProductCatalog::query()->create([
+            'product_id' => 21,
+            'store_id' => 1,
+            'name' => 'Fail Jacket',
+            'price' => 10,
+            'attributes' => [],
+            'is_published' => true,
+            'in_stock' => true,
+        ]);
+        ProductCatalog::query()->create([
+            'product_id' => 22,
+            'store_id' => 1,
+            'name' => 'Ok Jacket',
+            'price' => 20,
+            'attributes' => [],
+            'is_published' => true,
+            'in_stock' => true,
+        ]);
+
+        $this->llm->embedHandler = static function (string $text, string $taskType): array {
+            if (str_contains($text, 'Fail Jacket')) {
+                throw LlmException::http('Gemini embed failed (503): down', 503);
+            }
+
+            return array_fill(0, 768, $taskType === 'RETRIEVAL_DOCUMENT' ? 0.02 : 0.01);
+        };
+
+        $this->postJson('/api/recommendations/reindex')
+            ->assertOk()
+            ->assertJsonPath('indexed', 1);
+
+        $this->assertNull(DB::table('product_catalog')->where('product_id', 21)->value('embedding'));
+        $this->assertNotNull(DB::table('product_catalog')->where('product_id', 22)->value('embedding'));
+    }
+
     public function test_chat_returns_friendly_message_when_gemini_unavailable(): void
     {
         $this->app->instance(LlmClient::class, new class implements LlmClient

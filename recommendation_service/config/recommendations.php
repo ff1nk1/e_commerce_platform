@@ -42,4 +42,15 @@ return [
     */
     'internal_token' => (string) env('RECOMMENDATION_INTERNAL_TOKEN', ''),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Public chat rate limit
+    |--------------------------------------------------------------------------
+    |
+    | Max recommendation chat requests per minute for one user_id, or IP
+    | when the caller did not send a user id.
+    |
+    */
+    'chat_per_minute' => (int) env('RECOMMENDATION_CHAT_PER_MINUTE', 5),
+
 ];

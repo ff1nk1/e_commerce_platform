@@ -10,8 +10,10 @@ use App\Services\Llm\DTOs\SearchFilters;
 use App\Services\Llm\Exceptions\LlmException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Throwable;
 
 final class GeminiLlmClient implements LlmClient
 {
@@ -94,6 +96,8 @@ PROMPT;
         private readonly float $temperature,
         private readonly int $embeddingDimensions,
         private readonly int $timeout = 12,
+        private readonly int $embedRetryTimes = 3,
+        private readonly int $embedRetrySleepMs = 200,
     ) {}
 
     /**
@@ -127,7 +131,11 @@ PROMPT;
         }
 
         return $this->parseEmbedResponse(
-            $this->post($this->endpoint($this->embeddingModel, 'embedContent'), $payload)
+            $this->post(
+                $this->endpoint($this->embeddingModel, 'embedContent'),
+                $payload,
+                retry: $this->budgetRemaining === null,
+            )
         );
     }
 
@@ -228,13 +236,13 @@ PROMPT;
     /**
      * @param  array<string, mixed>  $payload
      */
-    private function post(string $endpoint, array $payload): Response
+    private function post(string $endpoint, array $payload, bool $retry = false): Response
     {
         $timeout = $this->effectiveTimeout();
         $started = microtime(true);
 
         try {
-            return $this->http($timeout)->post($endpoint, $payload);
+            return $this->send($endpoint, $payload, $timeout, $retry);
         } catch (ConnectionException $e) {
             $isTimeout = str_contains(strtolower($e->getMessage()), 'timed out')
                 || str_contains(strtolower($e->getMessage()), 'timeout');
@@ -244,11 +252,47 @@ PROMPT;
                 $isTimeout ? 504 : null,
                 $e,
             );
+        } catch (RequestException $e) {
+            return $e->response;
         } finally {
             if ($this->budgetRemaining !== null) {
                 $this->budgetRemaining -= microtime(true) - $started;
             }
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function send(string $endpoint, array $payload, int $timeout, bool $retry): Response
+    {
+        $pending = $this->http($timeout);
+
+        if ($retry && $this->embedRetryTimes > 1) {
+            $pending = $pending->retry(
+                $this->embedRetryTimes,
+                fn (int $attempt, mixed $exception): int => $this->embedRetrySleepMs * (2 ** ($attempt - 1)),
+                fn (Throwable $exception, PendingRequest $request, ?string $method = null): bool => $this->shouldRetryEmbed($exception),
+                false,
+            );
+        }
+
+        return $pending->post($endpoint, $payload);
+    }
+
+    private function shouldRetryEmbed(Throwable $exception): bool
+    {
+        if ($exception instanceof ConnectionException) {
+            return true;
+        }
+
+        if ($exception instanceof RequestException) {
+            $status = $exception->response->status();
+
+            return $status === 429 || $status >= 500;
+        }
+
+        return false;
     }
 
     private function effectiveTimeout(): int

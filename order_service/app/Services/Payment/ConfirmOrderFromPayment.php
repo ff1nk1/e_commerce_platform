@@ -4,17 +4,18 @@ declare(strict_types=1);
 
 namespace App\Services\Payment;
 
-use App\Contracts\PaymentGateway;
 use App\Domain\OrderStatus;
 use App\Events\OrderConfirmed;
 use App\Events\OrderPaid;
 use App\Messaging\FulfillmentEvents;
 use App\Messaging\PaymentCaptured;
+use App\Messaging\RefundOrphanPayment;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Order\OrderPayloadFactory;
 use App\Services\Stripe\StripePaymentResolver;
 use App\Services\Stripe\StripeSessionMoney;
+use Ecotone\Modelling\EventBus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -22,8 +23,8 @@ final class ConfirmOrderFromPayment
 {
     public function __construct(
         private OrderPayloadFactory $payloads,
-        private PaymentGateway $stripe,
         private FulfillmentEvents $fulfillment,
+        private EventBus $events,
     ) {}
 
     /**
@@ -44,7 +45,7 @@ final class ConfirmOrderFromPayment
 
         DB::transaction(function () use ($session): void {
             $payment = StripePaymentResolver::lockForSession($session);
-            if (! $payment instanceof Payment || $payment->status === 'succeeded') {
+            if (! $payment instanceof Payment || $this->paymentAlreadySettled($payment)) {
                 return;
             }
 
@@ -73,24 +74,8 @@ final class ConfirmOrderFromPayment
     {
         $status = $order->statusEnum();
 
-        if ($status === OrderStatus::Confirmed) {
-            $payment->status = 'succeeded';
-            if (is_string($session['payment_intent'] ?? null)) {
-                $payment->stripe_payment_intent_id = $session['payment_intent'];
-            }
-            $payment->save();
-
-            return;
-        }
-
-        if (in_array($status, [OrderStatus::Cancelled, OrderStatus::PaymentFailed], true)) {
-            $payment->status = 'succeeded';
-            if (is_string($session['payment_intent'] ?? null)) {
-                $payment->stripe_payment_intent_id = $session['payment_intent'];
-            }
-            $payment->save();
-
-            $this->refundOrphanCharge($payment, $session);
+        if ($this->shouldRefund($status)) {
+            $this->queueOrphanRefund($payment, $order, $session);
 
             return;
         }
@@ -122,14 +107,29 @@ final class ConfirmOrderFromPayment
         $this->fulfillment->publish(new PaymentCaptured($sagaId), $sagaId);
     }
 
+    private function paymentAlreadySettled(Payment $payment): bool
+    {
+        return in_array($payment->status, ['succeeded', 'refund_pending', 'refunded'], true);
+    }
+
+    private function shouldRefund(OrderStatus $status): bool
+    {
+        return in_array($status, [
+            OrderStatus::Confirmed,
+            OrderStatus::Cancelled,
+            OrderStatus::PaymentFailed,
+            OrderStatus::Shipped,
+        ], true);
+    }
+
     /**
      * @param  array<string, mixed>  $session
      */
-    private function refundOrphanCharge(Payment $payment, array $session): void
+    private function queueOrphanRefund(Payment $payment, Order $order, array $session): void
     {
         $fromPayment = $payment->stripe_payment_intent_id;
         $fromSession = is_string($session['payment_intent'] ?? null) ? $session['payment_intent'] : null;
-        $intentId = $fromPayment ?? $fromSession;
+        $intentId = (is_string($fromPayment) && $fromPayment !== '') ? $fromPayment : $fromSession;
 
         if (! is_string($intentId) || $intentId === '') {
             Log::error('Orphan Stripe charge without payment_intent; manual refund required', [
@@ -140,20 +140,14 @@ final class ConfirmOrderFromPayment
             return;
         }
 
-        try {
-            $this->stripe->refundPaymentIntent($intentId);
-            Log::warning('Refunded orphan Stripe charge after cancel/payment_failed', [
-                'payment_id' => $payment->id,
-                'order_id' => $payment->order_id,
-                'payment_intent' => $intentId,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('Failed to refund orphan Stripe charge', [
-                'payment_id' => $payment->id,
-                'order_id' => $payment->order_id,
-                'payment_intent' => $intentId,
-                'message' => $e->getMessage(),
-            ]);
-        }
+        $payment->status = 'refund_pending';
+        $payment->stripe_payment_intent_id = $intentId;
+        $payment->save();
+
+        $this->events->publish(new RefundOrphanPayment(
+            (int) $payment->id,
+            (int) $order->id,
+            $intentId,
+        ));
     }
 }

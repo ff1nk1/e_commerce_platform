@@ -6,6 +6,7 @@ namespace App\Services\Catalog;
 
 use App\Models\ProductCatalog;
 use App\Services\Llm\Contracts\LlmClient;
+use App\Services\Llm\Exceptions\LlmException;
 use App\Support\PgVectorLiteral;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -130,8 +131,12 @@ final class ProductIndexer
         ProductCatalog::query()->orderBy('id')->chunkById(50, function ($rows) use (&$count): void {
             foreach ($rows as $product) {
                 /** @var ProductCatalog $product */
-                $this->embedAndStore($product);
-                $count++;
+                try {
+                    $this->embedAndStore($product);
+                    $count++;
+                } catch (LlmException) {
+                    // Logged in embedAndStore. Leave embedding null and continue.
+                }
             }
         });
 
@@ -140,14 +145,24 @@ final class ProductIndexer
 
     public function embedAndStore(ProductCatalog $product): void
     {
-        $text = $this->textBuilder->fromModel($product);
-        $vector = $this->llm->embed($text, 'RETRIEVAL_DOCUMENT');
-        $literal = PgVectorLiteral::from($vector);
+        try {
+            $text = $this->textBuilder->fromModel($product);
+            $vector = $this->llm->embed($text, 'RETRIEVAL_DOCUMENT');
+            $literal = PgVectorLiteral::from($vector);
 
-        DB::statement(
-            'UPDATE product_catalog SET embedding = ?::vector, updated_at = ? WHERE id = ?',
-            [$literal, now(), $product->id]
-        );
+            DB::statement(
+                'UPDATE product_catalog SET embedding = ?::vector, updated_at = ? WHERE id = ?',
+                [$literal, now(), $product->id]
+            );
+        } catch (LlmException $e) {
+            Log::error('ProductIndexer: failed to generate embedding', [
+                'product_id' => $product->product_id,
+                'status' => $e->statusCode(),
+                'message' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
     }
 
     /**

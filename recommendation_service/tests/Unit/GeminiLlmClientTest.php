@@ -8,6 +8,8 @@ use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\Exceptions\LlmException;
 use App\Services\Llm\Gemini\GeminiLlmClient;
+use GuzzleHttp\Promise\PromiseInterface;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -24,6 +26,8 @@ final class GeminiLlmClientTest extends TestCase
             temperature: 0.3,
             embeddingDimensions: 768,
             timeout: $timeout,
+            embedRetryTimes: 3,
+            embedRetrySleepMs: 0,
         );
     }
 
@@ -281,6 +285,92 @@ final class GeminiLlmClientTest extends TestCase
         });
     }
 
+    public function test_embed_retries_429_then_returns_vector(): void
+    {
+        $values = array_fill(0, 768, 0.4);
+
+        Http::fake([
+            '*/models/text-embedding-004:embedContent' => Http::sequence()
+                ->push(['error' => 'rate'], 429)
+                ->push(['embedding' => ['values' => $values]], 200),
+        ]);
+
+        $embedding = $this->client()->embed('blue running shoes');
+
+        $this->assertCount(768, $embedding);
+        $this->assertSame(0.4, $embedding[0]);
+        Http::assertSentCount(2);
+    }
+
+    public function test_embed_retries_server_errors_then_throws_llm_exception(): void
+    {
+        Http::fake([
+            '*/models/text-embedding-004:embedContent' => Http::response(['error' => 'boom'], 500),
+        ]);
+
+        try {
+            $this->client()->embed('fail');
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertStringContainsString('Gemini embed failed (500)', $e->getMessage());
+            $this->assertSame(500, $e->statusCode());
+        }
+
+        Http::assertSentCount(3);
+    }
+
+    public function test_embed_retries_connection_timeouts(): void
+    {
+        $attempts = 0;
+
+        Http::fake(function () use (&$attempts): PromiseInterface {
+            return $this->embedAttempt($attempts);
+        });
+
+        $embedding = $this->client()->embed('shoes');
+
+        $this->assertSame(0.5, $embedding[0]);
+        $this->assertSame(3, $attempts);
+    }
+
+    public function test_embed_does_not_retry_client_errors(): void
+    {
+        Http::fake([
+            '*/models/text-embedding-004:embedContent' => Http::response(['error' => 'bad'], 400),
+        ]);
+
+        try {
+            $this->client()->embed('fail');
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertStringContainsString('Gemini embed failed (400)', $e->getMessage());
+            $this->assertSame(400, $e->statusCode());
+        }
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_embed_does_not_retry_while_chat_budget_is_active(): void
+    {
+        Http::fake([
+            '*/models/text-embedding-004:embedContent' => Http::response(['error' => 'boom'], 503),
+        ]);
+
+        $client = $this->client();
+        $client->startBudget(12);
+
+        try {
+            $client->embed('fail');
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertSame(503, $e->statusCode());
+        } finally {
+            $client->clearBudget();
+        }
+
+        Http::assertSentCount(1);
+    }
+
     public function test_exhausted_budget_throws_friendly_timeout(): void
     {
         $client = $this->client(timeout: 12);
@@ -302,5 +392,19 @@ final class GeminiLlmClientTest extends TestCase
         } finally {
             $client->clearBudget();
         }
+    }
+
+    /**
+     * Kept out of the fake closure so PHPStan does not treat the first call's
+     * counter as the constant 1 and mark later attempts unreachable.
+     */
+    private function embedAttempt(int &$attempts): PromiseInterface
+    {
+        $attempts++;
+        throw_if($attempts < 3, ConnectionException::class, 'cURL error 28: Operation timed out');
+
+        return Http::response([
+            'embedding' => ['values' => array_fill(0, 768, 0.5)],
+        ]);
     }
 }
