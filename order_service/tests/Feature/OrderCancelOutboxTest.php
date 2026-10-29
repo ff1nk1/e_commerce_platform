@@ -5,23 +5,15 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
-use Tests\Concerns\BindsInMemorySagaStepGuard;
+use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
 
 final class OrderCancelOutboxTest extends TestCase
 {
-    use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->bindInMemorySagaStepGuard();
-    }
 
     public function test_cancel_awaiting_payment_writes_cancelled_and_release(): void
     {
@@ -57,8 +49,8 @@ final class OrderCancelOutboxTest extends TestCase
             'cancel_reason' => 'user_cancelled',
         ]);
 
-        $cancelled = OutboxEvent::query()->where('event_type', 'order.cancelled')->first();
-        $release = OutboxEvent::query()->where('event_type', 'stock.release_requested')->first();
+        $cancelled = OutboxQueue::first('order.cancelled');
+        $release = OutboxQueue::first('stock.release_requested');
         $this->assertNotNull($cancelled);
         $this->assertNotNull($release);
         $this->assertSame($sagaId, $cancelled->payload['saga_id']);
@@ -69,7 +61,6 @@ final class OrderCancelOutboxTest extends TestCase
         $this->assertNotSame('', $cancelled->payload['occurred_at']);
         $this->assertSame($sagaId, $release->payload['saga_id']);
         $this->assertSame('stock.release_requested', $release->payload['event_type'] ?? null);
-        $this->assertArrayHasKey($sagaId.':stock.release_requested', $this->sagaStepStore);
     }
 
     public function test_cancel_pending_does_not_request_stock_release(): void
@@ -101,10 +92,10 @@ final class OrderCancelOutboxTest extends TestCase
             ->assertJsonPath('status', 'cancelled')
             ->assertJsonPath('cancel_reason', 'user_cancelled');
 
-        $this->assertNotNull(OutboxEvent::query()->where('event_type', 'order.cancelled')->first());
+        $this->assertNotNull(OutboxQueue::first('order.cancelled'));
         $this->assertSame(
             0,
-            OutboxEvent::query()->where('event_type', 'stock.release_requested')->count()
+            OutboxQueue::count('stock.release_requested')
         );
     }
 }

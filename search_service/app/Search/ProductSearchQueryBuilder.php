@@ -97,7 +97,15 @@ final class ProductSearchQueryBuilder
      */
     public function buildFilters(array $params): array
     {
-        $filters = [];
+        $filters = [
+            [
+                'bool' => [
+                    'must_not' => [
+                        ['term' => ['is_published' => false]],
+                    ],
+                ],
+            ],
+        ];
 
         if ($params['category_ids'] !== []) {
             $filters[] = ['terms' => ['category_id' => $params['category_ids']]];

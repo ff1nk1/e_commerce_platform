@@ -24,12 +24,13 @@ final class ProductService
         $product = DB::transaction(function () use ($data, $attributes): Product {
             $product = Product::query()->create($data);
             $this->syncAttributes($product, $attributes ?? []);
+            $product = $product->load(['store', 'category', 'attributes']);
+            event(new ProductCreated($product));
 
-            return $product->load(['store', 'category', 'attributes']);
+            return $product;
         });
 
         $this->clearProductCache();
-        event(new ProductCreated($product));
 
         return $product;
     }
@@ -46,38 +47,43 @@ final class ProductService
             if ($attributes !== null) {
                 $this->syncAttributes($product, $attributes);
             }
+            $product = $product->load(['store', 'category', 'attributes']);
+            event(new ProductUpdated($product));
 
-            return $product->load(['store', 'category', 'attributes']);
+            return $product;
         });
 
         $this->clearProductCache();
-        event(new ProductUpdated($product));
 
         return $product;
     }
 
     public function deleteProduct(Product $product): void
     {
-        $product->loadMissing(['store', 'category', 'attributes']);
-        $productData = clone $product;
-        $productData->setRelation('attributes', $product->attributes);
-
-        $product->delete();
+        DB::transaction(function () use ($product): void {
+            $product->loadMissing(['store', 'category', 'attributes']);
+            $productData = clone $product;
+            $productData->setRelation('attributes', $product->attributes);
+            $product->delete();
+            event(new ProductDeleted($productData));
+        });
 
         $this->clearProductCache();
-        event(new ProductDeleted($productData));
     }
 
     public function togglePublished(Product $product): Product
     {
-        $product->is_published = ! (bool) $product->is_published;
-        $product->save();
+        $product = DB::transaction(function () use ($product): Product {
+            $product->is_published = ! (bool) $product->is_published;
+            $product->save();
+            $product = $product->load(['store', 'category', 'attributes']);
+            $publishEventType = $product->is_published ? 'product.published' : 'product.unpublished';
+            event(new ProductPublishStateChanged($product, $publishEventType));
 
-        $product = $product->load(['store', 'category', 'attributes']);
+            return $product;
+        });
 
         $this->clearProductCache();
-        $publishEventType = $product->is_published ? 'product.published' : 'product.unpublished';
-        event(new ProductPublishStateChanged($product, $publishEventType));
 
         return $product;
     }

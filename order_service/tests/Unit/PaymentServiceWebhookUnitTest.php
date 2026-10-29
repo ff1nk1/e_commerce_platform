@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use App\Models\Payment;
 use App\Models\ProductSnapshot;
-use App\Services\SagaStepGuard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Shop\Messaging\OutboxQueue;
 use Tests\Concerns\UsesFakeStripe;
 use Tests\Concerns\UsesRedis;
 use Tests\TestCase;
@@ -75,9 +74,9 @@ final class PaymentServiceWebhookUnitTest extends TestCase
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'confirmed']);
         $this->assertDatabaseHas('payments', ['id' => $payment->id, 'status' => 'succeeded']);
 
-        $paid = OutboxEvent::query()->where('event_type', 'order.paid')->first();
-        $confirmed = OutboxEvent::query()->where('event_type', 'order.confirmed')->first();
-        $commit = OutboxEvent::query()->where('event_type', 'stock.commit_requested')->first();
+        $paid = OutboxQueue::first('order.paid');
+        $confirmed = OutboxQueue::first('order.confirmed');
+        $commit = OutboxQueue::first('stock.commit_requested');
         $this->assertNotNull($paid);
         $this->assertNotNull($confirmed);
         $this->assertNotNull($commit);
@@ -86,10 +85,6 @@ final class PaymentServiceWebhookUnitTest extends TestCase
         $this->assertSame('order.paid', $paid->payload['event_type'] ?? null);
         $this->assertSame('order.confirmed', $confirmed->payload['event_type'] ?? null);
         $this->assertSame($order->saga_id, $commit->payload['saga_id'] ?? null);
-        $this->assertSame(
-            SagaStepGuard::STATUS_DONE,
-            resolve(SagaStepGuard::class)->get($order->saga_id, 'stock.commit_requested')['status'] ?? null
-        );
     }
 
     public function test_checkout_expired_requests_stock_release(): void
@@ -132,17 +127,12 @@ final class PaymentServiceWebhookUnitTest extends TestCase
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'payment_failed']);
         $this->assertDatabaseHas('payments', ['id' => $payment->id, 'status' => 'failed']);
 
-        $release = OutboxEvent::query()->where('event_type', 'stock.release_requested')->first();
+        $release = OutboxQueue::first('stock.release_requested');
         $this->assertNotNull($release);
         $this->assertSame($order->saga_id, $release->payload['saga_id'] ?? null);
         $this->assertSame([
             ['product_id' => 42, 'store_id' => 3, 'quantity' => 1],
         ], $release->payload['items'] ?? null);
-
-        $this->assertSame(
-            'done',
-            resolve(SagaStepGuard::class)->get($order->saga_id, 'stock.release_requested')['status'] ?? null
-        );
     }
 
     private function createOrder(string $status): Order

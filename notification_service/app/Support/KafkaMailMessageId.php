@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Shop\Messaging\EnvelopeMessage;
 
 final class KafkaMailMessageId
 {
@@ -12,13 +12,13 @@ final class KafkaMailMessageId
      * @param  array<string, mixed>  $body
      */
     public static function resolve(
-        ConsumerMessage $message,
+        EnvelopeMessage $message,
         string $sourceTopic,
         string $eventType,
         array $body,
     ): string {
         $headerKey = (string) config('kafka.message_id_key', 'laravel-kafka::message-id');
-        $headers = $message->getHeaders() ?? [];
+        $headers = $message->getHeaders();
         $idFromHeader = $headers[$headerKey] ?? null;
         if (is_string($idFromHeader) && $idFromHeader !== '') {
             return $idFromHeader;

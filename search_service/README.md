@@ -92,8 +92,8 @@ Analyzers: `product_index` (index-time) и `product_search` (search-time + `syno
 
 | Topics | Handler | Index effect |
 |--------|---------|--------------|
-| `product.created` | `ProductEventsHandler` | full index (stock из payload) |
-| `product.updated` | same | **partial update** catalog fields only — stock не трогает |
+| `product.created`, `product.updated`, `product.published`, `product.unpublished` на топике `product.events` | `ProductEventsHandler` | поля каталога; `quantity` / `in_stock` не затираются, если документ уже есть |
+| `product.deleted` на том же топике | same | удаление документа |
 | `product.deleted` | same | delete product doc |
 | `category.created` / `updated` | `CategoryEventsHandler` | index category; на update ещё `updateByQuery` `category_name` на products |
 | `category.deleted` | same | delete category doc (products не удаляются) |

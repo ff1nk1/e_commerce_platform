@@ -36,4 +36,26 @@ final class ProxyForwardTimeoutTest extends TestCase
             return str_contains($httpRequest->url(), '/api/recommendations/chat');
         });
     }
+
+    public function test_forward_sends_uppercase_http_method(): void
+    {
+        Http::fake([
+            'http://search.test/*' => Http::response(['products' => []], 200),
+        ]);
+
+        $request = Request::create('/api/search?q=phone', 'GET');
+
+        $response = resolve(ProxyService::class)->forward(
+            $request,
+            'http://search.test',
+            '/api/search',
+        );
+
+        $this->assertSame(200, $response->getStatusCode());
+
+        Http::assertSent(function ($httpRequest): bool {
+            return $httpRequest->method() === 'GET'
+                && str_contains($httpRequest->url(), 'q=phone');
+        });
+    }
 }

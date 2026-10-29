@@ -7,6 +7,9 @@ namespace Tests\Integration;
 use App\Kafka\Handlers\CategoryEventsHandler;
 use App\Kafka\Handlers\ProductEventsHandler;
 use App\Kafka\Handlers\StockEventsHandler;
+use App\Messaging\CatalogStockChanged;
+use App\Messaging\CategoryLifecycle;
+use App\Messaging\ProductLifecycle;
 use App\Services\ProductSearchService;
 use OpenSearch\Client;
 
@@ -33,7 +36,7 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 
     public function test_product_created_event_indexes_document(): void
     {
-        $message = $this->stubConsumerMessage('product.created', [
+        $message = new ProductLifecycle($this->stubConsumerMessage('product.created', [
             'event' => 'product.created',
             'data' => [
                 'id' => 9001,
@@ -49,9 +52,9 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
                     ['name' => 'Color', 'value' => 'Black'],
                 ],
             ],
-        ], 'product.created');
+        ], 'product.created'));
 
-        resolve(ProductEventsHandler::class)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $result = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Kafka Created Phone',
@@ -65,7 +68,7 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 
     public function test_product_updated_preserves_stock_from_index(): void
     {
-        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
+        resolve(ProductEventsHandler::class)->onInbound(new ProductLifecycle($this->stubConsumerMessage('product.created', [
             'event' => 'product.created',
             'data' => [
                 'id' => 9002,
@@ -75,15 +78,15 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
                 'quantity' => 0,
                 'in_stock' => false,
             ],
-        ], 'product.created'));
+        ], 'product.created')));
 
-        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.changed', [
+        resolve(StockEventsHandler::class)->onInbound(new CatalogStockChanged($this->stubConsumerMessage('stock.changed', [
             'product_id' => 9002,
             'store_id' => 1,
             'quantity' => 8,
-        ], 'catalog.events'));
+        ], 'catalog.events')));
 
-        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.updated', [
+        resolve(ProductEventsHandler::class)->onInbound(new ProductLifecycle($this->stubConsumerMessage('product.updated', [
             'event' => 'product.updated',
             'data' => [
                 'id' => 9002,
@@ -93,7 +96,7 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
                 'quantity' => 0,
                 'in_stock' => false,
             ],
-        ], 'product.updated'));
+        ], 'product.updated')));
 
         $doc = resolve(Client::class)->get([
             'index' => config('opensearch.indices.products'),
@@ -107,7 +110,7 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 
     public function test_product_deleted_event_removes_document(): void
     {
-        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
+        resolve(ProductEventsHandler::class)->onInbound(new ProductLifecycle($this->stubConsumerMessage('product.created', [
             'event' => 'product.created',
             'data' => [
                 'id' => 9003,
@@ -115,12 +118,12 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
                 'price' => 10.0,
                 'store_id' => 1,
             ],
-        ], 'product.created'));
+        ], 'product.created')));
 
-        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.deleted', [
+        resolve(ProductEventsHandler::class)->onInbound(new ProductLifecycle($this->stubConsumerMessage('product.deleted', [
             'event' => 'product.deleted',
             'data' => ['id' => 9003],
-        ], 'product.deleted'));
+        ], 'product.deleted')));
 
         $result = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'To Be Deleted Via Kafka',
@@ -131,7 +134,7 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 
     public function test_category_updated_syncs_name_on_products(): void
     {
-        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
+        resolve(ProductEventsHandler::class)->onInbound(new ProductLifecycle($this->stubConsumerMessage('product.created', [
             'event' => 'product.created',
             'data' => [
                 'id' => 9004,
@@ -141,16 +144,16 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
                 'category_id' => 55,
                 'category' => ['id' => 55, 'name' => 'Before'],
             ],
-        ], 'product.created'));
+        ], 'product.created')));
 
-        resolve(CategoryEventsHandler::class)($this->stubConsumerMessage('category.updated', [
+        resolve(CategoryEventsHandler::class)->onInbound(new CategoryLifecycle($this->stubConsumerMessage('category.updated', [
             'event' => 'category.updated',
             'data' => [
                 'id' => 55,
                 'name' => 'After Sync',
                 'slug' => 'after-sync',
             ],
-        ], 'category.updated'));
+        ], 'category.updated')));
 
         $doc = resolve(Client::class)->get([
             'index' => config('opensearch.indices.products'),
@@ -167,7 +170,7 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 
     public function test_stock_changed_event_updates_availability(): void
     {
-        resolve(ProductEventsHandler::class)($this->stubConsumerMessage('product.created', [
+        resolve(ProductEventsHandler::class)->onInbound(new ProductLifecycle($this->stubConsumerMessage('product.created', [
             'event' => 'product.created',
             'data' => [
                 'id' => 9005,
@@ -177,13 +180,13 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
                 'quantity' => 4,
                 'in_stock' => true,
             ],
-        ], 'product.created'));
+        ], 'product.created')));
 
-        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.changed', [
+        resolve(StockEventsHandler::class)->onInbound(new CatalogStockChanged($this->stubConsumerMessage('stock.changed', [
             'product_id' => 9005,
             'store_id' => 1,
             'quantity' => 0,
-        ], 'catalog.events'));
+        ], 'catalog.events')));
 
         $result = resolve(ProductSearchService::class)->search($this->params([
             'q' => 'Stock Event Product',

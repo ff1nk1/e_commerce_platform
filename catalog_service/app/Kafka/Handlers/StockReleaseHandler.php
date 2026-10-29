@@ -4,32 +4,31 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
-use App\Services\Saga\SagaStepRunner;
-use App\Services\SagaStepGuard;
-use App\Services\StockReservationService;
+use App\Messaging\ApplyStockStep;
+use App\Messaging\StockReleaseRequested;
 use App\Support\StockSagaMessage;
+use Ecotone\Modelling\Attribute\EventHandler;
+use Ecotone\Modelling\EventBus;
 use Illuminate\Support\Facades\Log;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Shop\Messaging\EnvelopeMessage;
 
-class StockReleaseHandler
+final class StockReleaseHandler
 {
     public function __construct(
-        private SagaStepRunner $sagaRunner,
-        private SagaStepGuard $saga,
-        private StockReservationService $reservations,
+        private EventBus $events,
     ) {}
 
-    public function __invoke(ConsumerMessage $message): void
+    #[EventHandler(endpointId: 'catalog.stockRelease')]
+    public function onInbound(StockReleaseRequested $event): void
+    {
+        $this(new EnvelopeMessage($event->envelope));
+    }
+
+    public function __invoke(EnvelopeMessage $message): void
     {
         $parsed = StockSagaMessage::tryFrom($message);
         if (! $parsed instanceof StockSagaMessage) {
             $payload = $message->getBody();
-            if (! is_array($payload)) {
-                Log::warning('Получено невалидное событие stock.release_requested', ['payload' => $payload]);
-
-                return;
-            }
-
             $orderId = $payload['order_id'] ?? null;
             $items = $payload['items'] ?? [];
             $hasOrderId = (bool) $orderId;
@@ -47,33 +46,22 @@ class StockReleaseHandler
             return;
         }
 
-        $orderId = $parsed->orderId;
-        $items = $parsed->items;
-        $sagaId = $parsed->sagaId;
+        try {
+            $this->events->publish(new ApplyStockStep(
+                $parsed->sagaId,
+                'stock.release',
+                $parsed->orderId,
+                $parsed->items,
+            ));
+        } catch (\Throwable $e) {
+            Log::error('Критическая ошибка при обработке stock.release_requested', [
+                'order_id' => $parsed->orderId,
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+            ]);
 
-        $this->sagaRunner->run($sagaId, 'stock.release', function () use ($orderId, $items, $sagaId): ?array {
-            if ($this->saga->isCompleted($sagaId, 'stock.commit')) {
-                Log::info('stock.release skipped: stock.commit already completed', [
-                    'order_id' => $orderId,
-                    'saga_id' => $sagaId,
-                ]);
-
-                return [
-                    'status' => SagaStepGuard::STATUS_DONE,
-                    'result' => ['order_id' => $orderId, 'outcome' => 'skipped_after_commit'],
-                ];
-            }
-
-            $released = $this->reservations->release($orderId, $items);
-
-            if (! $released) {
-                return null;
-            }
-
-            return [
-                'status' => SagaStepGuard::STATUS_DONE,
-                'result' => ['order_id' => $orderId],
-            ];
-        });
+            throw $e;
+        }
     }
 }

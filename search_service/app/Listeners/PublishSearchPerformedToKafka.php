@@ -5,34 +5,33 @@ declare(strict_types=1);
 namespace App\Listeners;
 
 use App\Events\SearchPerformed;
-use App\Services\Kafka\KafkaPublisher;
-use Illuminate\Support\Facades\Log;
+use Shop\Messaging\OutboundMessage;
+use Shop\Messaging\OutboxPublisher;
+use Shop\Messaging\Topics;
 
 final class PublishSearchPerformedToKafka
 {
     public function __construct(
-        private KafkaPublisher $kafka,
+        private OutboxPublisher $outbox,
     ) {}
 
     public function handle(SearchPerformed $event): void
     {
         $params = $event->params;
-        $skipAnalytics = $event->skipAnalytics;
+        $headers = [];
+        if ($event->skipAnalytics) {
+            $headers['skip-analytics'] = 'true';
+        }
 
-        try {
-            $headers = [
-                'event-type' => 'search.performed',
-                'source' => 'search-service',
-            ];
-            if ($skipAnalytics) {
-                $headers['skip-analytics'] = 'true';
-            }
-
-            $body = [
-                'event' => 'search.performed',
-                'event_type' => 'search.performed',
+        $this->outbox->publish(new OutboundMessage(
+            topic: Topics::SEARCH_EVENTS,
+            key: hash('sha256', json_encode($params, JSON_THROW_ON_ERROR).'|'.$event->resultsCount),
+            eventType: 'search.performed',
+            payload: [
                 'timestamp' => now()->toIso8601String(),
-                'skip_analytics' => $skipAnalytics,
+                'event_type' => 'search.performed',
+                'event' => 'search.performed',
+                'skip_analytics' => $event->skipAnalytics,
                 'data' => [
                     'query' => $params['q'],
                     'filters' => [
@@ -45,13 +44,9 @@ final class PublishSearchPerformedToKafka
                     'results_count' => $event->resultsCount,
                     'sort' => $params['sort'],
                 ],
-            ];
-
-            $this->kafka->publish('search.events', $headers, $body);
-        } catch (\Throwable $e) {
-            Log::error('Kafka publish failed on search.performed', [
-                'error' => $e->getMessage(),
-            ]);
-        }
+            ],
+            source: 'search-service',
+            extraHeaders: $headers,
+        ));
     }
 }

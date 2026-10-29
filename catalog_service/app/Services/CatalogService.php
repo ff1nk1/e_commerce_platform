@@ -9,6 +9,7 @@ use App\Events\CategoryDeleted;
 use App\Events\CategoryUpdated;
 use App\Models\Category;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 final class CatalogService
 {
@@ -39,10 +40,14 @@ final class CatalogService
      */
     public function createCategory(array $data): Category
     {
-        $category = Category::query()->create($data);
+        $category = DB::transaction(function () use ($data): Category {
+            $category = Category::query()->create($data);
+            event(new CategoryCreated($category));
+
+            return $category;
+        });
 
         $this->clearCategoryCache();
-        event(new CategoryCreated($category));
 
         return $category;
     }
@@ -52,10 +57,14 @@ final class CatalogService
      */
     public function updateCategory(Category $category, array $data): Category
     {
-        $category->update($data);
+        $category = DB::transaction(function () use ($category, $data): Category {
+            $category->update($data);
+            event(new CategoryUpdated($category));
+
+            return $category;
+        });
 
         $this->clearCategoryCache();
-        event(new CategoryUpdated($category));
 
         return $category;
     }
@@ -69,11 +78,15 @@ final class CatalogService
         }
 
         // 2. Удаляем самого родителя
-        $categoryData = clone $category;
-        $result = $category->delete();
+        $result = DB::transaction(function () use ($category): bool {
+            $categoryData = clone $category;
+            $deleted = (bool) $category->delete();
+            event(new CategoryDeleted($categoryData));
+
+            return $deleted;
+        });
 
         $this->clearCategoryCache();
-        event(new CategoryDeleted($categoryData));
 
         return $result;
     }

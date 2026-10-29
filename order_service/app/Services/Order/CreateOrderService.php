@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace App\Services\Order;
 
 use App\Contracts\IdempotencyStore;
-use App\Contracts\SagaStepStore;
 use App\Domain\Money;
 use App\Domain\OrderStatus;
 use App\Events\OrderCreated;
+use App\Messaging\OrderPlaced;
 use App\Models\Order;
 use App\Models\ProductSnapshot;
+use Ecotone\Modelling\EventBus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
@@ -25,8 +26,8 @@ final class CreateOrderService
 
     public function __construct(
         private IdempotencyStore $idempotency,
-        private SagaStepStore $saga,
         private OrderPayloadFactory $payloads,
+        private EventBus $events,
     ) {}
 
     /**
@@ -61,12 +62,6 @@ final class CreateOrderService
             }
 
             $order = $this->persistOrder($userId, $email, $name, $items);
-            $this->saga->put(
-                (string) $order->saga_id,
-                'order.created',
-                SagaStepStore::STATUS_DONE,
-                ['order_id' => $order->id]
-            );
             $body = $this->payloads->serializeOrder($order);
             $result = ['status' => 201, 'body' => $body];
             $this->idempotency->put($scopeKey, 201, $body);
@@ -144,6 +139,8 @@ final class CreateOrderService
             foreach ($lineItems as $line) {
                 $order->items()->create($line);
             }
+
+            $this->events->publish(new OrderPlaced($sagaId));
 
             event(new OrderCreated([
                 'saga_id' => $sagaId,

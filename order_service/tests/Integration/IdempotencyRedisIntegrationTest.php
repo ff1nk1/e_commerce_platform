@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
-use App\Models\OutboxEvent;
 use App\Services\IdempotencyService;
 use Illuminate\Support\Str;
+use Shop\Messaging\OutboxQueue;
 
 final class IdempotencyRedisIntegrationTest extends IntegrationTestCase
 {
@@ -26,7 +26,7 @@ final class IdempotencyRedisIntegrationTest extends IntegrationTestCase
         $second->assertCreated();
         $this->assertSame($orderId, $second->json('id'));
 
-        $this->assertSame(1, OutboxEvent::query()->where('event_type', 'order.created')->count());
+        $this->assertSame(1, OutboxQueue::count('order.created'));
         $this->assertDatabaseCount('orders', 1);
 
         $idem = resolve(IdempotencyService::class);

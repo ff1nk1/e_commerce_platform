@@ -4,15 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
-use App\Console\Commands\KafkaOutboxWorker;
-use App\Kafka\Handlers\StockEventsHandler;
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use App\Models\Payment;
-use App\Services\SagaStepGuard;
 use App\Services\Stripe\StripeClient;
 use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
+use Shop\Messaging\OutboxQueue;
 use Tests\Concerns\RequiresStripe;
 
 final class StripeSessionExpiredCompensationTest extends IntegrationTestCase
@@ -41,13 +38,13 @@ final class StripeSessionExpiredCompensationTest extends IntegrationTestCase
         $orderId = (int) $create->json('id');
         $sagaId = Order::query()->findOrFail($orderId)->saga_id;
 
-        resolve(KafkaOutboxWorker::class)->processBatch();
+        OutboxQueue::flush();
 
-        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.reserved', [
+        $this->deliverStock('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'status' => 'success',
-        ]));
+        ]);
 
         $pay = $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 21], [
             'Idempotency-Key' => 'it-expire-pay-'.Str::uuid(),
@@ -88,20 +85,16 @@ final class StripeSessionExpiredCompensationTest extends IntegrationTestCase
         $this->assertDatabaseHas('orders', ['id' => $orderId, 'status' => 'payment_failed']);
         $this->assertDatabaseHas('payments', ['id' => $paymentId, 'status' => 'failed']);
 
-        $this->assertSame(
-            SagaStepGuard::STATUS_DONE,
-            resolve(SagaStepGuard::class)->get($sagaId, 'stock.release_requested')['status'] ?? null
-        );
-
-        $release = OutboxEvent::query()->where('event_type', 'stock.release_requested')->first();
+        $release = OutboxQueue::first('stock.release_requested');
         $this->assertNotNull($release);
         $this->assertSame($sagaId, $release->payload['saga_id'] ?? null);
         $this->assertSame([
             ['product_id' => 505, 'store_id' => 2, 'quantity' => 1],
         ], $release->payload['items'] ?? null);
 
-        resolve(KafkaOutboxWorker::class)->processBatch();
+        OutboxQueue::flush();
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             return ($message->getHeaders()['event-type'] ?? null) === 'stock.release_requested'
                 && (int) ($message->getBody()['order_id'] ?? 0) === $orderId;

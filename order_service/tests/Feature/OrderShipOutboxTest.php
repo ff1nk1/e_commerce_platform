@@ -5,23 +5,15 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
-use Tests\Concerns\BindsInMemorySagaStepGuard;
+use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
 
 final class OrderShipOutboxTest extends TestCase
 {
-    use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->bindInMemorySagaStepGuard();
-    }
 
     public function test_ship_confirmed_writes_order_shipped_outbox(): void
     {
@@ -51,7 +43,7 @@ final class OrderShipOutboxTest extends TestCase
             ->assertOk()
             ->assertJsonPath('status', 'shipped');
 
-        $shipped = OutboxEvent::query()->where('event_type', 'order.shipped')->first();
+        $shipped = OutboxQueue::first('order.shipped');
         $this->assertNotNull($shipped);
         $this->assertSame('order.events', $shipped->topic);
         $this->assertSame($order->id, $shipped->payload['order_id']);
@@ -76,6 +68,6 @@ final class OrderShipOutboxTest extends TestCase
 
         $this->postJson('/api/admin/orders/'.$order->id.'/ship')->assertUnprocessable();
 
-        $this->assertSame(0, OutboxEvent::query()->where('event_type', 'order.shipped')->count());
+        $this->assertSame(0, OutboxQueue::count('order.shipped'));
     }
 }

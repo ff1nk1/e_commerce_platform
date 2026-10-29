@@ -4,47 +4,35 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Kafka\Handlers\ProductEventsHandler;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
-use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Sleep;
-use Junges\Kafka\Facades\Kafka;
+use Shop\Messaging\Console\ConsumeKafkaCommand;
+use Shop\Messaging\KafkaInboundAdapter;
+use Shop\Messaging\Topics;
 
-#[Description('Консьюмер Order Service для снапшотов product.created / product.updated')]
+#[Description('Консьюмер Order Service для product.events')]
 #[Signature('kafka:consume:product-events')]
-final class KafkaConsumeProductEvents extends Command
+final class KafkaConsumeProductEvents extends ConsumeKafkaCommand
 {
-    private const MIGRATION_WAIT_SLEEP_SECONDS = 5;
-
-    public function handle(): int
+    public function handle(KafkaInboundAdapter $adapter): int
     {
-        $this->info('Запуск консьюмера для топиков product.created и product.updated...');
-
         while (! Schema::hasTable('product_snapshots')) {
-            $this->warn('Таблица product_snapshots ещё нет — ждём миграции (sleep 5s)...');
-            Sleep::sleep(self::MIGRATION_WAIT_SLEEP_SECONDS);
+            $this->warn('product_snapshots table missing; waiting for migrations');
+            Sleep::sleep(5);
         }
 
-        $consumer = Kafka::consumer(['product.created', 'product.updated'])
-            ->withBrokers(config('kafka.brokers', 'kafka:29092'))
-            ->withConsumerGroupId('order-service-products-v2')
-            ->withHandler(resolve(ProductEventsHandler::class))
-            ->withAutoCommit()
-            ->withOptions([
-                'auto.offset.reset' => 'earliest',
-            ])
-            ->build();
+        return parent::handle($adapter);
+    }
 
-        try {
-            $consumer->consume();
-        } catch (\Throwable $e) {
-            $this->error('ОШИБКА KAFKA: '.$e->getMessage());
+    protected function topics(): array
+    {
+        return [Topics::PRODUCT_EVENTS];
+    }
 
-            return self::FAILURE;
-        }
-
-        return self::SUCCESS;
+    protected function group(): string
+    {
+        return (string) config('kafka.consumer_groups.products', 'order-service-products-v2');
     }
 }

@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Kafka\Handlers;
 
 use App\Kafka\Concerns\ResolvesEventType;
+use App\Messaging\ProductLifecycle;
 use App\Services\SearchIndexService;
+use Ecotone\Modelling\Attribute\EventHandler;
 use Illuminate\Support\Facades\Log;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Shop\Messaging\EnvelopeMessage;
 
 final class ProductEventsHandler
 {
@@ -17,11 +19,17 @@ final class ProductEventsHandler
         private readonly SearchIndexService $index,
     ) {}
 
-    public function __invoke(ConsumerMessage $message): void
+    #[EventHandler(endpointId: 'search.product')]
+    public function onInbound(ProductLifecycle $event): void
+    {
+        $this(new EnvelopeMessage($event->envelope));
+    }
+
+    public function __invoke(EnvelopeMessage $message): void
     {
         [$eventType, $body] = $this->resolveEventTypeAndBody($message);
 
-        if (! in_array($eventType, ['product.created', 'product.updated', 'product.deleted'], true)) {
+        if (! in_array($eventType, ['product.created', 'product.updated', 'product.deleted', 'product.published', 'product.unpublished'], true)) {
             Log::debug("Игнорируем неизвестное событие продукта: {$eventType}");
 
             return;
@@ -63,7 +71,7 @@ final class ProductEventsHandler
             return;
         }
 
-        $this->index->indexProduct($data, preserveStock: $eventType === 'product.updated');
+        $this->index->indexProduct($data, preserveStock: true);
 
         Log::info('Kafka: product indexed in OpenSearch', [
             'event' => $eventType,

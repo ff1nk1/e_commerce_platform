@@ -6,6 +6,7 @@ namespace Tests\Integration;
 
 use App\Services\SearchIndexService;
 use Junges\Kafka\Facades\Kafka;
+use Shop\Messaging\OutboxQueue;
 
 final class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
 {
@@ -30,6 +31,7 @@ final class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
             ->assertJsonPath('products.total', 1)
             ->assertJsonPath('products.data.0.id', 9100);
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('search.events', null, function ($message): bool {
             $body = $message->getBody();
             $headers = $message->getHeaders();
@@ -62,6 +64,7 @@ final class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
             ->getJson('/api/search?q=Skip+Analytics+Phone')
             ->assertOk();
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('search.events', null, function ($message): bool {
             $body = $message->getBody();
             $headers = $message->getHeaders();

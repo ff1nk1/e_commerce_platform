@@ -25,7 +25,7 @@ final class StockSeeder extends Seeder
         $products = Product::query()->orderBy('id')->get();
 
         if ($products->isEmpty()) {
-            $this->command->warn('Нет товаров — сначала запустите ShopSeeder.');
+            $this->command?->warn('Нет товаров — сначала запустите ShopSeeder.');
 
             return;
         }
@@ -45,7 +45,7 @@ final class StockSeeder extends Seeder
             ]);
         }
 
-        $this->command->info(sprintf(
+        $this->command?->info(sprintf(
             'Stock seeded for %d products (first product quantity=0 for shortage tests).',
             $products->count()
         ));

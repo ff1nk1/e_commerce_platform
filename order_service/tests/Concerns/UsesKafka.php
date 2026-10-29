@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Concerns;
 
+use App\Messaging\FulfillmentEvents;
+use App\Messaging\StockReservationFailed;
+use App\Messaging\StockReserved;
 use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Request;
-use Junges\Kafka\Contracts\ConsumerMessage;
 use Junges\Kafka\Facades\Kafka;
-use Tests\Fakes\StubConsumerMessage;
+use Shop\Messaging\InboundEnvelope;
 
 trait UsesKafka
 {
@@ -32,16 +34,22 @@ trait UsesKafka
 
     /**
      * @param  array<string, mixed>  $body
-     * @param  array<string, mixed>  $headers
      */
-    protected function stubConsumerMessage(
-        string $eventType,
-        array $body,
-        string $topic = 'stock.events',
-        array $headers = [],
-    ): ConsumerMessage {
-        $headers = array_merge(['event-type' => $eventType], $headers);
-
-        return new StubConsumerMessage($eventType, $body, $topic, $headers);
+    protected function deliverStock(string $eventType, array $body): void
+    {
+        $sagaId = is_string($body['saga_id'] ?? null) ? $body['saga_id'] : '';
+        $envelope = new InboundEnvelope(
+            eventType: $eventType,
+            messageId: ($sagaId !== '' ? $sagaId : 'test').'-'.$eventType,
+            topic: 'stock.events',
+            key: isset($body['order_id']) && is_scalar($body['order_id']) ? (string) $body['order_id'] : null,
+            sagaId: $sagaId !== '' ? $sagaId : null,
+            payload: $body,
+            headers: ['event-type' => $eventType],
+        );
+        $event = $eventType === 'stock.reservation_failed'
+            ? new StockReservationFailed($envelope)
+            : new StockReserved($envelope);
+        resolve(FulfillmentEvents::class)->publish($event, $sagaId);
     }
 }

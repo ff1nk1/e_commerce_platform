@@ -4,25 +4,22 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Console\Commands\Concerns\RunsKafkaConsumer;
-use App\Kafka\Handlers\StockEventsHandler;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
-use Illuminate\Console\Command;
+use Shop\Messaging\Console\ConsumeKafkaCommand;
+use Shop\Messaging\Topics;
 
-#[Description('Консьюмер Search Service для stock.changed на топике catalog.events')]
+#[Description('Консьюмер Search Service для catalog.events')]
 #[Signature('kafka:consume:stock-events')]
-final class KafkaConsumeStockEvents extends Command
+final class KafkaConsumeStockEvents extends ConsumeKafkaCommand
 {
-    use RunsKafkaConsumer;
-
-    public function handle(): int
+    protected function topics(): array
     {
-        return $this->runKafkaConsumer(
-            ['catalog.events'],
-            'search-service-stock-v1',
-            StockEventsHandler::class,
-            'Запуск консьюмера для топика catalog.events (stock.changed)...',
-        );
+        return [Topics::CATALOG_EVENTS];
+    }
+
+    protected function group(): string
+    {
+        return (string) config('kafka.consumer_groups.stock', 'search-service-stock-v1');
     }
 }

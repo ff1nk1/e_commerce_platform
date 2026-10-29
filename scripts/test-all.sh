@@ -187,6 +187,7 @@ run_analytic() {
   start=$(date +%s)
   if docker run --rm --network "$NETWORK" \
     -v "$ROOT/analytic_service:/src" -w /src \
+    -v "$ROOT/packages/messaging:/packages/messaging:ro" \
     -e CLICKHOUSE_ADDR=analytic_clickhouse:9000 \
     -e CLICKHOUSE_DATABASE=analytics_test \
     -e CLICKHOUSE_USER=default \
@@ -242,13 +243,13 @@ if should_run catalog; then
   add_need catalog_app catalog_redis
 fi
 if should_run notification; then
-  add_need notification_app notification_mongodb notification_mailpit
+  add_need notification_app notification_db notification_mongodb notification_mailpit
 fi
 if should_run order; then
   add_need order_app order_db order_redis
 fi
 if should_run search; then
-  add_need search_app search_opensearch
+  add_need search_app search_db search_opensearch
 fi
 if should_run analytic; then
   add_need analytic_clickhouse kafka

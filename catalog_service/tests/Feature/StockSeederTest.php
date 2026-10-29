@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Models\OutboxEvent;
 use App\Models\Product;
 use App\Models\Stock;
 use App\Models\Store;
 use Database\Seeders\StockSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
 
 final class StockSeederTest extends TestCase
@@ -28,10 +28,7 @@ final class StockSeederTest extends TestCase
         $this->assertSame(0, (int) Stock::query()->where('product_id', $first->id)->value('quantity'));
         $this->assertSame(100, (int) Stock::query()->where('product_id', $second->id)->value('quantity'));
 
-        $events = OutboxEvent::query()
-            ->where('event_type', 'stock.changed')
-            ->orderBy('id')
-            ->get();
+        $events = OutboxQueue::ofType('stock.changed');
 
         $this->assertCount(2, $events);
         $this->assertSame('catalog.events', $events[0]->topic);

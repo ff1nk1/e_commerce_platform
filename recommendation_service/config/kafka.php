@@ -18,11 +18,7 @@ return [
     'debug' => env('KAFKA_DEBUG', false),
 
     'topics' => [
-        'product_created' => env('KAFKA_TOPIC_PRODUCT_CREATED', 'product.created'),
-        'product_updated' => env('KAFKA_TOPIC_PRODUCT_UPDATED', 'product.updated'),
-        'product_deleted' => env('KAFKA_TOPIC_PRODUCT_DELETED', 'product.deleted'),
-        'product_published' => env('KAFKA_TOPIC_PRODUCT_PUBLISHED', 'product.published'),
-        'product_unpublished' => env('KAFKA_TOPIC_PRODUCT_UNPUBLISHED', 'product.unpublished'),
+        'product_events' => env('KAFKA_TOPIC_PRODUCT_EVENTS', 'product.events'),
         'catalog_events' => env('KAFKA_TOPIC_CATALOG_EVENTS', 'catalog.events'),
     ],
 

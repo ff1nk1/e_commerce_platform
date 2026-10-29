@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\ProductEventsHandler;
+use App\Messaging\ProductSnapshotReceived;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
-use Junges\Kafka\Contracts\ConsumerMessage;
 use Mockery;
-use Mockery\MockInterface;
+use Shop\Messaging\InboundEnvelope;
 use Tests\TestCase;
 
 final class ProductEventsHandlerTest extends TestCase
@@ -39,7 +39,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        (new ProductEventsHandler)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $this->assertDatabaseHas('product_snapshots', [
             'id' => 42,
@@ -79,7 +79,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        (new ProductEventsHandler)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $this->assertDatabaseHas('product_snapshots', [
             'id' => 42,
@@ -109,7 +109,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        (new ProductEventsHandler)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $this->assertDatabaseHas('product_snapshots', [
             'id' => 10,
@@ -132,7 +132,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        (new ProductEventsHandler)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $this->assertDatabaseHas('product_snapshots', [
             'id' => 5,
@@ -155,7 +155,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        (new ProductEventsHandler)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $snapshot = ProductSnapshot::query()->find(88);
         $this->assertNotNull($snapshot);
@@ -175,7 +175,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        (new ProductEventsHandler)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $this->assertSame(0, ProductSnapshot::query()->count());
     }
@@ -187,7 +187,7 @@ final class ProductEventsHandlerTest extends TestCase
             'timestamp' => now()->toIso8601String(),
         ]);
 
-        (new ProductEventsHandler)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $this->assertSame(0, ProductSnapshot::query()->count());
     }
@@ -199,7 +199,7 @@ final class ProductEventsHandlerTest extends TestCase
             'data' => 'not-an-array',
         ]);
 
-        (new ProductEventsHandler)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $this->assertSame(0, ProductSnapshot::query()->count());
     }
@@ -216,7 +216,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        (new ProductEventsHandler)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $this->assertSame(0, ProductSnapshot::query()->count());
     }
@@ -245,7 +245,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        (new ProductEventsHandler)($message);
+        resolve(ProductEventsHandler::class)->onInbound($message);
 
         $this->assertSame(0, ProductSnapshot::query()->count());
     }
@@ -253,15 +253,18 @@ final class ProductEventsHandlerTest extends TestCase
     /**
      * @param  array<string, mixed>  $body
      */
-    private function consumerMessage(?string $eventType, array $body): ConsumerMessage&MockInterface
+    private function consumerMessage(?string $eventType, array $body): ProductSnapshotReceived
     {
         $headers = $eventType === null ? [] : ['event-type' => $eventType];
 
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn($headers);
-        $message->shouldReceive('getBody')->andReturn($body);
-
-        return $message;
+        return new ProductSnapshotReceived(new InboundEnvelope(
+            eventType: $eventType ?? '',
+            messageId: 'test-'.($eventType ?? 'none'),
+            topic: 'product.events',
+            key: null,
+            sagaId: null,
+            payload: $body,
+            headers: $headers,
+        ));
     }
 }

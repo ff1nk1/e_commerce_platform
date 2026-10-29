@@ -4,21 +4,27 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
-use App\Services\Saga\SagaStepRunner;
-use App\Services\SagaStepGuard;
-use App\Services\StockReservationService;
+use App\Messaging\ApplyStockStep;
+use App\Messaging\OrderCreatedMessage;
 use App\Support\StockSagaMessage;
+use Ecotone\Modelling\Attribute\EventHandler;
+use Ecotone\Modelling\EventBus;
 use Illuminate\Support\Facades\Log;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Shop\Messaging\EnvelopeMessage;
 
-class OrderCreatedHandler
+final class OrderCreatedHandler
 {
     public function __construct(
-        private SagaStepRunner $sagaRunner,
-        private StockReservationService $reservations,
+        private EventBus $events,
     ) {}
 
-    public function __invoke(ConsumerMessage $message): void
+    #[EventHandler(endpointId: 'catalog.orderCreated')]
+    public function onInbound(OrderCreatedMessage $event): void
+    {
+        $this(new EnvelopeMessage($event->envelope));
+    }
+
+    public function __invoke(EnvelopeMessage $message): void
     {
         $headers = $message->getHeaders();
         $eventType = $headers['event-type'] ?? null;
@@ -32,12 +38,6 @@ class OrderCreatedHandler
         $parsed = StockSagaMessage::tryFrom($message);
         if (! $parsed instanceof StockSagaMessage) {
             $payload = $message->getBody();
-            if (! is_array($payload)) {
-                Log::warning('Получено невалидное событие order.created', ['payload' => $payload]);
-
-                return;
-            }
-
             $orderId = $payload['order_id'] ?? null;
             $items = $payload['items'] ?? [];
             $hasOrderId = (bool) $orderId;
@@ -55,34 +55,21 @@ class OrderCreatedHandler
             return;
         }
 
-        $orderId = $parsed->orderId;
-        $items = $parsed->items;
-        $sagaId = $parsed->sagaId;
-
         try {
-            $this->sagaRunner->run($sagaId, 'stock.reserve', function () use ($orderId, $items, $sagaId): array {
-                $result = $this->reservations->reserve($orderId, $items, $sagaId);
-
-                if ($result['outcome'] === 'reservation_failed') {
-                    return [
-                        'status' => SagaStepGuard::STATUS_FAILED,
-                        'result' => ['order_id' => $orderId, 'outcome' => 'reservation_failed'],
-                    ];
-                }
-
-                return [
-                    'status' => SagaStepGuard::STATUS_DONE,
-                    'result' => ['order_id' => $orderId, 'outcome' => 'reserved'],
-                ];
-            });
+            $this->events->publish(new ApplyStockStep(
+                $parsed->sagaId,
+                'stock.reserve',
+                $parsed->orderId,
+                $parsed->items,
+            ));
         } catch (\Throwable $e) {
             Log::error('Фатальная ошибка внутри консьюмера order.created:', [
-                'order_id' => $orderId,
+                'order_id' => $parsed->orderId,
                 'message' => $e->getMessage(),
                 'line' => $e->getLine(),
                 'file' => $e->getFile(),
             ]);
-            // Rethrow so the consumer does not auto-commit a failed/busy message.
+
             throw $e;
         }
     }

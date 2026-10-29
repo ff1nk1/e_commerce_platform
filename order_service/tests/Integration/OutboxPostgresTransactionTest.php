@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
-use App\Console\Commands\KafkaOutboxWorker;
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use Illuminate\Support\Str;
+use Shop\Messaging\OutboxQueue;
 
 final class OutboxPostgresTransactionTest extends IntegrationTestCase
 {
@@ -37,7 +36,7 @@ final class OutboxPostgresTransactionTest extends IntegrationTestCase
             'quantity' => 2,
         ]);
 
-        $event = OutboxEvent::query()->where('event_type', 'order.created')->first();
+        $event = OutboxQueue::first('order.created');
         $this->assertNotNull($event);
         $this->assertSame('order.events', $event->topic);
         $this->assertSame($orderId, $event->payload['order_id']);
@@ -57,8 +56,8 @@ final class OutboxPostgresTransactionTest extends IntegrationTestCase
         $order = Order::query()->findOrFail($orderId);
         $this->assertSame($order->saga_id, $event->payload['saga_id']);
 
-        $published = resolve(KafkaOutboxWorker::class)->processBatch();
+        $published = OutboxQueue::flush();
         $this->assertGreaterThanOrEqual(1, $published);
-        $this->assertSame(0, OutboxEvent::query()->count());
+        $this->assertSame(0, OutboxQueue::count());
     }
 }

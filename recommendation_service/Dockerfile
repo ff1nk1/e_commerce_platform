@@ -3,13 +3,14 @@ FROM php-project-php-base:8.5
 
 WORKDIR /var/www
 
-COPY --chown=www-data:www-data composer.json composer.lock ./
+COPY packages/messaging /var/packages/messaging
+COPY recommendation_service/composer.json recommendation_service/composer.lock /var/www/
 
 RUN --mount=type=cache,target=/root/.composer/cache \
     COMPOSER_ALLOW_SUPERUSER=1 \
     composer install --no-dev --prefer-dist --no-interaction --no-scripts --no-autoloader
 
-COPY --chown=www-data:www-data . .
+COPY --chown=www-data:www-data recommendation_service/ /var/www/
 
 RUN mkdir -p \
         storage/framework/cache \

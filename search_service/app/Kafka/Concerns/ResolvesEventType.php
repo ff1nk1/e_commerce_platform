@@ -4,23 +4,20 @@ declare(strict_types=1);
 
 namespace App\Kafka\Concerns;
 
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Shop\Messaging\EnvelopeMessage;
 
 trait ResolvesEventType
 {
     /**
-     * @return array{0: mixed, 1: mixed}
+     * @return array{0: mixed, 1: array<string, mixed>}
      */
-    protected function resolveEventTypeAndBody(ConsumerMessage $message): array
+    protected function resolveEventTypeAndBody(EnvelopeMessage $message): array
     {
         $headers = $message->getHeaders();
         $body = $message->getBody();
-        $headerEventType = $headers['event-type'] ?? null;
-        $bodyEventType = null;
-        $eventType = $headerEventType;
-        if ($eventType === null) {
-            $bodyEventType = $body['event'] ?? null;
-            $eventType = $bodyEventType;
+        $eventType = $headers['event-type'] ?? '';
+        if ($eventType === '') {
+            $eventType = $body['event_type'] ?? $body['event'] ?? null;
         }
 
         return [$eventType, $body];

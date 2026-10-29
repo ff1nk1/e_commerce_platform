@@ -5,27 +5,24 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use App\Models\Payment;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use Shop\Messaging\OutboxQueue;
 use Symfony\Component\HttpFoundation\Response;
-use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\Concerns\UsesFakeStripe;
 use Tests\TestCase;
 
 final class StripeWebhookTest extends TestCase
 {
-    use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
     use UsesFakeStripe;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->bindInMemorySagaStepGuard();
         $this->useFakeStripe();
     }
 
@@ -59,8 +56,8 @@ final class StripeWebhookTest extends TestCase
 
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'confirmed']);
 
-        $paid = OutboxEvent::query()->where('event_type', 'order.paid')->first();
-        $confirmed = OutboxEvent::query()->where('event_type', 'order.confirmed')->first();
+        $paid = OutboxQueue::first('order.paid');
+        $confirmed = OutboxQueue::first('order.confirmed');
         $this->assertNotNull($paid);
         $this->assertNotNull($confirmed);
         $this->assertSame('paid@example.com', $paid->payload['email']);
@@ -70,13 +67,12 @@ final class StripeWebhookTest extends TestCase
         $this->assertSame('confirmed', $paid->payload['status']);
         $this->assertSame('confirmed', $confirmed->payload['status']);
 
-        $commit = OutboxEvent::query()->where('event_type', 'stock.commit_requested')->first();
+        $commit = OutboxQueue::first('stock.commit_requested');
         $this->assertNotNull($commit);
         $this->assertSame($order->saga_id, $commit->payload['saga_id'] ?? null);
         $this->assertSame([
             ['product_id' => 42, 'store_id' => 3, 'quantity' => 1],
         ], $commit->payload['items'] ?? null);
-        $this->assertArrayHasKey($order->saga_id.':stock.commit_requested', $this->sagaStepStore);
     }
 
     public function test_webhook_expired_marks_payment_failed_and_requests_release(): void
@@ -101,13 +97,12 @@ final class StripeWebhookTest extends TestCase
         ])->assertOk();
 
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'payment_failed']);
-        $event = OutboxEvent::query()->where('event_type', 'stock.release_requested')->first();
+        $event = OutboxQueue::first('stock.release_requested');
         $this->assertNotNull($event);
         $this->assertSame($order->saga_id, $event->payload['saga_id']);
         $this->assertSame([
             ['product_id' => 42, 'store_id' => 3, 'quantity' => 1],
         ], $event->payload['items']);
-        $this->assertArrayHasKey($order->saga_id.':stock.release_requested', $this->sagaStepStore);
     }
 
     private function createOrderWithItem(string $status): Order

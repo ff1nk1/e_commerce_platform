@@ -4,38 +4,22 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Kafka\Handlers\StockEventsHandler;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
-use Illuminate\Console\Command;
-use Junges\Kafka\Facades\Kafka;
+use Shop\Messaging\Console\ConsumeKafkaCommand;
+use Shop\Messaging\Topics;
 
-#[Description('Консьюмер Order Service для stock.reserved / stock.reservation_failed')]
+#[Description('Консьюмер Order Service для stock.events')]
 #[Signature('kafka:consume:stock-events')]
-final class KafkaConsumeStockEvents extends Command
+final class KafkaConsumeStockEvents extends ConsumeKafkaCommand
 {
-    public function handle(): int
+    protected function topics(): array
     {
-        $this->info('Запуск консьюмера для топика stock.events...');
+        return [Topics::STOCK_EVENTS];
+    }
 
-        $consumer = Kafka::consumer(['stock.events'])
-            ->withBrokers(config('kafka.brokers', 'kafka:29092'))
-            ->withConsumerGroupId('order-service-stock-v1')
-            ->withHandler(resolve(StockEventsHandler::class))
-            ->withAutoCommit()
-            ->withOptions([
-                'auto.offset.reset' => 'earliest',
-            ])
-            ->build();
-
-        try {
-            $consumer->consume();
-        } catch (\Throwable $e) {
-            $this->error('ОШИБКА KAFKA: '.$e->getMessage());
-
-            return self::FAILURE;
-        }
-
-        return self::SUCCESS;
+    protected function group(): string
+    {
+        return (string) config('kafka.consumer_groups.stock', 'order-service-stock-v1');
     }
 }

@@ -1,8 +1,8 @@
 services:
   catalog_app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: catalog_service/Dockerfile
       additional_contexts:
         "php-project-php-base:8.5": "service:php-base"
     image: catalog_service:local
@@ -14,6 +14,7 @@ services:
       - "8002"
     volumes:
       - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
     env_file:
       - .env
     environment:
@@ -135,6 +136,7 @@ services:
     command: php artisan kafka:consume:order-events
     volumes:
       - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
     env_file:
       - .env
     environment:
@@ -160,9 +162,37 @@ services:
     pull_policy: never
     container_name: catalog_kafka_outbox_worker
     restart: unless-stopped
-    command: php artisan kafka:outbox:work
+    command: php artisan ecotone:run kafka-outbox
     volumes:
       - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
+    env_file:
+      - .env
+    environment:
+      DB_HOST: catalog_service_db
+      DB_PORT: 5432
+      REDIS_HOST: catalog_service_redis
+      REDIS_PORT: 6379
+      KAFKA_BROKERS: kafka:29092
+    depends_on:
+      catalog_app:
+        condition: service_healthy
+      catalog_db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - php_project_net
+
+  catalog_kafka_inbox_worker:
+    image: catalog_service:local
+    pull_policy: never
+    container_name: catalog_kafka_inbox_worker
+    restart: unless-stopped
+    command: php artisan ecotone:run inbox
+    volumes:
+      - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
     env_file:
       - .env
     environment:

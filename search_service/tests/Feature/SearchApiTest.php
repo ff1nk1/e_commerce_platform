@@ -9,6 +9,7 @@ use Junges\Kafka\Facades\Kafka;
 use Mockery;
 use OpenSearch\Client;
 use OpenSearch\Namespaces\IndicesNamespace;
+use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
 
 final class SearchApiTest extends TestCase
@@ -128,6 +129,7 @@ final class SearchApiTest extends TestCase
             ->assertJsonPath('applied.q', 'phone');
 
         if (class_exists(Kafka::class)) {
+            OutboxQueue::flush();
             Kafka::assertPublishedOn('search.events', null, function ($message): bool {
                 return ($message->getHeaders()['event-type'] ?? null) === 'search.performed'
                     && ($message->getBody()['data']['results_count'] ?? null) === 1

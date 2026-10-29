@@ -16,8 +16,8 @@ flowchart LR
   API -->|"product/category sync"| Kafka["Kafka"]
   Orders["order.events"] --> Consumer["OrderEventsHandler"]
   Consumer --> Reserve["StockReservationService"]
-  Reserve --> Outbox["outbox_events"]
-  Outbox --> Worker["kafka:outbox:work"]
+  Reserve --> Outbox["kafka-outbox"]
+  Outbox --> Worker["ecotone:run kafka-outbox"]
   Worker --> Kafka
 ```
 
@@ -102,8 +102,8 @@ sequenceDiagram
   participant Kafka
   participant Cat as catalog consumer
   participant Svc as StockReservationService
-  participant Outbox as outbox_events
-  participant Worker as kafka:outbox:work
+  participant Outbox as kafka-outbox
+  participant Worker as ecotone:run kafka-outbox
 
   Order->>Kafka: order.created
   Kafka->>Cat: OrderCreatedHandler
@@ -123,7 +123,7 @@ sequenceDiagram
    - commit: `quantity -= qty`, `reserved = max(0, reserved - qty)`;
    - items: `product_id`/`store_id` ≥ 1, `quantity` ≥ 1, иначе fail/skip.
 4. В `stock.changed` в payload `quantity` уходит **available** (чтобы recommendation `in_stock = quantity > 0` оставался корректным).
-5. Outbox worker `kafka:outbox:work` публикует строки из `outbox_events`.
+5. Воркер `ecotone:run kafka-outbox` публикует сообщения канала `kafka-outbox`.
 
 ---
 
@@ -163,7 +163,7 @@ Storefront listing кэширует ключ с hash фильтров ([`Catalog
 |--------|---------|
 | app | nginx + php-fpm (`entrypoint-http.sh`, port 8002) |
 | order consumer | `php artisan kafka:consume:order-events` |
-| outbox | `php artisan kafka:outbox:work` |
+| outbox | `php artisan ecotone:run kafka-outbox` |
 
 Также Postgres, Redis, MinIO (+ mc bootstrap bucket `media`).
 

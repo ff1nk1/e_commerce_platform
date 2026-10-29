@@ -4,25 +4,22 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Console\Commands\Concerns\RunsKafkaConsumer;
-use App\Kafka\Handlers\CategoryEventsHandler;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
-use Illuminate\Console\Command;
+use Shop\Messaging\Console\ConsumeKafkaCommand;
+use Shop\Messaging\Topics;
 
-#[Description('Консьюмер Search Service для category.created / category.updated / category.deleted')]
+#[Description('Консьюмер Search Service для category.events')]
 #[Signature('kafka:consume:category-events')]
-final class KafkaConsumeCategoryEvents extends Command
+final class KafkaConsumeCategoryEvents extends ConsumeKafkaCommand
 {
-    use RunsKafkaConsumer;
-
-    public function handle(): int
+    protected function topics(): array
     {
-        return $this->runKafkaConsumer(
-            ['category.created', 'category.updated', 'category.deleted'],
-            'search-service-categories-v1',
-            CategoryEventsHandler::class,
-            'Запуск консьюмера для топиков category.created, category.updated, category.deleted...',
-        );
+        return [Topics::CATEGORY_EVENTS];
+    }
+
+    protected function group(): string
+    {
+        return (string) config('kafka.consumer_groups.categories', 'search-service-categories-v1');
     }
 }

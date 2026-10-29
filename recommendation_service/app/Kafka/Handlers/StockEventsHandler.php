@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\Messaging\CatalogStockChanged;
 use App\Services\Catalog\ProductIndexer;
+use Ecotone\Modelling\Attribute\EventHandler;
 use Illuminate\Support\Facades\Log;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Shop\Messaging\EnvelopeMessage;
 
 final class StockEventsHandler
 {
@@ -14,13 +16,16 @@ final class StockEventsHandler
         private readonly ProductIndexer $indexer,
     ) {}
 
-    public function __invoke(ConsumerMessage $message): void
+    #[EventHandler(endpointId: 'recommendation.stock')]
+    public function onInbound(CatalogStockChanged $event): void
+    {
+        $this(new EnvelopeMessage($event->envelope));
+    }
+
+    public function __invoke(EnvelopeMessage $message): void
     {
         $headers = $message->getHeaders();
         $body = $message->getBody();
-        if (! is_array($body)) {
-            $body = [];
-        }
 
         $headerEventType = $headers['event-type'] ?? null;
         $bodyEventType = $body['event'] ?? null;

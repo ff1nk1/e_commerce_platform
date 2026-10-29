@@ -70,20 +70,18 @@ flowchart TB
 
 | Топик | Кто пишет | Кто читает |
 |-------|-----------|------------|
-| `user.events` (`user.registered`) | auth, сразу | notification, analytic |
-| `product.created`, `product.updated` | catalog, сразу | order, search, recommendation, analytic |
-| `product.deleted` | catalog, сразу | search, recommendation |
-| `product.published`, `product.unpublished` | catalog, сразу | recommendation |
-| `category.*` | catalog, сразу | search |
+| `user.events` (`user.registered`) | auth, outbox | notification, analytic |
+| `product.events` (`created`, `updated`, `deleted`, `published`, `unpublished`) | catalog, outbox | order, search, recommendation, analytic |
+| `category.events` | catalog, outbox | search |
 | `stock.events` (`stock.reserved`, `stock.reservation_failed`) | catalog, outbox | order |
 | `catalog.events` (`stock.changed`) | catalog, outbox | search, recommendation |
 | `order.events` | order, outbox | catalog (`order.created`, `stock.release_requested`, `stock.commit_requested`), notification (`order.paid`, `order.confirmed`, `order.cancelled`), analytic (`order.created`, `order.paid`, `order.shipped`, `order.cancelled`) |
-| `search.events` (`search.performed`) | search, сразу | analytic |
+| `search.events` (`search.performed`) | search, outbox | analytic |
 | `user.events.dlq`, `order.events.dlq` | notification | — |
 
 `order.confirmed` читает только notification. `order.shipped` читает только analytic и пишет его как стадию `completed`.
 
-События товара и категории catalog публикует сразу. Ответы saga по остаткам и lifecycle заказа идут через transactional outbox (`kafka:outbox:work`).
+Исходящие события пишутся в канал `kafka-outbox` (`php artisan ecotone:run kafka-outbox`). Входящие — в `inbox` (`php artisan ecotone:run inbox`).
 
 ## Вне стека
 

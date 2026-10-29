@@ -8,28 +8,27 @@ use App\Exceptions\SagaStepBusyException;
 use App\Kafka\Handlers\OrderCreatedHandler;
 use App\Kafka\Handlers\StockCommitHandler;
 use App\Kafka\Handlers\StockReleaseHandler;
-use App\Models\OutboxEvent;
+use App\Messaging\HoldStockStep;
+use App\Messaging\OrderCreatedMessage;
+use App\Messaging\StockCommitRequested;
+use App\Messaging\StockReleaseRequested;
 use App\Models\Product;
 use App\Models\Stock;
 use App\Models\Store;
+use App\Services\StockReservationService;
+use Ecotone\Modelling\EventBus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Junges\Kafka\Contracts\ConsumerMessage;
 use Mockery;
-use Mockery\MockInterface;
-use Tests\Concerns\BindsInMemorySagaStepGuard;
+use Shop\Messaging\InboundEnvelope;
+use Shop\Messaging\OutboxQueue;
+use Shop\Messaging\StoredOutboxMessage;
 use Tests\TestCase;
 
 final class OrderStockHandlersTest extends TestCase
 {
-    use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->bindInMemorySagaStepGuard();
-    }
 
     protected function tearDown(): void
     {
@@ -58,22 +57,19 @@ final class OrderStockHandlersTest extends TestCase
             ]],
         ]);
 
-        resolve(OrderCreatedHandler::class)($message);
+        resolve(OrderCreatedHandler::class)->onInbound($message);
 
         $fresh = $stock->fresh();
         $this->assertEquals(10, $fresh->quantity);
         $this->assertEquals(3, $fresh->reserved);
         $this->assertEquals(7, $fresh->available);
-        $this->assertDatabaseHas('outbox_events', [
-            'topic' => 'stock.events',
-            'event_type' => 'stock.reserved',
-        ]);
-        $this->assertDatabaseHas('outbox_events', [
-            'topic' => 'catalog.events',
-            'event_type' => 'stock.changed',
-        ]);
-        $changed = OutboxEvent::query()->where('event_type', 'stock.changed')->first();
-        $this->assertSame(7, $changed->payload['quantity']);
+        $stored = OutboxQueue::first('stock.reserved');
+        $this->assertNotNull($stored);
+        $this->assertSame('stock.events', $stored->topic);
+        $stored = OutboxQueue::first('stock.changed');
+        $this->assertNotNull($stored);
+        $this->assertSame('catalog.events', $stored->topic);
+        $this->assertSame(7, $stored->payload['quantity']);
     }
 
     public function test_order_created_fails_without_partial_stock_change(): void
@@ -103,16 +99,14 @@ final class OrderStockHandlersTest extends TestCase
             ],
         ]);
 
-        resolve(OrderCreatedHandler::class)($message);
+        resolve(OrderCreatedHandler::class)->onInbound($message);
 
         $this->assertEquals(5, $stockA->fresh()->quantity);
         $this->assertEquals(0, $stockA->fresh()->reserved);
         $this->assertEquals(1, $stockB->fresh()->quantity);
         $this->assertEquals(0, $stockB->fresh()->reserved);
-        $this->assertDatabaseHas('outbox_events', [
-            'event_type' => 'stock.reservation_failed',
-        ]);
-        $this->assertSame(0, OutboxEvent::query()->where('event_type', 'stock.reserved')->count());
+        $this->assertNotNull(OutboxQueue::first('stock.reservation_failed'));
+        $this->assertSame(0, OutboxQueue::count('stock.reserved'));
     }
 
     public function test_stock_release_decrements_reserved(): void
@@ -136,15 +130,13 @@ final class OrderStockHandlersTest extends TestCase
             ]],
         ]);
 
-        resolve(StockReleaseHandler::class)($message);
+        resolve(StockReleaseHandler::class)->onInbound($message);
 
         $fresh = $stock->fresh();
         $this->assertEquals(10, $fresh->quantity);
         $this->assertEquals(2, $fresh->reserved);
-        $this->assertDatabaseHas('outbox_events', [
-            'event_type' => 'stock.changed',
-        ]);
-        $changed = OutboxEvent::query()->where('event_type', 'stock.changed')->first();
+        $changed = OutboxQueue::first('stock.changed');
+        $this->assertNotNull($changed);
         $this->assertSame(8, $changed->payload['quantity']);
     }
 
@@ -160,9 +152,9 @@ final class OrderStockHandlersTest extends TestCase
             ]],
         ]);
 
-        resolve(StockReleaseHandler::class)($message);
+        resolve(StockReleaseHandler::class)->onInbound($message);
 
-        $this->assertSame(0, OutboxEvent::query()->count());
+        $this->assertSame(0, OutboxQueue::count());
     }
 
     public function test_order_created_ignores_wrong_event_type(): void
@@ -185,11 +177,11 @@ final class OrderStockHandlersTest extends TestCase
             ]],
         ]);
 
-        resolve(OrderCreatedHandler::class)($message);
+        resolve(OrderCreatedHandler::class)->onInbound($message);
 
         $this->assertEquals(10, $stock->fresh()->quantity);
         $this->assertEquals(0, $stock->fresh()->reserved);
-        $this->assertSame(0, OutboxEvent::query()->count());
+        $this->assertSame(0, OutboxQueue::count());
     }
 
     public function test_order_created_invalid_payload_writes_no_outbox(): void
@@ -199,9 +191,9 @@ final class OrderStockHandlersTest extends TestCase
             'items' => [],
         ]);
 
-        resolve(OrderCreatedHandler::class)($message);
+        resolve(OrderCreatedHandler::class)->onInbound($message);
 
-        $this->assertSame(0, OutboxEvent::query()->count());
+        $this->assertSame(0, OutboxQueue::count());
     }
 
     public function test_order_created_rejects_non_positive_quantity(): void
@@ -215,7 +207,7 @@ final class OrderStockHandlersTest extends TestCase
             'reserved' => 0,
         ]);
 
-        resolve(OrderCreatedHandler::class)($this->consumerMessage('order.created', [
+        resolve(OrderCreatedHandler::class)->onInbound($this->consumerMessage('order.created', [
             'saga_id' => (string) Str::uuid(),
             'order_id' => 1005,
             'items' => [[
@@ -226,10 +218,8 @@ final class OrderStockHandlersTest extends TestCase
         ]));
 
         $this->assertEquals(0, $stock->fresh()->reserved);
-        $this->assertDatabaseHas('outbox_events', [
-            'event_type' => 'stock.reservation_failed',
-        ]);
-        $failed = OutboxEvent::query()->where('event_type', 'stock.reservation_failed')->first();
+        $this->assertNotNull(OutboxQueue::first('stock.reservation_failed'));
+        $failed = OutboxQueue::first('stock.reservation_failed');
         $this->assertSame('Invalid stock items', $failed->payload['reason']);
     }
 
@@ -261,29 +251,31 @@ final class OrderStockHandlersTest extends TestCase
             ],
         ]);
 
-        resolve(OrderCreatedHandler::class)($message);
+        resolve(OrderCreatedHandler::class)->onInbound($message);
 
         $this->assertEquals(10, $stockA->fresh()->quantity);
         $this->assertEquals(2, $stockA->fresh()->reserved);
         $this->assertEquals(8, $stockB->fresh()->quantity);
         $this->assertEquals(3, $stockB->fresh()->reserved);
 
-        $reserved = OutboxEvent::query()->where('event_type', 'stock.reserved')->first();
+        $reserved = OutboxQueue::first('stock.reserved');
         $this->assertNotNull($reserved);
         $this->assertSame([
             'order_id' => 2001,
             'status' => 'success',
             'saga_id' => $sagaId,
+            'event_type' => 'stock.reserved',
+            'event' => 'stock.reserved',
         ], $reserved->payload);
 
-        $changed = OutboxEvent::query()->where('event_type', 'stock.changed')->orderBy('id')->get();
+        $changed = OutboxQueue::ofType('stock.changed');
         $this->assertCount(2, $changed);
         $this->assertEqualsCanonicalizing(
             [
-                ['product_id' => $productA->id, 'store_id' => $store->id, 'quantity' => 8],
-                ['product_id' => $productB->id, 'store_id' => $store->id, 'quantity' => 5],
+                ['product_id' => $productA->id, 'store_id' => $store->id, 'quantity' => 8, 'event_type' => 'stock.changed', 'event' => 'stock.changed'],
+                ['product_id' => $productB->id, 'store_id' => $store->id, 'quantity' => 5, 'event_type' => 'stock.changed', 'event' => 'stock.changed'],
             ],
-            $changed->pluck('payload')->all()
+            array_map(static fn (StoredOutboxMessage $message): array => $message->payload, $changed)
         );
     }
 
@@ -303,16 +295,18 @@ final class OrderStockHandlersTest extends TestCase
             ]],
         ]);
 
-        resolve(OrderCreatedHandler::class)($message);
+        resolve(OrderCreatedHandler::class)->onInbound($message);
 
-        $failed = OutboxEvent::query()->where('event_type', 'stock.reservation_failed')->first();
+        $failed = OutboxQueue::first('stock.reservation_failed');
         $this->assertNotNull($failed);
         $this->assertSame([
             'order_id' => 2002,
             'reason' => 'Not enough stock',
             'saga_id' => $sagaId,
+            'event_type' => 'stock.reservation_failed',
+            'event' => 'stock.reservation_failed',
         ], $failed->payload);
-        $this->assertSame(0, OutboxEvent::query()->where('event_type', 'stock.reserved')->count());
+        $this->assertSame(0, OutboxQueue::count('stock.reserved'));
     }
 
     public function test_stock_release_invalid_payload_writes_no_outbox(): void
@@ -322,9 +316,9 @@ final class OrderStockHandlersTest extends TestCase
             'items' => [],
         ]);
 
-        resolve(StockReleaseHandler::class)($message);
+        resolve(StockReleaseHandler::class)->onInbound($message);
 
-        $this->assertSame(0, OutboxEvent::query()->count());
+        $this->assertSame(0, OutboxQueue::count());
     }
 
     public function test_order_created_replay_with_same_saga_id_does_not_double_reserve(): void
@@ -349,15 +343,16 @@ final class OrderStockHandlersTest extends TestCase
             ]],
         ]);
 
-        resolve(OrderCreatedHandler::class)($message);
-        resolve(OrderCreatedHandler::class)($message);
+        resolve(OrderCreatedHandler::class)->onInbound($message);
+        resolve(OrderCreatedHandler::class)->onInbound($message);
 
         $this->assertEquals(10, $stock->fresh()->quantity);
         $this->assertEquals(3, $stock->fresh()->reserved);
-        $this->assertSame(1, OutboxEvent::query()->where('event_type', 'stock.reserved')->count());
-        $reserved = OutboxEvent::query()->where('event_type', 'stock.reserved')->first();
+        $this->assertSame(1, OutboxQueue::count('stock.reserved'));
+        $reserved = OutboxQueue::first('stock.reserved');
+        $this->assertNotNull($reserved);
         $this->assertSame($sagaId, $reserved->payload['saga_id']);
-        $this->assertSame('done', $this->sagaStepStore[$sagaId.':stock.reserve']['status'] ?? null);
+        $this->assertSame('done', $this->stepStatus($sagaId, 'stock.reserve'));
     }
 
     public function test_order_created_busy_lock_throws_so_message_is_retried(): void
@@ -372,10 +367,10 @@ final class OrderStockHandlersTest extends TestCase
         ]);
         $sagaId = (string) Str::uuid();
 
-        $this->sagaStepLocks[$sagaId.':stock.reserve'] = true;
+        resolve(EventBus::class)->publish(new HoldStockStep($sagaId, 'stock.reserve'));
 
         try {
-            resolve(OrderCreatedHandler::class)($this->consumerMessage('order.created', [
+            resolve(OrderCreatedHandler::class)->onInbound($this->consumerMessage('order.created', [
                 'saga_id' => $sagaId,
                 'order_id' => 3002,
                 'items' => [[
@@ -388,7 +383,7 @@ final class OrderStockHandlersTest extends TestCase
         } catch (SagaStepBusyException) {
             $this->assertEquals(10, $stock->fresh()->quantity);
             $this->assertEquals(0, $stock->fresh()->reserved);
-            $this->assertSame(0, OutboxEvent::query()->count());
+            $this->assertSame(0, OutboxQueue::count());
         }
     }
 
@@ -404,7 +399,7 @@ final class OrderStockHandlersTest extends TestCase
         ]);
         $sagaId = (string) Str::uuid();
 
-        resolve(StockCommitHandler::class)($this->consumerMessage('stock.commit_requested', [
+        resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
             'saga_id' => $sagaId,
             'order_id' => 4001,
             'items' => [[
@@ -418,15 +413,13 @@ final class OrderStockHandlersTest extends TestCase
         $this->assertEquals(7, $fresh->quantity);
         $this->assertEquals(0, $fresh->reserved);
         $this->assertEquals(7, $fresh->available);
-        $this->assertDatabaseHas('outbox_events', [
-            'topic' => 'catalog.events',
-            'event_type' => 'stock.changed',
-        ]);
-        $changed = OutboxEvent::query()->where('event_type', 'stock.changed')->first();
-        $this->assertSame(7, $changed->payload['quantity']);
-        $this->assertSame('done', $this->sagaStepStore[$sagaId.':stock.commit']['status'] ?? null);
+        $stored = OutboxQueue::first('stock.changed');
+        $this->assertNotNull($stored);
+        $this->assertSame('catalog.events', $stored->topic);
+        $this->assertSame(7, $stored->payload['quantity']);
+        $this->assertSame('done', $this->stepStatus($sagaId, 'stock.commit'));
 
-        resolve(StockCommitHandler::class)($this->consumerMessage('stock.commit_requested', [
+        resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
             'saga_id' => $sagaId,
             'order_id' => 4001,
             'items' => [[
@@ -438,7 +431,7 @@ final class OrderStockHandlersTest extends TestCase
 
         $this->assertEquals(7, $stock->fresh()->quantity);
         $this->assertEquals(0, $stock->fresh()->reserved);
-        $this->assertSame(1, OutboxEvent::query()->where('event_type', 'stock.changed')->count());
+        $this->assertSame(1, OutboxQueue::count('stock.changed'));
     }
 
     public function test_order_created_merges_duplicate_line_items_before_reserve(): void
@@ -452,7 +445,7 @@ final class OrderStockHandlersTest extends TestCase
             'reserved' => 0,
         ]);
 
-        resolve(OrderCreatedHandler::class)($this->consumerMessage('order.created', [
+        resolve(OrderCreatedHandler::class)->onInbound($this->consumerMessage('order.created', [
             'saga_id' => (string) Str::uuid(),
             'order_id' => 4002,
             'items' => [
@@ -463,10 +456,9 @@ final class OrderStockHandlersTest extends TestCase
 
         $this->assertEquals(10, $stock->fresh()->quantity);
         $this->assertEquals(0, $stock->fresh()->reserved);
-        $this->assertDatabaseHas('outbox_events', [
-            'topic' => 'stock.events',
-            'event_type' => 'stock.reservation_failed',
-        ]);
+        $stored = OutboxQueue::first('stock.reservation_failed');
+        $this->assertNotNull($stored);
+        $this->assertSame('stock.events', $stored->topic);
     }
 
     public function test_stock_release_replay_with_same_saga_id_does_not_double_release(): void
@@ -491,13 +483,13 @@ final class OrderStockHandlersTest extends TestCase
             ]],
         ]);
 
-        resolve(StockReleaseHandler::class)($message);
-        resolve(StockReleaseHandler::class)($message);
+        resolve(StockReleaseHandler::class)->onInbound($message);
+        resolve(StockReleaseHandler::class)->onInbound($message);
 
         $this->assertEquals(10, $stock->fresh()->quantity);
         $this->assertEquals(2, $stock->fresh()->reserved);
-        $this->assertSame(1, OutboxEvent::query()->where('event_type', 'stock.changed')->count());
-        $this->assertSame('done', $this->sagaStepStore[$sagaId.':stock.release']['status'] ?? null);
+        $this->assertSame(1, OutboxQueue::count('stock.changed'));
+        $this->assertSame('done', $this->stepStatus($sagaId, 'stock.release'));
     }
 
     public function test_release_then_commit_does_not_decrement_quantity(): void
@@ -517,21 +509,21 @@ final class OrderStockHandlersTest extends TestCase
             'quantity' => 3,
         ]];
 
-        resolve(OrderCreatedHandler::class)($this->consumerMessage('order.created', [
+        resolve(OrderCreatedHandler::class)->onInbound($this->consumerMessage('order.created', [
             'saga_id' => $sagaId,
             'order_id' => 5001,
             'items' => $items,
         ]));
         $this->assertEquals(3, $stock->fresh()->reserved);
 
-        resolve(StockReleaseHandler::class)($this->consumerMessage('stock.release_requested', [
+        resolve(StockReleaseHandler::class)->onInbound($this->consumerMessage('stock.release_requested', [
             'saga_id' => $sagaId,
             'order_id' => 5001,
             'items' => $items,
         ]));
         $this->assertEquals(0, $stock->fresh()->reserved);
 
-        resolve(StockCommitHandler::class)($this->consumerMessage('stock.commit_requested', [
+        resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
             'saga_id' => $sagaId,
             'order_id' => 5001,
             'items' => $items,
@@ -540,11 +532,8 @@ final class OrderStockHandlersTest extends TestCase
         $fresh = $stock->fresh();
         $this->assertEquals(10, $fresh->quantity);
         $this->assertEquals(0, $fresh->reserved);
-        $this->assertSame('done', $this->sagaStepStore[$sagaId.':stock.commit']['status'] ?? null);
-        $this->assertSame(
-            'skipped_after_release',
-            $this->sagaStepStore[$sagaId.':stock.commit']['result']['outcome'] ?? null
-        );
+        $this->assertSame('done', $this->stepStatus($sagaId, 'stock.commit'));
+        $this->assertSame('skipped_after_release', $this->stepResult($sagaId, 'stock.commit')['outcome'] ?? null);
     }
 
     public function test_commit_then_release_is_noop_for_release(): void
@@ -564,13 +553,13 @@ final class OrderStockHandlersTest extends TestCase
             'quantity' => 3,
         ]];
 
-        resolve(OrderCreatedHandler::class)($this->consumerMessage('order.created', [
+        resolve(OrderCreatedHandler::class)->onInbound($this->consumerMessage('order.created', [
             'saga_id' => $sagaId,
             'order_id' => 5002,
             'items' => $items,
         ]));
 
-        resolve(StockCommitHandler::class)($this->consumerMessage('stock.commit_requested', [
+        resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
             'saga_id' => $sagaId,
             'order_id' => 5002,
             'items' => $items,
@@ -579,9 +568,9 @@ final class OrderStockHandlersTest extends TestCase
         $afterCommit = $stock->fresh();
         $this->assertEquals(7, $afterCommit->quantity);
         $this->assertEquals(0, $afterCommit->reserved);
-        $changedAfterCommit = OutboxEvent::query()->where('event_type', 'stock.changed')->count();
+        $changedAfterCommit = OutboxQueue::count('stock.changed');
 
-        resolve(StockReleaseHandler::class)($this->consumerMessage('stock.release_requested', [
+        resolve(StockReleaseHandler::class)->onInbound($this->consumerMessage('stock.release_requested', [
             'saga_id' => $sagaId,
             'order_id' => 5002,
             'items' => $items,
@@ -590,12 +579,9 @@ final class OrderStockHandlersTest extends TestCase
         $fresh = $stock->fresh();
         $this->assertEquals(7, $fresh->quantity);
         $this->assertEquals(0, $fresh->reserved);
-        $this->assertSame($changedAfterCommit, OutboxEvent::query()->where('event_type', 'stock.changed')->count());
-        $this->assertSame('done', $this->sagaStepStore[$sagaId.':stock.release']['status'] ?? null);
-        $this->assertSame(
-            'skipped_after_commit',
-            $this->sagaStepStore[$sagaId.':stock.release']['result']['outcome'] ?? null
-        );
+        $this->assertSame($changedAfterCommit, OutboxQueue::count('stock.changed'));
+        $this->assertSame('done', $this->stepStatus($sagaId, 'stock.release'));
+        $this->assertSame('skipped_after_commit', $this->stepResult($sagaId, 'stock.release')['outcome'] ?? null);
     }
 
     public function test_commit_with_zero_reserved_does_not_change_quantity(): void
@@ -610,7 +596,7 @@ final class OrderStockHandlersTest extends TestCase
         ]);
         $sagaId = (string) Str::uuid();
 
-        resolve(StockCommitHandler::class)($this->consumerMessage('stock.commit_requested', [
+        resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
             'saga_id' => $sagaId,
             'order_id' => 5003,
             'items' => [[
@@ -623,8 +609,8 @@ final class OrderStockHandlersTest extends TestCase
         $fresh = $stock->fresh();
         $this->assertEquals(10, $fresh->quantity);
         $this->assertEquals(0, $fresh->reserved);
-        $this->assertSame(0, OutboxEvent::query()->where('event_type', 'stock.changed')->count());
-        $this->assertSame('done', $this->sagaStepStore[$sagaId.':stock.commit']['status'] ?? null);
+        $this->assertSame(0, OutboxQueue::count('stock.changed'));
+        $this->assertSame('done', $this->stepStatus($sagaId, 'stock.commit'));
     }
 
     public function test_handlers_without_saga_id_do_not_mutate_stock(): void
@@ -643,15 +629,15 @@ final class OrderStockHandlersTest extends TestCase
             'quantity' => 2,
         ]];
 
-        resolve(OrderCreatedHandler::class)($this->consumerMessage('order.created', [
+        resolve(OrderCreatedHandler::class)->onInbound($this->consumerMessage('order.created', [
             'order_id' => 5004,
             'items' => $items,
         ]));
-        resolve(StockCommitHandler::class)($this->consumerMessage('stock.commit_requested', [
+        resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
             'order_id' => 5004,
             'items' => $items,
         ]));
-        resolve(StockReleaseHandler::class)($this->consumerMessage('stock.release_requested', [
+        resolve(StockReleaseHandler::class)->onInbound($this->consumerMessage('stock.release_requested', [
             'order_id' => 5004,
             'items' => $items,
         ]));
@@ -659,20 +645,108 @@ final class OrderStockHandlersTest extends TestCase
         $fresh = $stock->fresh();
         $this->assertEquals(10, $fresh->quantity);
         $this->assertEquals(2, $fresh->reserved);
-        $this->assertSame(0, OutboxEvent::query()->where('event_type', 'stock.reserved')->count());
-        $this->assertSame(0, OutboxEvent::query()->where('event_type', 'stock.changed')->count());
+        $this->assertSame(0, OutboxQueue::count('stock.reserved'));
+        $this->assertSame(0, OutboxQueue::count('stock.changed'));
+    }
+
+    public function test_reserve_inside_raw_pdo_transaction_increments_reserved(): void
+    {
+        $connection = DB::connection();
+        while ($connection->transactionLevel() > 0) {
+            $connection->rollBack();
+        }
+
+        $pdo = $connection->getPdo();
+        $pdo->beginTransaction();
+
+        try {
+            $this->assertSame(0, $connection->transactionLevel());
+            $this->assertTrue($pdo->inTransaction());
+
+            $store = Store::factory()->create();
+            $product = Product::factory()->create(['store_id' => $store->id]);
+            $stock = Stock::factory()->create([
+                'product_id' => $product->id,
+                'store_id' => $store->id,
+                'quantity' => 10,
+                'reserved' => 0,
+            ]);
+
+            $result = resolve(StockReservationService::class)->reserve(42, [[
+                'product_id' => $product->id,
+                'store_id' => $store->id,
+                'quantity' => 4,
+            ]], (string) Str::uuid());
+
+            $this->assertSame('reserved', $result['outcome']);
+            $fresh = $stock->fresh();
+            $this->assertNotNull($fresh);
+            $this->assertEquals(10, $fresh->quantity);
+            $this->assertEquals(4, $fresh->reserved);
+        } finally {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
+    }
+
+    private function stepStatus(string $sagaId, string $step): ?string
+    {
+        $status = $this->stepDocument($sagaId)['steps'][$step]['status'] ?? null;
+
+        return is_string($status) ? $status : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function stepResult(string $sagaId, string $step): array
+    {
+        $result = $this->stepDocument($sagaId)['steps'][$step]['result'] ?? null;
+
+        return is_array($result) ? $result : [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function stepDocument(string $sagaId): array
+    {
+        $document = DB::table('ecotone_document_store')->where('document_id', $sagaId)->value('document');
+        if (! is_string($document) || $document === '') {
+            return [];
+        }
+
+        $decoded = json_decode($document, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**
      * @param  array<string, mixed>  $body
+     * @return (
+     *     $eventType is 'stock.commit_requested' ? StockCommitRequested : (
+     *         $eventType is 'stock.release_requested' ? StockReleaseRequested : OrderCreatedMessage
+     *     )
+     * )
      */
-    private function consumerMessage(string $eventType, array $body): ConsumerMessage&MockInterface
+    private function consumerMessage(string $eventType, array $body): OrderCreatedMessage|StockCommitRequested|StockReleaseRequested
     {
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn(['event-type' => $eventType]);
-        $message->shouldReceive('getBody')->andReturn($body);
+        $sagaId = $body['saga_id'] ?? null;
+        $envelope = new InboundEnvelope(
+            eventType: $eventType,
+            messageId: 'test-'.$eventType,
+            topic: 'order.events',
+            key: isset($body['order_id']) && is_scalar($body['order_id']) ? (string) $body['order_id'] : null,
+            sagaId: is_string($sagaId) && $sagaId !== '' ? $sagaId : null,
+            payload: $body,
+            headers: ['event-type' => $eventType],
+        );
 
-        return $message;
+        return match ($eventType) {
+            'stock.commit_requested' => new StockCommitRequested($envelope),
+            'stock.release_requested' => new StockReleaseRequested($envelope),
+            default => new OrderCreatedMessage($envelope),
+        };
     }
 }

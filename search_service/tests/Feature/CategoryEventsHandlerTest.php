@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\CategoryEventsHandler;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use App\Messaging\CategoryLifecycle;
 use Mockery;
 use Mockery\MockInterface;
 use OpenSearch\Client;
 use OpenSearch\Namespaces\IndicesNamespace;
+use Shop\Messaging\InboundEnvelope;
 use Tests\TestCase;
 
 final class CategoryEventsHandlerTest extends TestCase
@@ -49,7 +50,7 @@ final class CategoryEventsHandlerTest extends TestCase
             ],
         ]);
 
-        $this->app->make(CategoryEventsHandler::class)($message);
+        $this->app->make(CategoryEventsHandler::class)->onInbound($message);
     }
 
     public function test_category_updated_syncs_product_category_name(): void
@@ -76,7 +77,7 @@ final class CategoryEventsHandlerTest extends TestCase
             ],
         ]);
 
-        $this->app->make(CategoryEventsHandler::class)($message);
+        $this->app->make(CategoryEventsHandler::class)->onInbound($message);
     }
 
     public function test_category_deleted_removes_document(): void
@@ -97,7 +98,7 @@ final class CategoryEventsHandlerTest extends TestCase
             ],
         ]);
 
-        $this->app->make(CategoryEventsHandler::class)($message);
+        $this->app->make(CategoryEventsHandler::class)->onInbound($message);
     }
 
     public function test_unknown_event_type_is_ignored(): void
@@ -113,7 +114,7 @@ final class CategoryEventsHandlerTest extends TestCase
             'data' => ['id' => 1, 'name' => 'X'],
         ]);
 
-        $this->app->make(CategoryEventsHandler::class)($message);
+        $this->app->make(CategoryEventsHandler::class)->onInbound($message);
     }
 
     public function test_category_updated_without_name_is_skipped(): void
@@ -131,7 +132,7 @@ final class CategoryEventsHandlerTest extends TestCase
             ],
         ]);
 
-        $this->app->make(CategoryEventsHandler::class)($message);
+        $this->app->make(CategoryEventsHandler::class)->onInbound($message);
     }
 
     public function test_missing_data_is_skipped(): void
@@ -141,7 +142,7 @@ final class CategoryEventsHandlerTest extends TestCase
         $client->shouldNotReceive('delete');
         $this->app->instance(Client::class, $client);
 
-        $this->app->make(CategoryEventsHandler::class)(
+        $this->app->make(CategoryEventsHandler::class)->onInbound(
             $this->consumerMessage('category.created', ['event' => 'category.created'])
         );
     }
@@ -169,15 +170,18 @@ final class CategoryEventsHandlerTest extends TestCase
     /**
      * @param  array<string, mixed>  $body
      */
-    private function consumerMessage(?string $eventType, array $body): ConsumerMessage&MockInterface
+    private function consumerMessage(?string $eventType, array $body): CategoryLifecycle
     {
         $headers = $eventType === null ? [] : ['event-type' => $eventType];
 
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn($headers);
-        $message->shouldReceive('getBody')->andReturn($body);
-
-        return $message;
+        return new CategoryLifecycle(new InboundEnvelope(
+            eventType: $eventType ?? '',
+            messageId: 'test-'.($eventType ?? 'none'),
+            topic: 'category.events',
+            key: null,
+            sagaId: null,
+            payload: $body,
+            headers: $headers,
+        ));
     }
 }

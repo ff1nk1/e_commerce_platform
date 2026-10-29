@@ -8,6 +8,7 @@ use App\Events\UserRegistered;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\RefreshTokenKeys;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Str;
@@ -32,11 +33,12 @@ final class AuthService
         // Password cast on User hashes plain text — do not Hash::make here.
         $userData['role_id'] = Role::query()->where('slug', 'customer')->valueOrFail('id');
 
-        $user = User::query()->create($userData);
+        return DB::transaction(function () use ($userData): User {
+            $user = User::query()->create($userData);
+            event(new UserRegistered($user));
 
-        event(new UserRegistered($user));
-
-        return $user;
+            return $user;
+        });
     }
 
     /**

@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use Illuminate\Support\Facades\Artisan;
-use Junges\Kafka\Consumers\Builder;
-use Junges\Kafka\Contracts\MessageConsumer;
-use Junges\Kafka\Facades\Kafka;
-use Mockery;
+use RuntimeException;
+use Shop\Messaging\KafkaConsumerLoop;
+use Shop\Messaging\Topics;
 use Tests\TestCase;
 
 final class KafkaConsumeCommandsTest extends TestCase
@@ -19,15 +18,9 @@ final class KafkaConsumeCommandsTest extends TestCase
         $this->mockConsoleOutput = false;
     }
 
-    protected function tearDown(): void
-    {
-        Mockery::close();
-        parent::tearDown();
-    }
-
     public function test_order_events_consume_returns_failure_on_kafka_error(): void
     {
-        $this->mockFailingConsumer();
+        $this->bindFailingLoop([Topics::ORDER_EVENTS], 'notification-service-order-v1');
 
         $exitCode = Artisan::call('kafka:consume:order-events');
 
@@ -37,7 +30,7 @@ final class KafkaConsumeCommandsTest extends TestCase
 
     public function test_user_events_consume_returns_failure_on_kafka_error(): void
     {
-        $this->mockFailingConsumer();
+        $this->bindFailingLoop([Topics::USER_EVENTS], 'notification-service-consumers-v1');
 
         $exitCode = Artisan::call('kafka:consume:user-events');
 
@@ -45,21 +38,27 @@ final class KafkaConsumeCommandsTest extends TestCase
         $this->assertStringContainsString('ОШИБКА KAFKA', Artisan::output());
     }
 
-    private function mockFailingConsumer(): void
+    /**
+     * @param  list<string>  $topics
+     */
+    private function bindFailingLoop(array $topics, string $group): void
     {
-        $consumer = Mockery::mock(MessageConsumer::class);
-        $consumer->shouldReceive('consume')
-            ->once()
-            ->andThrow(new \RuntimeException('broker unreachable'));
+        $this->app->instance(KafkaConsumerLoop::class, new class($topics, $group) implements KafkaConsumerLoop
+        {
+            /**
+             * @param  list<string>  $expectedTopics
+             */
+            public function __construct(
+                private readonly array $expectedTopics,
+                private readonly string $expectedGroup,
+            ) {}
 
-        $builder = Mockery::mock(Builder::class);
-        $builder->shouldReceive('withBrokers')->andReturnSelf();
-        $builder->shouldReceive('withConsumerGroupId')->andReturnSelf();
-        $builder->shouldReceive('withHandler')->andReturnSelf();
-        $builder->shouldReceive('withAutoCommit')->andReturnSelf();
-        $builder->shouldReceive('withOptions')->andReturnSelf();
-        $builder->shouldReceive('build')->andReturn($consumer);
+            public function consume(array $topics, string $groupId, string $offsetReset, callable $handler): void
+            {
+                throw_if($topics !== $this->expectedTopics || $groupId !== $this->expectedGroup || $offsetReset === '', RuntimeException::class, 'unexpected consumer arguments');
 
-        Kafka::shouldReceive('consumer')->once()->andReturn($builder);
+                throw new RuntimeException('broker unreachable');
+            }
+        });
     }
 }

@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Concerns;
 
-use Junges\Kafka\Contracts\ConsumerMessage;
 use Junges\Kafka\Facades\Kafka;
-use Tests\Fakes\StubConsumerMessage;
+use Shop\Messaging\InboundEnvelope;
 
 trait UsesKafka
 {
@@ -24,9 +23,21 @@ trait UsesKafka
         array $body,
         string $topic = 'catalog.events',
         array $headers = [],
-    ): ConsumerMessage {
+    ): InboundEnvelope {
         $headers = array_merge(['event-type' => $eventType], $headers);
+        $stringHeaders = [];
+        foreach ($headers as $name => $value) {
+            $stringHeaders[(string) $name] = is_scalar($value) ? (string) $value : '';
+        }
 
-        return new StubConsumerMessage($eventType, $body, $topic, $headers);
+        return new InboundEnvelope(
+            eventType: $eventType,
+            messageId: 'test-'.$eventType,
+            topic: $topic,
+            key: null,
+            sagaId: null,
+            payload: $body,
+            headers: $stringHeaders,
+        );
     }
 }

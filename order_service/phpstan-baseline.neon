@@ -5,591 +5,153 @@ parameters:
 			identifier: argument.type
 			count: 1
 			path: app/Domain/Money.php
-
 		-
 			message: '#^Parameter \#1 \$num1 of function bccomp expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Domain/Money.php
-
 		-
 			message: '#^Parameter \#1 \$num1 of function bcmul expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 2
 			path: app/Domain/Money.php
-
 		-
 			message: '#^Parameter \#2 \$num2 of function bcadd expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Domain/Money.php
-
 		-
 			message: '#^Parameter \#2 \$num2 of function bccomp expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Domain/Money.php
-
 		-
 			message: '#^Parameter \#2 \$num2 of function bcmul expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Domain/Money.php
-
-		-
-			message: '#^Parameter \#3 \$work of method App\\Services\\Saga\\SagaStepRunner\:\:run\(\) expects callable\(\)\: array\{status\?\: string, result\?\: array\<string, mixed\>\}, Closure\(\)\: \(array\{status\: ''failed'', result\: array\{order_id\: int\}\}\|null\) given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Kafka/Handlers/StockEventsHandler.php
-
-		-
-			message: '#^Parameter \#3 \$work of method App\\Services\\Saga\\SagaStepRunner\:\:run\(\) expects callable\(\)\: array\{status\?\: string, result\?\: array\<string, mixed\>\}, Closure\(\)\: \(array\{status\: string, result\: array\<string, mixed\>\}\|null\) given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Kafka/Handlers/StockEventsHandler.php
-
 		-
 			message: '#^Class App\\Models\\Order uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
 			identifier: missingType.generics
 			count: 1
 			path: app/Models/Order.php
-
 		-
 			message: '#^Class App\\Models\\OrderItem uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
 			identifier: missingType.generics
 			count: 1
 			path: app/Models/OrderItem.php
-
-		-
-			message: '#^Class App\\Models\\OutboxEvent uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
-			identifier: missingType.generics
-			count: 1
-			path: app/Models/OutboxEvent.php
-
 		-
 			message: '#^Class App\\Models\\Payment uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
 			identifier: missingType.generics
 			count: 1
 			path: app/Models/Payment.php
-
 		-
 			message: '#^Class App\\Models\\ProductSnapshot uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
 			identifier: missingType.generics
 			count: 1
 			path: app/Models/ProductSnapshot.php
-
 		-
 			message: '#^Method App\\Services\\IdempotencyService\:\:get\(\) should return array\{status\: int, body\: array\<string, mixed\>\}\|null but returns array\<mixed, mixed\>\|null\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Services/IdempotencyService.php
-
 		-
 			message: '#^Cannot call method toIso8601String\(\) on Carbon\\Carbon\|null\.$#'
 			identifier: method.nonObject
 			count: 1
 			path: app/Services/Order/CreateOrderService.php
-
 		-
 			message: '#^Parameter \#1 \$sessionId of method App\\Contracts\\PaymentGateway\:\:retrieveCheckoutSession\(\) expects string, string\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Services/Payment/CreateCheckoutService.php
-
-		-
-			message: '#^Method App\\Services\\SagaStepGuard\:\:get\(\) should return array\{status\: string, result\?\: array\<string, mixed\>, at\: string\}\|null but returns array\<mixed, mixed\>\|null\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Services/SagaStepGuard.php
-
 		-
 			message: '#^Method App\\Services\\Stripe\\StripeClient\:\:constructWebhookEvent\(\) should return array\{id\: string, type\: string, data\: array\{object\: array\<string, mixed\>\}\} but returns array\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Services/Stripe/StripeClient.php
-
 		-
 			message: '#^Method App\\Services\\Stripe\\StripeClient\:\:constructWebhookEvent\(\) should return array\{id\: string, type\: string, data\: array\{object\: array\<string, mixed\>\}\} but returns non\-empty\-array\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Services/Stripe/StripeClient.php
-
-		-
-			message: '#^Parameter \#1 \$payload of static method App\\Support\\KafkaPayload\:\:sagaId\(\) expects array\<string, mixed\>, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Support/KafkaOutboxHeaders.php
-
 		-
 			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: config/filesystems.php
-
 		-
 			message: '#^Static property Database\\Factories\\UserFactory\:\:\$password \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
 			identifier: property.unusedType
 			count: 1
 			path: database/factories/UserFactory.php
-
-		-
-			message: '#^Offset ''email'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/InsufficientStockSagaTest.php
-
-		-
-			message: '#^Offset ''order_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/InsufficientStockSagaTest.php
-
-		-
-			message: '#^Offset ''reason'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/InsufficientStockSagaTest.php
-
-		-
-			message: '#^Offset ''items'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/MultiItemCartCheckoutTest.php
-
-		-
-			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with null will always evaluate to false\.$#'
-			identifier: method.impossibleType
-			count: 1
-			path: tests/Feature/OrderCancelOutboxTest.php
-
-		-
-			message: '#^Offset ''email'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderCancelOutboxTest.php
-
-		-
-			message: '#^Offset ''event_type'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 2
-			path: tests/Feature/OrderCancelOutboxTest.php
-
-		-
-			message: '#^Offset ''occurred_at'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Feature/OrderCancelOutboxTest.php
-
-		-
-			message: '#^Offset ''reason'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderCancelOutboxTest.php
-
-		-
-			message: '#^Offset ''saga_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 2
-			path: tests/Feature/OrderCancelOutboxTest.php
-
-		-
-			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with null will always evaluate to false\.$#'
-			identifier: method.impossibleType
-			count: 2
-			path: tests/Feature/OrderCreateOutboxTest.php
-
-		-
-			message: '#^Offset ''created_at'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Feature/OrderCreateOutboxTest.php
-
-		-
-			message: '#^Offset ''event_type'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Feature/OrderCreateOutboxTest.php
-
-		-
-			message: '#^Offset ''items'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderCreateOutboxTest.php
-
-		-
-			message: '#^Offset ''order_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderCreateOutboxTest.php
-
-		-
-			message: '#^Offset ''saga_id'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Feature/OrderCreateOutboxTest.php
-
-		-
-			message: '#^Offset ''total_amount'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Feature/OrderCreateOutboxTest.php
-
-		-
-			message: '#^Offset ''user_id'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Feature/OrderCreateOutboxTest.php
-
-		-
-			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with null will always evaluate to false\.$#'
-			identifier: method.impossibleType
-			count: 1
-			path: tests/Feature/OrderShipOutboxTest.php
-
-		-
-			message: '#^Offset ''event_type'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Feature/OrderShipOutboxTest.php
-
-		-
-			message: '#^Offset ''occurred_at'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Feature/OrderShipOutboxTest.php
-
-		-
-			message: '#^Offset ''order_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderShipOutboxTest.php
-
-		-
-			message: '#^Offset ''saga_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderShipOutboxTest.php
-
-		-
-			message: '#^Offset ''status'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderShipOutboxTest.php
-
-		-
-			message: '#^Offset ''total_amount'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderShipOutboxTest.php
-
-		-
-			message: '#^Offset ''user_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderShipOutboxTest.php
-
 		-
 			message: '#^Method Tests\\Feature\\PaymentCheckoutTest\:\:createAwaitingPaymentOrder\(\) should return App\\Models\\Order but returns App\\Models\\Order\|null\.$#'
 			identifier: return.type
 			count: 1
 			path: tests/Feature/PaymentCheckoutTest.php
-
 		-
 			message: '#^Cannot call method expectsOutputToContain\(\) on Illuminate\\Testing\\PendingCommand\|int\.$#'
 			identifier: method.nonObject
 			count: 1
 			path: tests/Feature/ProductEventsHandlerTest.php
-
 		-
 			message: '#^Cannot call method getAttributes\(\) on App\\Models\\ProductSnapshot\|null\.$#'
 			identifier: method.nonObject
 			count: 1
 			path: tests/Feature/ProductEventsHandlerTest.php
-
 		-
 			message: '#^Cannot access property \$cancel_reason on App\\Models\\Order\|null\.$#'
 			identifier: property.nonObject
 			count: 1
 			path: tests/Feature/StockEventsHandlerTest.php
-
 		-
 			message: '#^Cannot access property \$status on App\\Models\\Order\|null\.$#'
 			identifier: property.nonObject
-			count: 7
+			count: 6
 			path: tests/Feature/StockEventsHandlerTest.php
-
-		-
-			message: '#^Offset ''email'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/StockEventsHandlerTest.php
-
-		-
-			message: '#^Offset ''order_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/StockEventsHandlerTest.php
-
-		-
-			message: '#^Offset ''reason'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/StockEventsHandlerTest.php
-
 		-
 			message: '#^Method Tests\\Feature\\StripeWebhookTest\:\:createOrderWithItem\(\) should return App\\Models\\Order but returns App\\Models\\Order\|null\.$#'
 			identifier: return.type
 			count: 1
 			path: tests/Feature/StripeWebhookTest.php
-
-		-
-			message: '#^Offset ''email'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 2
-			path: tests/Feature/StripeWebhookTest.php
-
-		-
-			message: '#^Offset ''items'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/StripeWebhookTest.php
-
-		-
-			message: '#^Offset ''items'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Feature/StripeWebhookTest.php
-
-		-
-			message: '#^Offset ''order_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 2
-			path: tests/Feature/StripeWebhookTest.php
-
-		-
-			message: '#^Offset ''saga_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/StripeWebhookTest.php
-
-		-
-			message: '#^Offset ''saga_id'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Feature/StripeWebhookTest.php
-
-		-
-			message: '#^Offset ''status'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 2
-			path: tests/Feature/StripeWebhookTest.php
-
-		-
-			message: '#^Offset ''items'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Integration/OutboxPostgresTransactionTest.php
-
-		-
-			message: '#^Offset ''order_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Integration/OutboxPostgresTransactionTest.php
-
-		-
-			message: '#^Offset ''saga_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Integration/OutboxPostgresTransactionTest.php
-
-		-
-			message: '#^Offset ''email'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Integration/SagaInsufficientStockFlowTest.php
-
-		-
-			message: '#^Offset ''reason'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Integration/SagaInsufficientStockFlowTest.php
-
-		-
-			message: '#^Parameter \#1 \$sagaId of method App\\Services\\SagaStepGuard\:\:get\(\) expects string, string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Integration/SagaInsufficientStockFlowTest.php
-
-		-
-			message: '#^Offset ''email'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Integration/SagaUserCancelCompensationTest.php
-
-		-
-			message: '#^Offset ''reason'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Integration/SagaUserCancelCompensationTest.php
-
-		-
-			message: '#^Offset ''saga_id'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Integration/SagaUserCancelCompensationTest.php
-
-		-
-			message: '#^Parameter \#1 \$sagaId of method App\\Services\\SagaStepGuard\:\:get\(\) expects string, string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Integration/SagaUserCancelCompensationTest.php
-
-		-
-			message: '#^Offset ''email'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Integration/StripeCheckoutAndWebhookFlowTest.php
-
-		-
-			message: '#^Offset ''status'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Integration/StripeCheckoutAndWebhookFlowTest.php
-
 		-
 			message: '#^Parameter \#1 \$sessionId of method App\\Services\\Stripe\\StripeClient\:\:retrieveCheckoutSession\(\) expects string, string\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: tests/Integration/StripeCheckoutAndWebhookFlowTest.php
-
-		-
-			message: '#^Offset ''items'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Integration/StripeSessionExpiredCompensationTest.php
-
-		-
-			message: '#^Offset ''saga_id'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Integration/StripeSessionExpiredCompensationTest.php
-
-		-
-			message: '#^Parameter \#1 \$sagaId of method App\\Services\\SagaStepGuard\:\:get\(\) expects string, string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/Integration/StripeSessionExpiredCompensationTest.php
-
 		-
 			message: '#^Parameter \#1 \$sessionId of method App\\Services\\Stripe\\StripeClient\:\:retrieveCheckoutSession\(\) expects string, string\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: tests/Integration/StripeSessionExpiredCompensationTest.php
-
 		-
 			message: '#^Cannot access property \$status on App\\Models\\Order\|null\.$#'
 			identifier: property.nonObject
 			count: 3
 			path: tests/Unit/ConfirmOrderFromPaymentTest.php
-
 		-
 			message: '#^Cannot access property \$status on App\\Models\\Payment\|null\.$#'
 			identifier: property.nonObject
 			count: 2
 			path: tests/Unit/ConfirmOrderFromPaymentTest.php
-
 		-
 			message: '#^Offset ''status'' might not exist on array\{status\: int, body\: array\<string, mixed\>\}\|null\.$#'
 			identifier: offsetAccess.notFound
 			count: 1
 			path: tests/Unit/IdempotencyServiceTest.php
-
-		-
-			message: '#^Offset ''event_type'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 2
-			path: tests/Unit/OutboxWriterTest.php
-
-		-
-			message: '#^Offset ''order_id'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Unit/OutboxWriterTest.php
-
 		-
 			message: '#^Method Tests\\Unit\\PaymentServiceWebhookUnitTest\:\:createOrder\(\) should return App\\Models\\Order but returns App\\Models\\Order\|null\.$#'
 			identifier: return.type
 			count: 1
 			path: tests/Unit/PaymentServiceWebhookUnitTest.php
-
-		-
-			message: '#^Offset ''email'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Unit/PaymentServiceWebhookUnitTest.php
-
-		-
-			message: '#^Offset ''event_type'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 2
-			path: tests/Unit/PaymentServiceWebhookUnitTest.php
-
-		-
-			message: '#^Offset ''items'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Unit/PaymentServiceWebhookUnitTest.php
-
-		-
-			message: '#^Offset ''saga_id'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 2
-			path: tests/Unit/PaymentServiceWebhookUnitTest.php
-
-		-
-			message: '#^Offset ''status'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Unit/PaymentServiceWebhookUnitTest.php
-
-		-
-			message: '#^Parameter \#1 \$sagaId of method App\\Services\\SagaStepGuard\:\:get\(\) expects string, string\|null given\.$#'
-			identifier: argument.type
-			count: 2
-			path: tests/Unit/PaymentServiceWebhookUnitTest.php
-
 		-
 			message: '#^Cannot access property \$cancel_reason on App\\Models\\Order\|null\.$#'
 			identifier: property.nonObject
 			count: 1
 			path: tests/Unit/StockEventsHandlerUnitTest.php
-
 		-
 			message: '#^Cannot access property \$status on App\\Models\\Order\|null\.$#'
 			identifier: property.nonObject
-			count: 6
-			path: tests/Unit/StockEventsHandlerUnitTest.php
-
-		-
-			message: '#^Offset ''email'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Unit/StockEventsHandlerUnitTest.php
-
-		-
-			message: '#^Offset ''items'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Unit/StockEventsHandlerUnitTest.php
-
-		-
-			message: '#^Offset ''reason'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
-			path: tests/Unit/StockEventsHandlerUnitTest.php
-
-		-
-			message: '#^Offset ''saga_id'' on string on left side of \?\? does not exist\.$#'
-			identifier: nullCoalesce.offset
-			count: 1
+			count: 5
 			path: tests/Unit/StockEventsHandlerUnitTest.php

@@ -5,193 +5,91 @@ parameters:
 			identifier: property.notFound
 			count: 1
 			path: app/Http/Requests/UpdateCategoryRequest.php
-
-		-
-			message: '#^Parameter \#3 \$work of method App\\Services\\Saga\\SagaStepRunner\:\:run\(\) expects callable\(\)\: array\{status\?\: string, result\?\: array\<string, mixed\>\}, Closure\(\)\: \(array\{status\: ''done'', result\: array\{order_id\: int\|string, outcome\?\: ''skipped_after_release''\}\}\|null\) given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Kafka/Handlers/StockCommitHandler.php
-
-		-
-			message: '#^Parameter \#3 \$work of method App\\Services\\Saga\\SagaStepRunner\:\:run\(\) expects callable\(\)\: array\{status\?\: string, result\?\: array\<string, mixed\>\}, Closure\(\)\: \(array\{status\: ''done'', result\: array\{order_id\: int\|string, outcome\?\: ''skipped_after_commit''\}\}\|null\) given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Kafka/Handlers/StockReleaseHandler.php
-
-		-
-			message: '#^Class App\\Models\\OutboxEvent uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
-			identifier: missingType.generics
-			count: 1
-			path: app/Models/OutboxEvent.php
-
 		-
 			message: '#^Anonymous function never returns float so it can be removed from the return type\.$#'
 			identifier: return.unusedType
 			count: 1
 			path: app/Models/Stock.php
-
 		-
 			message: '#^Method App\\Models\\Stock\:\:available\(\) return type with generic class Illuminate\\Database\\Eloquent\\Casts\\Attribute does not specify its types\: TGet, TSet$#'
 			identifier: missingType.generics
 			count: 1
 			path: app/Models/Stock.php
-
 		-
 			message: '#^Property App\\Models\\User\:\:\$id \(int\<0, max\>\) does not accept int\.$#'
 			identifier: assign.propertyType
 			count: 1
 			path: app/Models/User.php
-
-		-
-			message: '#^Method App\\Services\\CatalogService\:\:deleteCategory\(\) should return bool but returns bool\|null\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Services/CatalogService.php
-
 		-
 			message: '#^Method App\\Services\\CatalogService\:\:getAllCategories\(\) should return list\<array\<string, mixed\>\> but returns array\<mixed\>\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Services/CatalogService.php
-
-		-
-			message: '#^Method App\\Services\\SagaStepGuard\:\:get\(\) should return array\{status\: string, result\?\: array\<string, mixed\>, at\: string\}\|null but returns array\<mixed, mixed\>\|null\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Services/SagaStepGuard.php
-
 		-
 			message: '#^Access to an undefined property App\\Models\\Stock\:\:\$available\.$#'
 			identifier: property.notFound
 			count: 2
 			path: app/Services/StockReservationService.php
-
 		-
 			message: '#^Property App\\Models\\Stock\:\:\$quantity \(int\<0, max\>\) does not accept int\.$#'
 			identifier: assign.propertyType
 			count: 1
 			path: app/Services/StockReservationService.php
-
 		-
 			message: '#^Property App\\Models\\Stock\:\:\$reserved \(int\<0, max\>\) does not accept int\.$#'
 			identifier: assign.propertyType
 			count: 2
 			path: app/Services/StockReservationService.php
-
 		-
 			message: '#^Access to an undefined property App\\Models\\Stock\:\:\$available\.$#'
 			identifier: property.notFound
 			count: 1
 			path: app/Services/StockService.php
-
 		-
 			message: '#^Property App\\Models\\Stock\:\:\$quantity \(int\<0, max\>\) does not accept int\.$#'
 			identifier: assign.propertyType
 			count: 1
 			path: app/Services/StockService.php
-
-		-
-			message: '#^Parameter \#1 \$payload of static method App\\Support\\KafkaPayload\:\:sagaId\(\) expects array\<string, mixed\>, string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Support/KafkaOutboxHeaders.php
-
 		-
 			message: '#^Parameter \#2 \$items of class App\\Support\\StockSagaMessage constructor expects list\<array\<string, mixed\>\>, non\-empty\-array\<mixed, mixed\> given\.$#'
 			identifier: argument.type
 			count: 1
 			path: app/Support/StockSagaMessage.php
-
 		-
 			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: config/filesystems.php
-
 		-
 			message: '#^Static property Database\\Factories\\UserFactory\:\:\$password \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
 			identifier: property.unusedType
 			count: 1
 			path: database/factories/UserFactory.php
-
 		-
 			message: '#^Possibly invalid array key type string\|null\.$#'
 			identifier: offsetAccess.invalidOffset
 			count: 1
 			path: database/seeders/ProductAttributeSeeder.php
-
 		-
 			message: '#^Cannot access property \$available on App\\Models\\Stock\|null\.$#'
 			identifier: property.nonObject
 			count: 2
 			path: tests/Feature/OrderStockHandlersTest.php
-
-		-
-			message: '#^Cannot access property \$payload on App\\Models\\OutboxEvent\|null\.$#'
-			identifier: property.nonObject
-			count: 5
-			path: tests/Feature/OrderStockHandlersTest.php
-
 		-
 			message: '#^Cannot access property \$quantity on App\\Models\\Stock\|null\.$#'
 			identifier: property.nonObject
 			count: 18
 			path: tests/Feature/OrderStockHandlersTest.php
-
 		-
 			message: '#^Cannot access property \$reserved on App\\Models\\Stock\|null\.$#'
 			identifier: property.nonObject
 			count: 21
 			path: tests/Feature/OrderStockHandlersTest.php
-
-		-
-			message: '#^Offset ''quantity'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 3
-			path: tests/Feature/OrderStockHandlersTest.php
-
-		-
-			message: '#^Offset ''reason'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderStockHandlersTest.php
-
-		-
-			message: '#^Offset ''saga_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Feature/OrderStockHandlersTest.php
-
-		-
-			message: '#^Cannot access property \$payload on App\\Models\\OutboxEvent\|null\.$#'
-			identifier: property.nonObject
-			count: 4
-			path: tests/Feature/StockSeederTest.php
-
-		-
-			message: '#^Cannot access property \$topic on App\\Models\\OutboxEvent\|null\.$#'
-			identifier: property.nonObject
-			count: 1
-			path: tests/Feature/StockSeederTest.php
-
-		-
-			message: '#^Offset ''product_id'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 2
-			path: tests/Feature/StockSeederTest.php
-
-		-
-			message: '#^Offset ''quantity'' does not exist on string\.$#'
-			identifier: offsetAccess.notFound
-			count: 2
-			path: tests/Feature/StockSeederTest.php
-
 		-
 			message: '#^Cannot access property \$is_published on App\\Models\\Product\|null\.$#'
 			identifier: property.nonObject
 			count: 1
 			path: tests/Unit/CatalogProductKafkaTest.php
-
 		-
 			message: '#^Cannot access property \$parent_id on App\\Models\\Category\|null\.$#'
 			identifier: property.nonObject

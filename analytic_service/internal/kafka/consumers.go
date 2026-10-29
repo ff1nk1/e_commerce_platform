@@ -74,7 +74,7 @@ func (c *Consumers) Run(ctx context.Context) error {
 		{GroupID: "analytic-service-users-v3", Topics: []string{"user.events"}, Handle: c.handleUser},
 		{GroupID: "analytic-service-orders-v5", Topics: []string{"order.events"}, Handle: c.handleOrder},
 		{GroupID: "analytic-service-search-v3", Topics: []string{"search.events"}, Handle: c.handleSearch},
-		{GroupID: "analytic-service-products-v1", Topics: []string{"product.created", "product.updated"}, Handle: c.handleProduct},
+		{GroupID: "analytic-service-products-v1", Topics: []string{"product.events"}, Handle: c.handleProduct},
 	}
 
 	g, ctx := errgroup.WithContext(ctx)

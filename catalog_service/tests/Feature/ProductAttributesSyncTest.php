@@ -11,6 +11,7 @@ use App\Models\Store;
 use App\Services\ProductService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Junges\Kafka\Facades\Kafka;
+use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
 
 final class ProductAttributesSyncTest extends TestCase
@@ -47,7 +48,8 @@ final class ProductAttributesSyncTest extends TestCase
         ]);
         $this->assertSame(2, ProductAttribute::query()->where('product_id', $product->id)->count());
 
-        Kafka::assertPublishedOn('product.created', null, function ($message) use ($product): bool {
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('product.events', null, function ($message) use ($product): bool {
             $attrs = $message->getBody()['data']['attributes'] ?? null;
             if (! is_array($attrs)) {
                 return false;
@@ -90,7 +92,8 @@ final class ProductAttributesSyncTest extends TestCase
         ]);
         $this->assertSame(1, ProductAttribute::query()->where('product_id', $product->id)->count());
 
-        Kafka::assertPublishedOn('product.updated', null, function ($message): bool {
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('product.events', null, function ($message): bool {
             $attrs = $message->getBody()['data']['attributes'] ?? [];
 
             return count($attrs) === 1

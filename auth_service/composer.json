@@ -9,9 +9,11 @@
         "php": "^8.3",
         "firebase/php-jwt": "^7.2",
         "laravel/framework": "^13.17",
+        "ecotone/dbal": "^1.328",
+        "ecotone/laravel": "^1.328",
         "laravel/tinker": "^3.0",
-        "mateusjunges/laravel-kafka": "^2.12",
-        "predis/predis": "^3.6"
+        "predis/predis": "^3.6",
+        "shop/messaging": "1.0.0"
     },
     "require-dev": {
         "driftingly/rector-laravel": "^2.1",
@@ -88,6 +90,15 @@
             "php-http/discovery": true
         }
     },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../packages/messaging",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
     "minimum-stability": "stable",
     "prefer-stable": true
 }

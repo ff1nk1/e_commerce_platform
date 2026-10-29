@@ -5,27 +5,24 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
+use Shop\Messaging\OutboxQueue;
 use Tests\Concerns\BindsFakePaymentGateway;
 use Tests\Concerns\BindsInMemoryIdempotency;
-use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
 final class MultiItemCartCheckoutTest extends TestCase
 {
     use BindsFakePaymentGateway;
     use BindsInMemoryIdempotency;
-    use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->bindInMemoryIdempotency();
-        $this->bindInMemorySagaStepGuard();
     }
 
     protected function tearDown(): void
@@ -64,7 +61,7 @@ final class MultiItemCartCheckoutTest extends TestCase
         $orderId = (int) $create->json('id');
         $this->assertSame('225.50', $create->json('total_amount'));
 
-        $event = OutboxEvent::query()->where('event_type', 'order.created')->first();
+        $event = OutboxQueue::first('order.created');
         $this->assertNotNull($event);
         $this->assertCount(2, $event->payload['items']);
 
@@ -81,7 +78,7 @@ final class MultiItemCartCheckoutTest extends TestCase
         ]);
         $replay->assertCreated();
         $this->assertSame($orderId, $replay->json('id'));
-        $this->assertSame(1, OutboxEvent::query()->where('event_type', 'order.created')->count());
+        $this->assertSame(1, OutboxQueue::count('order.created'));
 
         Order::query()->whereKey($orderId)->update(['status' => 'awaiting_payment']);
 

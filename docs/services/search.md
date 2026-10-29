@@ -4,19 +4,25 @@
 
 ## Назначение
 
-Поиск и autocomplete по каталогу. Своей SQL-базы нет: документы живут в OpenSearch и приезжают из Kafka.
+Поиск и autocomplete по каталогу. Документы живут в OpenSearch и приезжают из Kafka. Postgres нужен только Ecotone (outbox/inbox).
 
 ## Зависимости
 
 | Что | Зачем |
 |-----|--------|
 | OpenSearch | индексы `products` и `categories` |
+| Postgres `search_db` | Ecotone outbox/inbox |
 | Kafka | product, category, `catalog.events`; публикация `search.events` |
 
 ## ENV
 
 | Переменная | Тип | Дефолт | Обязательна |
 |------------|-----|--------|-------------|
+| `DB_CONNECTION` | string | `pgsql` | да |
+| `DB_HOST` | string | `search_service_db` | да |
+| `DB_PORT` | int | `5432` | да |
+| `DB_DATABASE` | string | `search_db` | да |
+| `DB_USERNAME` / `DB_PASSWORD` | string | `laravel` / `secret` | да |
 | `KAFKA_BROKERS` | string | `kafka:29092` | да |
 | `OPENSEARCH_HOSTS` | URL | `http://search_opensearch:9200` | да |
 | `OPENSEARCH_PRODUCTS_INDEX` | string | `products` | нет |

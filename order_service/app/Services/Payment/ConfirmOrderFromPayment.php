@@ -8,10 +8,11 @@ use App\Contracts\PaymentGateway;
 use App\Domain\OrderStatus;
 use App\Events\OrderConfirmed;
 use App\Events\OrderPaid;
+use App\Messaging\FulfillmentEvents;
+use App\Messaging\PaymentCaptured;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Order\OrderPayloadFactory;
-use App\Services\Order\RequestStockCommit;
 use App\Services\Stripe\StripePaymentResolver;
 use App\Services\Stripe\StripeSessionMoney;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +23,7 @@ final class ConfirmOrderFromPayment
     public function __construct(
         private OrderPayloadFactory $payloads,
         private PaymentGateway $stripe,
-        private RequestStockCommit $stockCommit,
+        private FulfillmentEvents $fulfillment,
     ) {}
 
     /**
@@ -41,9 +42,7 @@ final class ConfirmOrderFromPayment
             return;
         }
 
-        $commitOrder = null;
-
-        DB::transaction(function () use ($session, &$commitOrder): void {
+        DB::transaction(function () use ($session): void {
             $payment = StripePaymentResolver::lockForSession($session);
             if (! $payment instanceof Payment || $payment->status === 'succeeded') {
                 return;
@@ -63,18 +62,14 @@ final class ConfirmOrderFromPayment
                 return;
             }
 
-            $this->applyConfirm($payment, $order, $session, $commitOrder);
+            $this->applyConfirm($payment, $order, $session);
         });
-
-        if ($commitOrder instanceof Order) {
-            $this->stockCommit->recordSagaStep($commitOrder);
-        }
     }
 
     /**
      * @param  array<string, mixed>  $session
      */
-    private function applyConfirm(Payment $payment, Order $order, array $session, ?Order &$commitOrder): void
+    private function applyConfirm(Payment $payment, Order $order, array $session): void
     {
         $status = $order->statusEnum();
 
@@ -123,8 +118,8 @@ final class ConfirmOrderFromPayment
         event(new OrderPaid($payload));
         event(new OrderConfirmed($payload));
 
-        $this->stockCommit->dispatch($order);
-        $commitOrder = $order;
+        $sagaId = is_string($order->saga_id) ? $order->saga_id : '';
+        $this->fulfillment->publish(new PaymentCaptured($sagaId), $sagaId);
     }
 
     /**

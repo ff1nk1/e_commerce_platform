@@ -8,7 +8,7 @@ use App\Events\KafkaEventMovedToDlq;
 use App\Models\EmailLog;
 use App\Support\KafkaMailMessageId;
 use Illuminate\Support\Facades\Log;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Shop\Messaging\EnvelopeMessage;
 
 final class KafkaMailPipeline
 {
@@ -20,24 +20,16 @@ final class KafkaMailPipeline
      * @param  list<string>  $allowedTypes
      */
     public function handle(
-        ConsumerMessage $message,
+        EnvelopeMessage $message,
         array $allowedTypes,
         string $sourceTopic,
         string $dlqTopic,
     ): void {
-        $headers = $message->getHeaders() ?? [];
+        $headers = $message->getHeaders();
         $body = $message->getBody();
 
-        if (! is_array($body)) {
-            Log::warning("Kafka {$sourceTopic}: тело сообщения не массив", [
-                'event-type' => $headers['event-type'] ?? null,
-            ]);
-
-            return;
-        }
-
         $headerEventType = $headers['event-type'] ?? null;
-        $bodyEventType = $body['event_type'] ?? null;
+        $bodyEventType = $body['event_type'] ?? $body['event'] ?? null;
         $eventType = $headerEventType ?? $bodyEventType;
         if (! is_string($eventType) || $eventType === '') {
             Log::debug("Игнорируем событие {$sourceTopic}: отсутствует event-type");
@@ -87,14 +79,13 @@ final class KafkaMailPipeline
     }
 
     private function sendToDlq(
-        ConsumerMessage $message,
+        EnvelopeMessage $message,
         EmailLog $emailLog,
         string $errorMessage,
         string $dlqTopic,
     ): void {
         $emailLog->update([
             'status' => 'failed',
-            'moved_to_dlq' => true,
             'error_message' => $errorMessage,
         ]);
 
@@ -104,5 +95,9 @@ final class KafkaMailPipeline
             (string) $emailLog->email,
             $dlqTopic,
         ));
+
+        $emailLog->update([
+            'moved_to_dlq' => true,
+        ]);
     }
 }

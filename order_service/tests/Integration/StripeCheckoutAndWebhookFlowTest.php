@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
-use App\Console\Commands\KafkaOutboxWorker;
-use App\Kafka\Handlers\StockEventsHandler;
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use App\Models\Payment;
 use App\Services\Stripe\StripeClient;
 use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
+use Shop\Messaging\OutboxQueue;
 use Tests\Concerns\RequiresStripe;
 
 final class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
@@ -41,13 +39,13 @@ final class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
         $orderId = (int) $create->json('id');
         $sagaId = Order::query()->findOrFail($orderId)->saga_id;
 
-        resolve(KafkaOutboxWorker::class)->processBatch();
+        OutboxQueue::flush();
 
-        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.reserved', [
+        $this->deliverStock('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'status' => 'success',
-        ]));
+        ]);
 
         $pay = $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 20], [
             'Idempotency-Key' => 'it-stripe-pay-'.Str::uuid(),
@@ -98,19 +96,21 @@ final class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
         $this->assertDatabaseHas('orders', ['id' => $orderId, 'status' => 'confirmed']);
         $this->assertDatabaseHas('payments', ['id' => $paymentId, 'status' => 'succeeded']);
 
-        $paid = OutboxEvent::query()->where('event_type', 'order.paid')->first();
-        $confirmed = OutboxEvent::query()->where('event_type', 'order.confirmed')->first();
+        $paid = OutboxQueue::first('order.paid');
+        $confirmed = OutboxQueue::first('order.confirmed');
         $this->assertNotNull($paid);
         $this->assertNotNull($confirmed);
         $this->assertSame('stripe-buyer@example.com', $paid->payload['email'] ?? null);
         $this->assertSame('confirmed', $confirmed->payload['status'] ?? null);
 
-        resolve(KafkaOutboxWorker::class)->processBatch();
+        OutboxQueue::flush();
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             return ($message->getHeaders()['event-type'] ?? null) === 'order.paid'
                 && (int) ($message->getBody()['order_id'] ?? 0) === $orderId;
         });
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             return ($message->getHeaders()['event-type'] ?? null) === 'order.confirmed'
                 && (int) ($message->getBody()['order_id'] ?? 0) === $orderId;

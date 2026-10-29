@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use App\Models\Payment;
 use App\Models\ProductSnapshot;
 use App\Services\Payment\ConfirmOrderFromPayment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Mockery;
+use Shop\Messaging\OutboxQueue;
 use Tests\Concerns\BindsFakePaymentGateway;
 use Tests\TestCase;
 
@@ -40,7 +40,7 @@ final class ConfirmOrderFromPaymentTest extends TestCase
         ]);
 
         $this->assertSame('pending', $order->fresh()->status->value);
-        $this->assertSame(0, OutboxEvent::query()->where('event_type', 'order.confirmed')->count());
+        $this->assertSame(0, OutboxQueue::count('order.confirmed'));
     }
 
     public function test_rejects_amount_mismatch(): void
@@ -81,7 +81,7 @@ final class ConfirmOrderFromPaymentTest extends TestCase
 
         $this->assertSame('cancelled', $order->fresh()->status->value);
         $this->assertSame('succeeded', $payment->fresh()->status);
-        $this->assertSame(0, OutboxEvent::query()->where('event_type', 'order.confirmed')->count());
+        $this->assertSame(0, OutboxQueue::count('order.confirmed'));
     }
 
     /**

@@ -43,7 +43,7 @@ final class ProxyService
     ];
 
     /** @var list<string> */
-    private const QUERY_ONLY_METHODS = ['get', 'delete', 'head'];
+    private const QUERY_ONLY_METHODS = ['GET', 'DELETE', 'HEAD'];
 
     /**
      * Join a configured path prefix with an optional route suffix.
@@ -81,7 +81,8 @@ final class ProxyService
         ?array $identity = null,
     ): Response {
         $url = $this->buildUrl($baseUrl, $path);
-        $method = strtolower($request->method());
+        // Guzzle 8 sends the method verbatim. Nginx rejects lowercase methods with 400.
+        $method = strtoupper($request->method());
         $query = $request->query();
         $body = $request->all();
 

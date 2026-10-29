@@ -7,6 +7,7 @@ namespace App\Indexing;
 use App\Indexing\Concerns\DeletesOpenSearchDocuments;
 use Illuminate\Support\Facades\Log;
 use OpenSearch\Client;
+use Shop\Messaging\CatalogPayloadNormalizer;
 use Throwable;
 
 final class ProductDocumentWriter
@@ -26,6 +27,7 @@ final class ProductDocumentWriter
     public function __construct(
         private readonly Client $client,
         private readonly OpenSearchIndexManager $indices,
+        private readonly CatalogPayloadNormalizer $payloads = new CatalogPayloadNormalizer,
     ) {}
 
     /**
@@ -40,7 +42,7 @@ final class ProductDocumentWriter
             return;
         }
 
-        $document = $this->mapCatalogFields($data);
+        $document = $this->mapCatalogFields($this->payloads->normalize($data));
 
         if ($preserveStock && $this->productExists($id)) {
             // Partial update: never overwrite quantity/in_stock (avoids race with stock.changed).
@@ -135,6 +137,7 @@ final class ProductDocumentWriter
             'price' => isset($data['price']) ? (float) $data['price'] : null,
             'category_name' => $categoryName,
             'store_name' => $storeName,
+            'is_published' => (bool) ($data['is_published'] ?? true),
             'attributes' => $this->normalizeAttributes($data['attributes'] ?? []),
         ];
     }

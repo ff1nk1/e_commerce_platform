@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Services\ProductSearchService;
-use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Facades\Kafka;
 use Mockery;
+use Shop\Messaging\OutboxPublisher;
+use Shop\Messaging\OutboxQueue;
 use Tests\Concerns\CapturesOpenSearchRequests;
 use Tests\TestCase;
 
@@ -34,7 +35,10 @@ final class ProductSearchQueryBuilderTest extends TestCase
         $body = $this->lastSearchBody();
 
         $this->assertArrayHasKey('match_all', $body['query']['bool']['must'][0]);
-        $this->assertArrayNotHasKey('post_filter', $body);
+        $this->assertSame(
+            [['bool' => ['must_not' => [['term' => ['is_published' => false]]]]]],
+            $body['post_filter']['bool']['filter'],
+        );
         $this->assertSame([['id' => ['order' => 'desc']]], $body['sort']);
         $this->assertSame(10000, $body['track_total_hits']);
     }
@@ -328,6 +332,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
             'sort' => 'price_asc',
         ]));
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('search.events', null, function ($message): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
@@ -363,6 +368,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
             'sort' => 'relevance',
         ]), skipAnalytics: true);
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('search.events', null, function ($message): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
@@ -374,7 +380,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
         });
     }
 
-    public function test_search_succeeds_when_kafka_publish_fails(): void
+    public function test_search_fails_when_the_outbox_write_fails(): void
     {
         $this->mockOpenSearchClient([
             'hits' => [
@@ -396,21 +402,11 @@ final class ProductSearchQueryBuilderTest extends TestCase
             'aggregations' => $this->emptySearchResponse()['aggregations'],
         ]);
 
-        Kafka::shouldReceive('publish')
-            ->once()
-            ->andThrow(new \RuntimeException('broker down'));
+        $outbox = Mockery::mock(OutboxPublisher::class);
+        $outbox->shouldReceive('publish')->once()->andThrow(new \RuntimeException('outbox down'));
+        $this->app->instance(OutboxPublisher::class, $outbox);
 
-        $logSpy = Log::spy();
-
-        $result = resolve(ProductSearchService::class)->search($this->searchParams(['q' => 'ok', 'sort' => 'relevance']));
-
-        $this->assertSame(1, $result['products']['total']);
-        $this->assertSame('Resilient', $result['products']['data'][0]['name']);
-
-        $logSpy->shouldHaveReceived('error')
-            ->once()
-            ->withArgs(function ($message): bool {
-                return $message === 'Kafka publish failed on search.performed';
-            });
+        $this->expectException(\RuntimeException::class);
+        resolve(ProductSearchService::class)->search($this->searchParams(['q' => 'ok', 'sort' => 'relevance']));
     }
 }

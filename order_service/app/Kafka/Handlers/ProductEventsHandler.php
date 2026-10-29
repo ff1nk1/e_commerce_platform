@@ -4,14 +4,22 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\Messaging\ProductSnapshotReceived;
 use App\Models\ProductSnapshot;
+use Ecotone\Modelling\Attribute\EventHandler;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Shop\Messaging\EnvelopeMessage;
 
 final class ProductEventsHandler
 {
-    public function __invoke(ConsumerMessage $message): void
+    #[EventHandler(endpointId: 'order.productSnapshot')]
+    public function onInbound(ProductSnapshotReceived $event): void
+    {
+        $this(new EnvelopeMessage($event->envelope));
+    }
+
+    public function __invoke(EnvelopeMessage $message): void
     {
         if (! Schema::hasTable('product_snapshots')) {
             Log::warning('Kafka: product_snapshots table missing; skipping until migrations run');
@@ -22,7 +30,7 @@ final class ProductEventsHandler
         $headers = $message->getHeaders();
         $body = $message->getBody();
         $eventTypeFromHeader = $headers['event-type'] ?? null;
-        $eventTypeFromBody = $body['event'] ?? null;
+        $eventTypeFromBody = $body['event_type'] ?? $body['event'] ?? null;
         $eventType = $eventTypeFromHeader ?? $eventTypeFromBody;
 
         if (! in_array($eventType, ['product.created', 'product.updated'], true)) {

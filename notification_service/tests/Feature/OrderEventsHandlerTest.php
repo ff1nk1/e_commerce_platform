@@ -9,6 +9,7 @@ use App\Mail\MailableRegistry;
 use App\Mail\OrderCancelledMail;
 use App\Mail\OrderConfirmedMail;
 use App\Mail\OrderPaidMail;
+use App\Messaging\OrderNotification;
 use App\Models\EmailLog;
 use App\Services\MailDeliveryService;
 use Illuminate\Mail\PendingMail;
@@ -16,7 +17,8 @@ use Illuminate\Support\Facades\Mail;
 use Junges\Kafka\Facades\Kafka;
 use Mockery;
 use Mockery\MockInterface;
-use Tests\Fakes\FakeConsumerMessage;
+use Shop\Messaging\InboundEnvelope;
+use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
 
 final class OrderEventsHandlerTest extends TestCase
@@ -38,7 +40,7 @@ final class OrderEventsHandlerTest extends TestCase
         Mail::fake();
 
         $body = $this->orderBody();
-        resolve(OrderEventsHandler::class)($this->message('order.paid', $body));
+        resolve(OrderEventsHandler::class)->onInbound($this->message('order.paid', $body));
 
         Mail::assertSent(OrderPaidMail::class, function (OrderPaidMail $mail) use ($body): bool {
             return $mail->hasTo($body['email'])
@@ -58,7 +60,7 @@ final class OrderEventsHandlerTest extends TestCase
         Mail::fake();
 
         $body = $this->orderBody();
-        resolve(OrderEventsHandler::class)($this->message('order.confirmed', $body));
+        resolve(OrderEventsHandler::class)->onInbound($this->message('order.confirmed', $body));
 
         Mail::assertSent(OrderConfirmedMail::class);
         $log = EmailLog::query()->where('status', 'sent')->first();
@@ -72,7 +74,7 @@ final class OrderEventsHandlerTest extends TestCase
         Mail::fake();
 
         $body = $this->orderBody(['reason' => 'insufficient_stock']);
-        resolve(OrderEventsHandler::class)($this->message('order.cancelled', $body));
+        resolve(OrderEventsHandler::class)->onInbound($this->message('order.cancelled', $body));
 
         Mail::assertSent(OrderCancelledMail::class, function (OrderCancelledMail $mail): bool {
             return ($mail->payload['reason'] ?? null) === 'insufficient_stock';
@@ -88,9 +90,9 @@ final class OrderEventsHandlerTest extends TestCase
         Mail::fake();
 
         $body = $this->orderBody(['event_type' => 'order.paid']);
-        $message = new FakeConsumerMessage($body, [], '42');
+        $message = $this->message('', $body, '42', []);
 
-        resolve(OrderEventsHandler::class)($message);
+        resolve(OrderEventsHandler::class)->onInbound($message);
 
         Mail::assertSent(OrderPaidMail::class);
         $log = EmailLog::query()->where('email', $body['email'])->first();
@@ -103,7 +105,7 @@ final class OrderEventsHandlerTest extends TestCase
         Mail::fake();
         Kafka::fake();
 
-        resolve(OrderEventsHandler::class)($this->message('order.created', $this->orderBody()));
+        resolve(OrderEventsHandler::class)->onInbound($this->message('order.created', $this->orderBody()));
 
         Mail::assertNothingSent();
         $this->assertSame(0, EmailLog::query()->count());
@@ -115,12 +117,12 @@ final class OrderEventsHandlerTest extends TestCase
         Mail::fake();
         Kafka::fake();
 
-        $message = new FakeConsumerMessage([
+        $message = $this->message('order.paid', [
             'order_id' => 1,
             'name' => 'No Email',
-        ], ['event-type' => 'order.paid'], '1');
+        ], '1');
 
-        resolve(OrderEventsHandler::class)($message);
+        resolve(OrderEventsHandler::class)->onInbound($message);
 
         Mail::assertNothingSent();
         $this->assertSame(0, EmailLog::query()->count());
@@ -137,8 +139,8 @@ final class OrderEventsHandlerTest extends TestCase
             'laravel-kafka::message-id' => 'idempotent-order-1',
         ]);
 
-        resolve(OrderEventsHandler::class)($message);
-        resolve(OrderEventsHandler::class)($message);
+        resolve(OrderEventsHandler::class)->onInbound($message);
+        resolve(OrderEventsHandler::class)->onInbound($message);
 
         Mail::assertSent(OrderPaidMail::class, 1);
         $this->assertSame(1, EmailLog::query()->where('message_id', 'idempotent-order-1')->count());
@@ -168,7 +170,7 @@ final class OrderEventsHandlerTest extends TestCase
         $body = $this->orderBody(['email' => 'dlq-order@example.com']);
         $message = $this->message('order.paid', $body, '99');
 
-        resolve(OrderEventsHandler::class)($message);
+        resolve(OrderEventsHandler::class)->onInbound($message);
 
         $log = EmailLog::query()->where('email', 'dlq-order@example.com')->first();
         $this->assertNotNull($log);
@@ -179,6 +181,7 @@ final class OrderEventsHandlerTest extends TestCase
         $this->assertSame('order.paid', $log->payload['event_type'] ?? null);
         $this->assertStringContainsString('SMTP permanently down', (string) $log->error_message);
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('order.events.dlq');
     }
 
@@ -206,13 +209,23 @@ final class OrderEventsHandlerTest extends TestCase
     private function message(
         string $eventType,
         array $body,
-        string $key = '42',
+        ?string $key = '42',
         ?array $headers = null,
-    ): FakeConsumerMessage {
-        return new FakeConsumerMessage(
-            $body,
-            $headers ?? ['event-type' => $eventType],
-            $key,
-        );
+    ): OrderNotification {
+        $headers ??= $eventType === '' ? [] : ['event-type' => $eventType];
+        $stringHeaders = [];
+        foreach ($headers as $name => $value) {
+            $stringHeaders[(string) $name] = is_scalar($value) ? (string) $value : '';
+        }
+
+        return new OrderNotification(new InboundEnvelope(
+            eventType: $eventType,
+            messageId: $stringHeaders['laravel-kafka::message-id'] ?? 'test-'.$eventType.'-'.($key ?? 'none'),
+            topic: 'order.events',
+            key: $key,
+            sagaId: null,
+            payload: $body,
+            headers: $stringHeaders,
+        ));
     }
 }

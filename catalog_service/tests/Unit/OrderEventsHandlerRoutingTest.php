@@ -5,86 +5,61 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Kafka\Handlers\OrderCreatedHandler;
+use App\Kafka\Handlers\StockCommitHandler;
 use App\Kafka\Handlers\StockReleaseHandler;
-use App\Kafka\MainHandlers\OrderEventsHandler;
-use Junges\Kafka\Contracts\ConsumerMessage;
-use Mockery;
-use Mockery\MockInterface;
+use App\Messaging\CatalogInboundEventFactory;
+use App\Messaging\OrderCreatedMessage;
+use App\Messaging\StockCommitRequested;
+use App\Messaging\StockReleaseRequested;
+use Shop\Messaging\InboundEnvelope;
 use Tests\TestCase;
 
 final class OrderEventsHandlerRoutingTest extends TestCase
 {
-    protected function tearDown(): void
-    {
-        Mockery::close();
-        parent::tearDown();
-    }
-
     public function test_routes_order_created_to_order_created_handler(): void
     {
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn(['event-type' => 'order.created']);
+        $event = $this->event('order.created');
 
-        $orderHandler = Mockery::mock(OrderCreatedHandler::class);
-        $orderHandler->shouldReceive('__invoke')->once()->with($message);
-
-        $this->app->instance(OrderCreatedHandler::class, $orderHandler);
-
-        (new OrderEventsHandler)($message);
-        $this->addToAssertionCount(1);
+        $this->assertInstanceOf(OrderCreatedMessage::class, $event);
+        resolve(OrderCreatedHandler::class)->onInbound($event);
     }
 
     public function test_routes_stock_release_to_stock_release_handler(): void
     {
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn(['event-type' => 'stock.release_requested']);
+        $event = $this->event('stock.release_requested');
 
-        $releaseHandler = Mockery::mock(StockReleaseHandler::class);
-        $releaseHandler->shouldReceive('__invoke')->once()->with($message);
+        $this->assertInstanceOf(StockReleaseRequested::class, $event);
+        resolve(StockReleaseHandler::class)->onInbound($event);
+    }
 
-        $this->app->instance(StockReleaseHandler::class, $releaseHandler);
+    public function test_routes_stock_commit_to_stock_commit_handler(): void
+    {
+        $event = $this->event('stock.commit_requested');
 
-        (new OrderEventsHandler)($message);
-        $this->addToAssertionCount(1);
+        $this->assertInstanceOf(StockCommitRequested::class, $event);
+        resolve(StockCommitHandler::class)->onInbound($event);
     }
 
     public function test_ignores_unknown_event_type(): void
     {
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn(['event-type' => 'something.else']);
-
-        $orderHandler = Mockery::mock(OrderCreatedHandler::class);
-        $orderHandler->shouldReceive('__invoke')->never();
-        $this->app->instance(OrderCreatedHandler::class, $orderHandler);
-
-        $releaseHandler = Mockery::mock(StockReleaseHandler::class);
-        $releaseHandler->shouldReceive('__invoke')->never();
-        $this->app->instance(StockReleaseHandler::class, $releaseHandler);
-
-        (new OrderEventsHandler)($message);
-
-        $this->addToAssertionCount(1);
+        $this->assertNull($this->event('something.else'));
     }
 
     public function test_ignores_missing_event_type_header(): void
     {
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn([]);
+        $this->assertNull($this->event(''));
+    }
 
-        $orderHandler = Mockery::mock(OrderCreatedHandler::class);
-        $orderHandler->shouldReceive('__invoke')->never();
-        $this->app->instance(OrderCreatedHandler::class, $orderHandler);
-
-        $releaseHandler = Mockery::mock(StockReleaseHandler::class);
-        $releaseHandler->shouldReceive('__invoke')->never();
-        $this->app->instance(StockReleaseHandler::class, $releaseHandler);
-
-        (new OrderEventsHandler)($message);
-
-        $this->addToAssertionCount(1);
+    private function event(string $eventType): ?object
+    {
+        return (new CatalogInboundEventFactory)->make(new InboundEnvelope(
+            eventType: $eventType,
+            messageId: 'test-'.$eventType,
+            topic: 'order.events',
+            key: null,
+            sagaId: null,
+            payload: [],
+            headers: $eventType === '' ? [] : ['event-type' => $eventType],
+        ));
     }
 }

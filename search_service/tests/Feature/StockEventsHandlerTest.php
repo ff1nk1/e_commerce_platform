@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\StockEventsHandler;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use App\Messaging\CatalogStockChanged;
 use Mockery;
 use Mockery\MockInterface;
 use OpenSearch\Client;
 use OpenSearch\Namespaces\IndicesNamespace;
+use Shop\Messaging\InboundEnvelope;
 use Tests\TestCase;
 
 final class StockEventsHandlerTest extends TestCase
@@ -43,7 +44,7 @@ final class StockEventsHandlerTest extends TestCase
             'quantity' => 5,
         ]);
 
-        $this->app->make(StockEventsHandler::class)($message);
+        $this->app->make(StockEventsHandler::class)->onInbound($message);
     }
 
     public function test_stock_changed_updates_in_stock_false(): void
@@ -67,7 +68,7 @@ final class StockEventsHandlerTest extends TestCase
             'quantity' => 0,
         ]);
 
-        $this->app->make(StockEventsHandler::class)($message);
+        $this->app->make(StockEventsHandler::class)->onInbound($message);
     }
 
     public function test_stock_changed_skips_missing_product(): void
@@ -84,7 +85,7 @@ final class StockEventsHandlerTest extends TestCase
             'quantity' => 3,
         ]);
 
-        $this->app->make(StockEventsHandler::class)($message);
+        $this->app->make(StockEventsHandler::class)->onInbound($message);
     }
 
     public function test_non_stock_changed_events_are_ignored(): void
@@ -99,7 +100,7 @@ final class StockEventsHandlerTest extends TestCase
             'status' => 'success',
         ]);
 
-        $this->app->make(StockEventsHandler::class)($message);
+        $this->app->make(StockEventsHandler::class)->onInbound($message);
     }
 
     public function test_command_is_registered(): void
@@ -124,15 +125,18 @@ final class StockEventsHandlerTest extends TestCase
     /**
      * @param  array<string, mixed>  $body
      */
-    private function consumerMessage(?string $eventType, array $body): ConsumerMessage&MockInterface
+    private function consumerMessage(?string $eventType, array $body): CatalogStockChanged
     {
         $headers = $eventType === null ? [] : ['event-type' => $eventType];
 
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn($headers);
-        $message->shouldReceive('getBody')->andReturn($body);
-
-        return $message;
+        return new CatalogStockChanged(new InboundEnvelope(
+            eventType: $eventType ?? '',
+            messageId: 'test-'.($eventType ?? 'none'),
+            topic: 'stock.events',
+            key: null,
+            sagaId: null,
+            payload: $body,
+            headers: $headers,
+        ));
     }
 }

@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Role;
+use App\Models\User;
 use App\Services\Auth\AuthService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Facades\Kafka;
+use RuntimeException;
+use Shop\Messaging\OutboxPublisher;
+use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
 
 final class UserRegisteredKafkaTest extends TestCase
@@ -47,6 +50,7 @@ final class UserRegisteredKafkaTest extends TestCase
 
         $this->assertTrue(Hash::check('secret123', $user->password));
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('user.events', null, function ($message) use ($user): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
@@ -63,34 +67,22 @@ final class UserRegisteredKafkaTest extends TestCase
         });
     }
 
-    public function test_it_registers_user_even_if_kafka_fails(): void
+    public function test_it_rolls_back_registration_when_the_outbox_write_fails(): void
     {
-        Kafka::shouldReceive('publish')
-            ->once()
-            ->andThrow(new \Exception('Connection to Kafka broker timed out'));
+        $outbox = \Mockery::mock(OutboxPublisher::class);
+        $outbox->shouldReceive('publish')->once()->andThrow(new RuntimeException('outbox down'));
+        $this->app->instance(OutboxPublisher::class, $outbox);
 
-        $logSpy = Log::spy();
+        try {
+            resolve(AuthService::class)->register([
+                'name' => 'Jane Doe',
+                'email' => 'jane@example.com',
+                'password' => 'secret123',
+            ]);
+            $this->fail('registration should roll back');
+        } catch (RuntimeException) {
+        }
 
-        $userData = [
-            'name' => 'Jane Doe',
-            'email' => 'jane@example.com',
-            'password' => 'secret123',
-        ];
-
-        $service = resolve(AuthService::class);
-        $user = $service->register($userData);
-
-        $this->assertDatabaseHas('users', [
-            'email' => 'jane@example.com',
-            'name' => 'Jane Doe',
-        ]);
-
-        $logSpy->shouldHaveReceived('error')
-            ->once()
-            ->withArgs(function ($message, array $context) use ($user): bool {
-                return $message === 'Kafka publish failed on user.registered'
-                    && isset($context['user_id']) && $context['user_id'] === $user->id
-                    && isset($context['error']) && $context['error'] === 'Connection to Kafka broker timed out';
-            });
+        $this->assertSame(0, User::query()->where('email', 'jane@example.com')->count());
     }
 }

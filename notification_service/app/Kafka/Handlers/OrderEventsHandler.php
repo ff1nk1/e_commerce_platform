@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\Messaging\OrderNotification;
 use App\Services\KafkaMailPipeline;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Ecotone\Modelling\Attribute\EventHandler;
+use Shop\Messaging\EnvelopeMessage;
 
 final class OrderEventsHandler
 {
@@ -15,7 +17,13 @@ final class OrderEventsHandler
         private KafkaMailPipeline $pipeline,
     ) {}
 
-    public function __invoke(ConsumerMessage $message): void
+    #[EventHandler(endpointId: 'notification.order')]
+    public function onInbound(OrderNotification $event): void
+    {
+        $this(new EnvelopeMessage($event->envelope));
+    }
+
+    public function __invoke(EnvelopeMessage $message): void
     {
         $this->pipeline->handle(
             $message,

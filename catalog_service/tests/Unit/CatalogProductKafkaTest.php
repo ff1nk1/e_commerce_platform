@@ -10,8 +10,9 @@ use App\Models\Store;
 use App\Services\CatalogService;
 use App\Services\ProductService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Log;
 use Junges\Kafka\Facades\Kafka;
+use Shop\Messaging\OutboxPublisher;
+use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
 
 final class CatalogProductKafkaTest extends TestCase
@@ -27,7 +28,8 @@ final class CatalogProductKafkaTest extends TestCase
             'slug' => 'laptops',
         ]);
 
-        Kafka::assertPublishedOn('category.created', null, function ($message) use ($category): bool {
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('category.events', null, function ($message) use ($category): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -48,7 +50,8 @@ final class CatalogProductKafkaTest extends TestCase
         $category = Category::factory()->create(['name' => 'Old', 'slug' => 'old']);
         resolve(CatalogService::class)->updateCategory($category, ['name' => 'New']);
 
-        Kafka::assertPublishedOn('category.updated', null, function ($message) use ($category): bool {
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('category.events', null, function ($message) use ($category): bool {
             $body = $message->getBody();
 
             return ($message->getHeaders()['event-type'] ?? null) === 'category.updated'
@@ -70,8 +73,10 @@ final class CatalogProductKafkaTest extends TestCase
 
         resolve(CatalogService::class)->deleteCategory($parent);
 
-        Kafka::assertPublishedOn('category.updated');
-        Kafka::assertPublishedOn('category.deleted');
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('category.events');
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('category.events');
 
         $this->assertDatabaseMissing('categories', ['id' => $parent->id]);
         $this->assertNull($child->fresh()->parent_id);
@@ -91,7 +96,8 @@ final class CatalogProductKafkaTest extends TestCase
             'price' => 199.99,
         ]);
 
-        Kafka::assertPublishedOn('product.created', null, function ($message) use ($product): bool {
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('product.events', null, function ($message) use ($product): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
 
@@ -113,7 +119,8 @@ final class CatalogProductKafkaTest extends TestCase
         $product = Product::factory()->create(['name' => 'Old phone']);
         resolve(ProductService::class)->updateProduct($product, ['name' => 'New phone']);
 
-        Kafka::assertPublishedOn('product.updated', null, function ($message) use ($product): bool {
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('product.events', null, function ($message) use ($product): bool {
             $body = $message->getBody();
 
             return ($message->getHeaders()['event-type'] ?? null) === 'product.updated'
@@ -130,42 +137,35 @@ final class CatalogProductKafkaTest extends TestCase
         $productId = $product->id;
         resolve(ProductService::class)->deleteProduct($product);
 
-        Kafka::assertPublishedOn('product.deleted', null, function ($message) use ($productId): bool {
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('product.events', null, function ($message) use ($productId): bool {
             return ($message->getBody()['data']['id'] ?? null) === $productId;
         });
 
         $this->assertDatabaseMissing('products', ['id' => $productId]);
     }
 
-    public function test_create_product_succeeds_when_kafka_fails(): void
+    public function test_create_product_rolls_back_when_the_outbox_write_fails(): void
     {
-        Kafka::shouldReceive('publish')
-            ->once()
-            ->andThrow(new \Exception('Connection to Kafka broker timed out'));
-
-        $logSpy = Log::spy();
+        $outbox = \Mockery::mock(OutboxPublisher::class);
+        $outbox->shouldReceive('publish')->once()->andThrow(new \RuntimeException('outbox down'));
+        $this->app->instance(OutboxPublisher::class, $outbox);
 
         $store = Store::factory()->create();
         $category = Category::factory()->create();
 
-        $product = resolve(ProductService::class)->createProduct([
-            'store_id' => $store->id,
-            'category_id' => $category->id,
-            'name' => 'Resilient phone',
-            'price' => 99,
-        ]);
+        try {
+            resolve(ProductService::class)->createProduct([
+                'store_id' => $store->id,
+                'category_id' => $category->id,
+                'name' => 'Resilient phone',
+                'price' => 99,
+            ]);
+            $this->fail('product create should roll back');
+        } catch (\RuntimeException) {
+        }
 
-        $this->assertDatabaseHas('products', [
-            'id' => $product->id,
-            'name' => 'Resilient phone',
-        ]);
-
-        $logSpy->shouldHaveReceived('error')
-            ->once()
-            ->withArgs(function ($message, array $context) use ($product): bool {
-                return $message === 'Kafka publish failed on product.created'
-                    && ($context['product_id'] ?? null) === $product->id;
-            });
+        $this->assertDatabaseMissing('products', ['name' => 'Resilient phone']);
     }
 
     public function test_new_product_defaults_to_published(): void
@@ -196,7 +196,8 @@ final class CatalogProductKafkaTest extends TestCase
         $unpublished = resolve(ProductService::class)->togglePublished($product);
 
         $this->assertFalse($unpublished->is_published);
-        Kafka::assertPublishedOn('product.unpublished', null, function ($message) use ($product): bool {
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('product.events', null, function ($message) use ($product): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();
             $data = $body['data'] ?? [];
@@ -222,7 +223,8 @@ final class CatalogProductKafkaTest extends TestCase
         $published = resolve(ProductService::class)->togglePublished($unpublished);
 
         $this->assertTrue($published->is_published);
-        Kafka::assertPublishedOn('product.published', null, function ($message) use ($product): bool {
+        OutboxQueue::flush();
+        Kafka::assertPublishedOn('product.events', null, function ($message) use ($product): bool {
             $body = $message->getBody();
             $data = $body['data'] ?? [];
 

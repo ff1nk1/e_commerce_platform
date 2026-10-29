@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\ProductEventsHandler;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use App\Messaging\ProductLifecycle;
 use Mockery;
 use Mockery\MockInterface;
 use OpenSearch\Client;
 use OpenSearch\Namespaces\IndicesNamespace;
+use Shop\Messaging\InboundEnvelope;
 use Tests\TestCase;
 
 final class ProductEventsHandlerTest extends TestCase
@@ -62,7 +63,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        $this->app->make(ProductEventsHandler::class)($message);
+        $this->app->make(ProductEventsHandler::class)->onInbound($message);
     }
 
     public function test_product_updated_preserves_stock(): void
@@ -91,7 +92,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        $this->app->make(ProductEventsHandler::class)($message);
+        $this->app->make(ProductEventsHandler::class)->onInbound($message);
     }
 
     public function test_product_deleted_removes_document(): void
@@ -113,7 +114,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        $this->app->make(ProductEventsHandler::class)($message);
+        $this->app->make(ProductEventsHandler::class)->onInbound($message);
     }
 
     public function test_falls_back_to_body_event_when_header_missing(): void
@@ -133,7 +134,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        $this->app->make(ProductEventsHandler::class)($message);
+        $this->app->make(ProductEventsHandler::class)->onInbound($message);
     }
 
     public function test_invalid_payload_is_skipped(): void
@@ -151,7 +152,7 @@ final class ProductEventsHandlerTest extends TestCase
             ],
         ]);
 
-        $this->app->make(ProductEventsHandler::class)($message);
+        $this->app->make(ProductEventsHandler::class)->onInbound($message);
     }
 
     public function test_unknown_event_type_is_ignored(): void
@@ -166,7 +167,7 @@ final class ProductEventsHandlerTest extends TestCase
             'data' => ['id' => 1, 'name' => 'X', 'store_id' => 1],
         ]);
 
-        $this->app->make(ProductEventsHandler::class)($message);
+        $this->app->make(ProductEventsHandler::class)->onInbound($message);
     }
 
     public function test_missing_data_or_id_is_skipped(): void
@@ -176,11 +177,11 @@ final class ProductEventsHandlerTest extends TestCase
         $client->shouldNotReceive('delete');
         $this->app->instance(Client::class, $client);
 
-        $this->app->make(ProductEventsHandler::class)(
+        $this->app->make(ProductEventsHandler::class)->onInbound(
             $this->consumerMessage('product.created', ['event' => 'product.created'])
         );
 
-        $this->app->make(ProductEventsHandler::class)(
+        $this->app->make(ProductEventsHandler::class)->onInbound(
             $this->consumerMessage('product.deleted', [
                 'event' => 'product.deleted',
                 'data' => ['name' => 'No id'],
@@ -210,15 +211,18 @@ final class ProductEventsHandlerTest extends TestCase
     /**
      * @param  array<string, mixed>  $body
      */
-    private function consumerMessage(?string $eventType, array $body): ConsumerMessage&MockInterface
+    private function consumerMessage(?string $eventType, array $body): ProductLifecycle
     {
         $headers = $eventType === null ? [] : ['event-type' => $eventType];
 
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn($headers);
-        $message->shouldReceive('getBody')->andReturn($body);
-
-        return $message;
+        return new ProductLifecycle(new InboundEnvelope(
+            eventType: $eventType ?? '',
+            messageId: 'test-'.($eventType ?? 'none'),
+            topic: 'product.events',
+            key: null,
+            sagaId: null,
+            payload: $body,
+            headers: $headers,
+        ));
     }
 }

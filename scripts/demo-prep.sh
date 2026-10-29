@@ -9,8 +9,14 @@
 #   docker compose up -d
 #
 # Order matters: search indices before catalog seed (Kafka republish),
-# recommendation schema + product consumer before catalog seed (AI index),
-# catalog before order seed (ProductSnapshotSeeder reads catalog DB).
+# recommendation schema before catalog seed, catalog before order seed
+# (ProductSnapshotSeeder reads catalog DB).
+#
+# Messaging is Ecotone: publishers write the kafka-outbox channel
+# (`ecotone:run kafka-outbox`), topic consumers only enqueue inbox, and
+# `ecotone:run inbox` runs the handlers. Product embeddings are Gemini
+# embedContent (LLM_DRIVER=gemini, GEMINI_EMBEDDING_MODEL) inside
+# recommendation_kafka_inbox_worker — not inside the Kafka consumer.
 #
 # Analytic ClickHouse migrations run automatically when analytic_api /
 # analytic_consumers start — no artisan step here.
@@ -36,6 +42,8 @@ declare -a RESULTS=()
 # Gemini embed of ~45 seeded products can take several minutes.
 RECO_INDEX_TIMEOUT_SEC="${RECO_INDEX_TIMEOUT_SEC:-600}"
 RECO_INDEX_POLL_SEC="${RECO_INDEX_POLL_SEC:-5}"
+# OpenSearch (and other healthchecked services) stay "running" while the JVM boots.
+READY_TIMEOUT_SEC="${READY_TIMEOUT_SEC:-120}"
 
 log() { printf '%b\n' "$*"; }
 
@@ -47,6 +55,36 @@ require_running() {
     return 1
   fi
   return 0
+}
+
+# Health is empty when the service has no healthcheck.
+service_health() {
+  "${COMPOSE[@]}" ps --format '{{.Health}}' "$1" 2>/dev/null | head -1
+}
+
+wait_until_ready() {
+  local svc="$1"
+  local health start elapsed
+  health="$(service_health "$svc")"
+  if [[ -z "$health" || "$health" == healthy* ]]; then
+    return 0
+  fi
+
+  log "  ${svc} is ${health}, waiting up to ${READY_TIMEOUT_SEC}s"
+  start=$(date +%s)
+  while true; do
+    health="$(service_health "$svc")"
+    if [[ "$health" == healthy* ]]; then
+      elapsed=$(( $(date +%s) - start ))
+      log "  ${svc} is healthy (${elapsed}s)"
+      return 0
+    fi
+    if [[ $(( $(date +%s) - start )) -ge $READY_TIMEOUT_SEC ]]; then
+      log "${RED}ERROR:${NC} ${svc} is still ${health:-unknown} after ${READY_TIMEOUT_SEC}s"
+      return 1
+    fi
+    sleep 2
+  done
 }
 
 should_run() {
@@ -114,6 +152,24 @@ echo (int) ($json["indexed_products"] ?? 0);
 '
 }
 
+# Inbox worker is the process that calls Gemini embedContent.
+require_gemini_embed() {
+  "${COMPOSE[@]}" exec -T recommendation_kafka_inbox_worker php -r '
+require "vendor/autoload.php";
+$app = require "bootstrap/app.php";
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$driver = (string) config("llm.driver");
+$key = trim((string) config("llm.gemini.api_key"));
+$model = (string) config("llm.gemini.embedding_model");
+$placeholder = $key === "" || $key === "your_api_key_here" || str_contains(strtolower($key), "dummy");
+if ($driver !== "gemini" || $placeholder) {
+    fwrite(STDERR, "driver={$driver} usable_key=".($placeholder ? "no" : "yes")."\n");
+    exit(1);
+}
+echo "driver={$driver} model={$model}\n";
+'
+}
+
 wait_for_recommendation_index() {
   local label="recommendation-index-wait"
   local expected indexed
@@ -121,8 +177,22 @@ wait_for_recommendation_index() {
   local deadline
 
   log ""
-  log "${BOLD}═══ [${label}] wait for product_catalog embeddings ═══${NC}"
+  log "${BOLD}═══ [${label}] wait for Gemini product_catalog embeddings ═══${NC}"
   start=$(date +%s)
+
+  local gemini_info
+  if ! gemini_info="$(require_gemini_embed 2>&1)"; then
+    log "${RED}FAIL${NC} [${label}] Gemini embeddings are not configured in recommendation_kafka_inbox_worker"
+    log "  Set LLM_DRIVER=gemini and a real GEMINI_API_KEY in recommendation_service/.env,"
+    log "  then: docker compose up -d --force-recreate recommendation_app recommendation_kafka_inbox_worker recommendation_kafka_product_consumer"
+    if [[ -n "$gemini_info" ]]; then
+      log "  ${gemini_info}"
+    fi
+    RESULTS+=("FAIL ${label}")
+    FAILED=1
+    return 1
+  fi
+  log "Embeddings via Gemini (${gemini_info})"
 
   if ! expected="$(catalog_product_count 2>/dev/null)"; then
     log "${RED}FAIL${NC} [${label}] cannot read catalog product count"
@@ -159,7 +229,8 @@ wait_for_recommendation_index() {
       end=$(date +%s)
       elapsed=$((end - start))
       log "${RED}FAIL${NC} [${label}] timeout after ${elapsed}s (indexed=${indexed:-?}/${expected})"
-      log "  Check GEMINI_API_KEY in recommendation .env and logs of recommendation_kafka_product_consumer."
+      log "  Check GEMINI_API_KEY and logs of recommendation_kafka_inbox_worker (Gemini embedContent)."
+      log "  Kafka consumers only enqueue inbox; embeddings run in that worker."
       RESULTS+=("FAIL ${label}")
       FAILED=1
       return 1
@@ -197,23 +268,29 @@ if should_run notification; then
   add_need notification_app
 fi
 if should_run search; then
-  add_need search_app search_opensearch
+  add_need search_app search_db search_opensearch
 fi
 if should_run catalog; then
-  add_need catalog_app kafka catalog_kafka_order_consumer catalog_kafka_outbox_worker \
+  add_need catalog_app kafka \
+    catalog_kafka_outbox_worker catalog_kafka_order_consumer catalog_kafka_inbox_worker \
     search_kafka_product_consumer search_kafka_category_consumer search_kafka_stock_consumer \
-    recommendation_app recommendation_db recommendation_kafka_product_consumer
+    search_kafka_inbox_worker \
+    recommendation_app recommendation_db \
+    recommendation_kafka_product_consumer recommendation_kafka_stock_consumer \
+    recommendation_kafka_inbox_worker
 fi
 if should_run order; then
   add_need order_app catalog_db kafka \
-    order_kafka_outbox_worker order_kafka_stock_consumer \
-    catalog_kafka_order_consumer catalog_kafka_outbox_worker
+    order_kafka_outbox_worker order_kafka_stock_consumer order_kafka_inbox_worker \
+    catalog_kafka_outbox_worker catalog_kafka_order_consumer catalog_kafka_inbox_worker
 fi
 if should_run recommendation; then
-  add_need recommendation_app recommendation_db recommendation_kafka_product_consumer
-  # recommendation-only path republishes from catalog via Kafka
+  add_need recommendation_app recommendation_db \
+    recommendation_kafka_product_consumer recommendation_kafka_stock_consumer \
+    recommendation_kafka_inbox_worker
+  # recommendation-only path republishes from catalog; outbox worker relays to Kafka.
   if ! should_run catalog; then
-    add_need catalog_app kafka
+    add_need catalog_app kafka catalog_kafka_outbox_worker
   fi
 fi
 
@@ -239,6 +316,16 @@ if [[ $CHECK_FAIL -ne 0 ]]; then
   log "  docker compose up -d ${UNIQUE[*]}"
   exit 1
 fi
+
+READY_FAIL=0
+for s in "${UNIQUE[@]}"; do
+  if ! wait_until_ready "$s"; then
+    READY_FAIL=1
+  fi
+done
+if [[ $READY_FAIL -ne 0 ]]; then
+  exit 1
+fi
 log "${GREEN}All required containers are running.${NC}"
 
 TOTAL_START=$(date +%s)
@@ -251,6 +338,7 @@ if should_run notification; then
   run_step notification notification_app php artisan migrate --seed --force
 fi
 if should_run search; then
+  run_step search-migrate search_app php artisan migrate --force
   # Wipe stale docs from prior seeds (truncate does not emit product.deleted).
   run_step search search_app php artisan opensearch:setup --recreate --force
 fi
@@ -305,7 +393,7 @@ done
 
 log ""
 log "${YELLOW}Note:${NC} analytic ClickHouse schema migrates on analytic_api / analytic_consumers startup."
-log "${YELLOW}Note:${NC} recommendation product_catalog is filled via Kafka after catalog seed (needs GEMINI_API_KEY)."
+log "${YELLOW}Note:${NC} product_catalog embeddings are Gemini embedContent, run by recommendation_kafka_inbox_worker after catalog seed (needs GEMINI_API_KEY)."
 
 if [[ $FAILED -ne 0 ]]; then
   log ""

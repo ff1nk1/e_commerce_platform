@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Kafka\Handlers\UserEventsHandler;
 use App\Mail\MailableRegistry;
 use App\Mail\WelcomeMail;
+use App\Messaging\UserNotification;
 use App\Models\EmailLog;
 use App\Services\MailDeliveryService;
 use Illuminate\Mail\PendingMail;
@@ -14,7 +15,8 @@ use Illuminate\Support\Facades\Mail;
 use Junges\Kafka\Facades\Kafka;
 use Mockery;
 use Mockery\MockInterface;
-use Tests\Fakes\FakeConsumerMessage;
+use Shop\Messaging\InboundEnvelope;
+use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
 
 final class UserEventsHandlerTest extends TestCase
@@ -41,7 +43,7 @@ final class UserEventsHandlerTest extends TestCase
             'user_id' => 7,
         ], 'user.registered');
 
-        resolve(UserEventsHandler::class)($message);
+        resolve(UserEventsHandler::class)->onInbound($message);
 
         Mail::assertSent(WelcomeMail::class, function (WelcomeMail $mail) {
             return $mail->hasTo('new@example.com');
@@ -59,7 +61,7 @@ final class UserEventsHandlerTest extends TestCase
         Mail::fake();
         Kafka::fake();
 
-        resolve(UserEventsHandler::class)($this->message([
+        resolve(UserEventsHandler::class)->onInbound($this->message([
             'email' => 'x@example.com',
             'name' => 'X',
         ], 'user.updated'));
@@ -74,12 +76,12 @@ final class UserEventsHandlerTest extends TestCase
         Mail::fake();
         Kafka::fake();
 
-        $message = new FakeConsumerMessage([
+        $message = $this->message([
             'email' => 'x@example.com',
             'name' => 'X',
-        ], [], '1');
+        ], '', '1', []);
 
-        resolve(UserEventsHandler::class)($message);
+        resolve(UserEventsHandler::class)->onInbound($message);
 
         Mail::assertNothingSent();
         $this->assertSame(0, EmailLog::query()->count());
@@ -98,8 +100,8 @@ final class UserEventsHandlerTest extends TestCase
             'laravel-kafka::message-id' => 'idempotent-user-1',
         ]);
 
-        resolve(UserEventsHandler::class)($message);
-        resolve(UserEventsHandler::class)($message);
+        resolve(UserEventsHandler::class)->onInbound($message);
+        resolve(UserEventsHandler::class)->onInbound($message);
 
         Mail::assertSent(WelcomeMail::class, 1);
         $this->assertSame(1, EmailLog::query()->where('message_id', 'idempotent-user-1')->count());
@@ -127,7 +129,7 @@ final class UserEventsHandlerTest extends TestCase
         $this->app->instance(MailDeliveryService::class, $service);
 
         $handler = resolve(UserEventsHandler::class);
-        $handler($this->message([
+        $handler->onInbound($this->message([
             'email' => 'dlq@example.com',
             'name' => 'DLQ User',
             'user_id' => 42,
@@ -140,6 +142,7 @@ final class UserEventsHandlerTest extends TestCase
         $this->assertEquals($maxRetries, $log->retries);
         $this->assertStringContainsString('SMTP permanently down', (string) $log->error_message);
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('user.events.dlq');
     }
 
@@ -148,13 +151,13 @@ final class UserEventsHandlerTest extends TestCase
         Kafka::fake();
         Mail::fake();
 
-        $message = new FakeConsumerMessage(
+        $message = $this->message(
             ['name' => 'No Email'],
-            ['event-type' => 'user.registered'],
+            'user.registered',
             '1',
         );
 
-        resolve(UserEventsHandler::class)($message);
+        resolve(UserEventsHandler::class)->onInbound($message);
 
         $this->assertSame(0, EmailLog::query()->count());
         Kafka::assertNothingPublished();
@@ -167,13 +170,23 @@ final class UserEventsHandlerTest extends TestCase
     private function message(
         array $body,
         string $eventType,
-        string $key = '7',
+        ?string $key = '7',
         ?array $headers = null,
-    ): FakeConsumerMessage {
-        return new FakeConsumerMessage(
-            $body,
-            $headers ?? ['event-type' => $eventType],
-            $key,
-        );
+    ): UserNotification {
+        $headers ??= $eventType === '' ? [] : ['event-type' => $eventType];
+        $stringHeaders = [];
+        foreach ($headers as $name => $value) {
+            $stringHeaders[(string) $name] = is_scalar($value) ? (string) $value : '';
+        }
+
+        return new UserNotification(new InboundEnvelope(
+            eventType: $eventType,
+            messageId: $stringHeaders['laravel-kafka::message-id'] ?? 'test-'.$eventType.'-'.($key ?? 'none'),
+            topic: 'user.events',
+            key: $key,
+            sagaId: null,
+            payload: $body,
+            headers: $stringHeaders,
+        ));
     }
 }

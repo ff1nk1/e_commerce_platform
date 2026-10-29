@@ -29,6 +29,8 @@ return RectorConfig::configure()
         $serviceRoot.'/vendor',
         $serviceRoot.'/storage',
         $serviceRoot.'/bootstrap/cache',
+        // Reads $_SERVER/$_ENV before Laravel boots and writes them back.
+        $serviceRoot.'/tests/Concerns/SyncsDotEnvKeys.php',
     ])
     ->withComposerBased(laravel: true)
     ->withSets([

@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
-use App\Console\Commands\KafkaOutboxWorker;
-use App\Kafka\Handlers\StockEventsHandler;
 use App\Models\Order;
-use App\Models\OutboxEvent;
-use App\Services\SagaStepGuard;
 use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
+use Shop\Messaging\OutboxQueue;
 
 final class SagaInsufficientStockFlowTest extends IntegrationTestCase
 {
@@ -33,28 +30,25 @@ final class SagaInsufficientStockFlowTest extends IntegrationTestCase
         $orderId = (int) $create->json('id');
         $sagaId = Order::query()->findOrFail($orderId)->saga_id;
 
-        resolve(KafkaOutboxWorker::class)->processBatch();
+        OutboxQueue::flush();
 
         // Direct handler invoke (Kafka consume is flaky with live brokers/workers).
-        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.reservation_failed', [
+        $this->deliverStock('stock.reservation_failed', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'reason' => 'Not enough stock',
-        ]));
+        ]);
 
         $this->assertSame('cancelled', Order::query()->findOrFail($orderId)->status->value);
-        $this->assertSame(
-            SagaStepGuard::STATUS_FAILED,
-            resolve(SagaStepGuard::class)->get($sagaId, 'stock.reservation_failed')['status'] ?? null
-        );
 
-        $cancelled = OutboxEvent::query()->where('event_type', 'order.cancelled')->first();
+        $cancelled = OutboxQueue::first('order.cancelled');
         $this->assertNotNull($cancelled);
         $this->assertSame('insufficient_stock', $cancelled->payload['reason'] ?? null);
         $this->assertSame('scarce@example.com', $cancelled->payload['email'] ?? null);
 
-        resolve(KafkaOutboxWorker::class)->processBatch();
+        OutboxQueue::flush();
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             $headers = $message->getHeaders();
             $body = $message->getBody();

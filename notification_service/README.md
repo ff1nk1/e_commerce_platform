@@ -9,7 +9,7 @@ Laravel-сервис **писем и журнала отправок**. Слуш
 | Хранилище | Что лежит |
 |-----------|-----------|
 | MongoDB `email_logs` | статус, payload, retries, признак DLQ |
-| SQLite | пустое подключение Laravel по умолчанию, очереди не используются |
+| Postgres `notification_db` | Ecotone outbox/inbox |
 | Mailpit | локальный SMTP (`:1025`), UI `:8025` |
 
 ## Kafka

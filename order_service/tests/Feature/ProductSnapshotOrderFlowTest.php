@@ -6,26 +6,18 @@ namespace Tests\Feature;
 
 use App\Contracts\IdempotencyStore;
 use App\Kafka\Handlers\ProductEventsHandler;
+use App\Messaging\ProductSnapshotReceived;
 use App\Services\IdempotencyService;
 use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
-use Junges\Kafka\Contracts\ConsumerMessage;
 use Mockery;
-use Mockery\MockInterface;
-use Tests\Concerns\BindsInMemorySagaStepGuard;
+use Shop\Messaging\InboundEnvelope;
 use Tests\TestCase;
 
 final class ProductSnapshotOrderFlowTest extends TestCase
 {
-    use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->bindInMemorySagaStepGuard();
-    }
 
     protected function tearDown(): void
     {
@@ -46,21 +38,24 @@ final class ProductSnapshotOrderFlowTest extends TestCase
 
     public function test_handler_snapshot_allows_order_create(): void
     {
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn(['event-type' => 'product.created']);
-        $message->shouldReceive('getBody')->andReturn([
-            'event' => 'product.created',
-            'timestamp' => now()->toIso8601String(),
-            'data' => [
-                'id' => 136,
-                'name' => 'че то новое',
-                'price' => '6767.00',
-                'store_id' => 1,
+        resolve(ProductEventsHandler::class)->onInbound(new ProductSnapshotReceived(new InboundEnvelope(
+            eventType: 'product.created',
+            messageId: 'test-product-created-136',
+            topic: 'product.events',
+            key: '136',
+            sagaId: null,
+            payload: [
+                'event' => 'product.created',
+                'timestamp' => now()->toIso8601String(),
+                'data' => [
+                    'id' => 136,
+                    'name' => 'че то новое',
+                    'price' => '6767.00',
+                    'store_id' => 1,
+                ],
             ],
-        ]);
-
-        (new ProductEventsHandler)($message);
+            headers: ['event-type' => 'product.created'],
+        )));
 
         $this->bindScopedIdempotencyMock(expectPut: true);
 
@@ -87,20 +82,23 @@ final class ProductSnapshotOrderFlowTest extends TestCase
 
     public function test_http_order_create_uses_snapshot_price(): void
     {
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn(['event-type' => 'product.updated']);
-        $message->shouldReceive('getBody')->andReturn([
-            'event' => 'product.updated',
-            'data' => [
-                'id' => 137,
-                'name' => 'f',
-                'price' => '111.00',
-                'store_id' => 1,
+        resolve(ProductEventsHandler::class)->onInbound(new ProductSnapshotReceived(new InboundEnvelope(
+            eventType: 'product.updated',
+            messageId: 'test-product-updated-137',
+            topic: 'product.events',
+            key: '137',
+            sagaId: null,
+            payload: [
+                'event' => 'product.updated',
+                'data' => [
+                    'id' => 137,
+                    'name' => 'f',
+                    'price' => '111.00',
+                    'store_id' => 1,
+                ],
             ],
-        ]);
-
-        (new ProductEventsHandler)($message);
+            headers: ['event-type' => 'product.updated'],
+        )));
 
         $this->bindScopedIdempotencyMock(expectPut: true);
 

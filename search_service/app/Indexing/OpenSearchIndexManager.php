@@ -209,6 +209,7 @@ final class OpenSearchIndexManager
             ],
             'quantity' => ['type' => 'integer'],
             'in_stock' => ['type' => 'boolean'],
+            'is_published' => ['type' => 'boolean'],
             'attributes' => [
                 'type' => 'nested',
                 'properties' => [

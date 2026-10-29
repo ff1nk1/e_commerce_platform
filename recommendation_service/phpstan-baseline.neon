@@ -101,15 +101,3 @@ parameters:
 			identifier: offsetAccess.notFound
 			count: 1
 			path: tests/Unit/AttributeResolverTest.php
-
-		-
-			message: '#^Cannot call method hasHeader\(\) on array\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/Unit/GeminiLlmClientTest.php
-
-		-
-			message: '#^Cannot call method url\(\) on array\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: tests/Unit/GeminiLlmClientTest.php

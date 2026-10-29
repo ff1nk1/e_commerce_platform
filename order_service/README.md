@@ -27,7 +27,7 @@ flowchart LR
 - Checkout/webhooks: [`app/Services/Payment/`](app/Services/Payment/)
 - Outbox: [`app/Services/OutboxWriter.php`](app/Services/OutboxWriter.php)
 - Routes: [`routes/api.php`](routes/api.php)
-- Workers: `kafka:consume:product-events`, `kafka:consume:stock-events`, `kafka:outbox:work` ([`compose.yml`](compose.yml))
+- Workers: `kafka:consume:product-events`, `kafka:consume:stock-events`, `ecotone:run kafka-outbox`, `ecotone:run inbox` ([`compose.yml`](compose.yml))
 
 ---
 
@@ -128,7 +128,7 @@ sequenceDiagram
 **Produce** (topic `order.events` через outbox):  
 `order.created`, `order.cancelled`, `order.paid`, `order.confirmed`, `order.shipped`, `stock.release_requested`, `stock.commit_requested`.
 
-Паттерн: domain event в той же DB TX → listener пишет `outbox_events` → `kafka:outbox:work` публикует и удаляет строку.
+Паттерн: domain event в той же DB TX → `OutboxPublisher` пишет канал `kafka-outbox` → `ecotone:run kafka-outbox` публикует в Kafka.
 
 ---
 

@@ -60,20 +60,18 @@ JWT и роли проверяет только auth. [`ProxyService`](auth_serv
 
 | Топик | Кто пишет | Кто читает |
 |-------|-----------|------------|
-| `user.events` (`user.registered`) | auth, sync | notification (письмо), analytic |
-| `product.created`, `product.updated` | catalog, sync | order (snapshots), search, recommendation, analytic |
-| `product.deleted` | catalog, sync | search, recommendation |
-| `product.published`, `product.unpublished` | catalog, sync | recommendation |
-| `category.created`, `category.updated`, `category.deleted` | catalog, sync | search |
+| `user.events` (`user.registered`) | auth, outbox | notification (письмо), analytic |
+| `product.events` (`product.created`, `product.updated`, `product.deleted`, `product.published`, `product.unpublished`) | catalog, outbox | order (snapshots: created/updated), search, recommendation, analytic (created/updated) |
+| `category.events` (`category.created`, `category.updated`, `category.deleted`) | catalog, outbox | search |
 | `stock.events` (`stock.reserved`, `stock.reservation_failed`) | catalog, outbox | order |
 | `catalog.events` (`stock.changed`) | catalog, outbox | search, recommendation |
 | `order.events` | order, outbox | catalog (`order.created`, `stock.release_requested`, `stock.commit_requested`), notification (`order.paid`, `order.confirmed`, `order.cancelled`), analytic (`order.created`, `order.paid`, `order.shipped`, `order.cancelled`) |
-| `search.events` (`search.performed`) | search, sync | analytic |
+| `search.events` (`search.performed`) | search, outbox | analytic |
 | `user.events.dlq`, `order.events.dlq` | notification | — |
 
 `order.confirmed` читает только notification. `order.shipped` читает только analytic и пишет его как стадию `completed`. Catalog оба типа пропускает.
 
-События товара и категории catalog публикует сразу. Ответы saga по остаткам и весь lifecycle заказа идут через transactional outbox (`kafka:outbox:work`).
+Все исходящие события пишутся в DBAL-канал `kafka-outbox` в той же транзакции, что и домен, и уходят воркером `php artisan ecotone:run kafka-outbox`. Входящие сообщения сначала попадают в `inbox`, затем их разбирает `php artisan ecotone:run inbox`.
 
 ### Вне стека
 

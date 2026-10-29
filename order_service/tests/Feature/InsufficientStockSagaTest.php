@@ -4,17 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Kafka\Handlers\StockEventsHandler;
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Junges\Kafka\Contracts\ConsumerMessage;
 use Mockery;
-use Mockery\MockInterface;
+use Shop\Messaging\OutboxQueue;
 use Tests\Concerns\BindsFakePaymentGateway;
 use Tests\Concerns\BindsInMemoryIdempotency;
-use Tests\Concerns\BindsInMemorySagaStepGuard;
+use Tests\Concerns\UsesKafka;
 use Tests\TestCase;
 
 /**
@@ -25,14 +22,13 @@ final class InsufficientStockSagaTest extends TestCase
 {
     use BindsFakePaymentGateway;
     use BindsInMemoryIdempotency;
-    use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
+    use UsesKafka;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->bindInMemoryIdempotency();
-        $this->bindInMemorySagaStepGuard();
     }
 
     protected function tearDown(): void
@@ -65,20 +61,18 @@ final class InsufficientStockSagaTest extends TestCase
         $orderId = (int) $create->json('id');
         $sagaId = (string) Order::query()->findOrFail($orderId)->saga_id;
 
-        $this->assertDatabaseHas('outbox_events', [
-            'event_type' => 'order.created',
-        ]);
+        $this->assertNotNull(OutboxQueue::first('order.created'));
 
-        resolve(StockEventsHandler::class)($this->stockMessage('stock.reservation_failed', [
+        $this->deliverStock('stock.reservation_failed', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'reason' => 'Not enough stock',
-        ]));
+        ]);
 
         $show = $this->getJson('/api/orders/'.$orderId.'?user_id=11');
         $show->assertOk()->assertJsonPath('status', 'cancelled');
 
-        $cancelled = OutboxEvent::query()->where('event_type', 'order.cancelled')->first();
+        $cancelled = OutboxQueue::first('order.cancelled');
         $this->assertNotNull($cancelled);
         $this->assertSame($orderId, $cancelled->payload['order_id']);
         $this->assertSame('buyer11@example.com', $cancelled->payload['email']);
@@ -86,7 +80,7 @@ final class InsufficientStockSagaTest extends TestCase
 
         $this->assertSame(
             0,
-            OutboxEvent::query()->where('event_type', 'stock.release_requested')->count()
+            OutboxQueue::count('stock.release_requested')
         );
 
         $stripe = $this->mockPaymentGateway();
@@ -122,11 +116,11 @@ final class InsufficientStockSagaTest extends TestCase
         $orderId = (int) $create->json('id');
         $sagaId = (string) Order::query()->findOrFail($orderId)->saga_id;
 
-        resolve(StockEventsHandler::class)($this->stockMessage('stock.reserved', [
+        $this->deliverStock('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'status' => 'success',
-        ]));
+        ]);
 
         $this->assertSame('awaiting_payment', $this->getJson('/api/orders/'.$orderId.'?user_id=11')->json('status'));
 
@@ -142,18 +136,5 @@ final class InsufficientStockSagaTest extends TestCase
         ], [
             'Idempotency-Key' => 'ok-pay-1',
         ])->assertOk()->assertJsonPath('checkout_url', 'https://checkout.stripe.com/c/pay/cs_ok');
-    }
-
-    /**
-     * @param  array<string, mixed>  $body
-     */
-    private function stockMessage(string $eventType, array $body): ConsumerMessage&MockInterface
-    {
-        /** @var ConsumerMessage&MockInterface $message */
-        $message = Mockery::mock(ConsumerMessage::class);
-        $message->shouldReceive('getHeaders')->andReturn(['event-type' => $eventType]);
-        $message->shouldReceive('getBody')->andReturn($body);
-
-        return $message;
     }
 }

@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
-use App\Console\Commands\KafkaOutboxWorker;
-use App\Kafka\Handlers\StockEventsHandler;
 use App\Models\Order;
-use App\Models\OutboxEvent;
-use App\Services\SagaStepGuard;
 use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
+use Shop\Messaging\OutboxQueue;
 
 final class SagaUserCancelCompensationTest extends IntegrationTestCase
 {
@@ -33,13 +30,13 @@ final class SagaUserCancelCompensationTest extends IntegrationTestCase
         $orderId = (int) $create->json('id');
         $sagaId = Order::query()->findOrFail($orderId)->saga_id;
 
-        resolve(KafkaOutboxWorker::class)->processBatch();
+        OutboxQueue::flush();
 
-        resolve(StockEventsHandler::class)($this->stubConsumerMessage('stock.reserved', [
+        $this->deliverStock('stock.reserved', [
             'saga_id' => $sagaId,
             'order_id' => $orderId,
             'status' => 'success',
-        ]));
+        ]);
 
         $this->assertSame('awaiting_payment', Order::query()->findOrFail($orderId)->status->value);
 
@@ -47,25 +44,22 @@ final class SagaUserCancelCompensationTest extends IntegrationTestCase
             ->assertOk()
             ->assertJsonPath('status', 'cancelled');
 
-        $this->assertSame(
-            SagaStepGuard::STATUS_DONE,
-            resolve(SagaStepGuard::class)->get($sagaId, 'stock.release_requested')['status'] ?? null
-        );
-
-        $cancelled = OutboxEvent::query()->where('event_type', 'order.cancelled')->first();
-        $release = OutboxEvent::query()->where('event_type', 'stock.release_requested')->first();
+        $cancelled = OutboxQueue::first('order.cancelled');
+        $release = OutboxQueue::first('stock.release_requested');
         $this->assertNotNull($cancelled);
         $this->assertNotNull($release);
         $this->assertSame('user_cancelled', $cancelled->payload['reason'] ?? null);
         $this->assertSame('cancel@example.com', $cancelled->payload['email'] ?? null);
         $this->assertSame($sagaId, $release->payload['saga_id'] ?? null);
 
-        resolve(KafkaOutboxWorker::class)->processBatch();
+        OutboxQueue::flush();
 
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             return ($message->getHeaders()['event-type'] ?? null) === 'order.cancelled'
                 && (int) ($message->getBody()['order_id'] ?? 0) === $orderId;
         });
+        OutboxQueue::flush();
         Kafka::assertPublishedOn('order.events', null, function ($message) use ($orderId): bool {
             return ($message->getHeaders()['event-type'] ?? null) === 'stock.release_requested'
                 && (int) ($message->getBody()['order_id'] ?? 0) === $orderId;

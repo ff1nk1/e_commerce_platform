@@ -7,6 +7,8 @@ namespace App\Services\Order;
 use App\Contracts\PaymentGateway;
 use App\Domain\OrderStatus;
 use App\Events\OrderCancelled;
+use App\Messaging\FulfillmentEvents;
+use App\Messaging\OrderCancelRequested;
 use App\Models\Order;
 use App\Models\Payment;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +19,7 @@ final class CancelOrderService
 {
     public function __construct(
         private OrderPayloadFactory $payloads,
-        private RequestStockRelease $stockRelease,
+        private FulfillmentEvents $fulfillment,
         private PaymentGateway $payments,
     ) {}
 
@@ -47,7 +49,8 @@ final class CancelOrderService
             ));
 
             if ($previousStatus === OrderStatus::AwaitingPayment) {
-                $this->stockRelease->dispatch($order);
+                $sagaId = is_string($order->saga_id) ? $order->saga_id : '';
+                $this->fulfillment->publish(new OrderCancelRequested($sagaId), $sagaId);
                 $wroteRelease = true;
             }
 
@@ -55,7 +58,6 @@ final class CancelOrderService
         });
 
         if ($wroteRelease) {
-            $this->stockRelease->recordSagaStep($order);
             $this->expireOpenCheckoutSessions($order);
         }
 

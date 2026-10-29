@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Messaging\SearchInboundEventFactory;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use OpenSearch\Client;
 use OpenSearch\ClientBuilder;
+use Shop\Messaging\InboundEventFactory;
 
 final class AppServiceProvider extends ServiceProvider
 {
@@ -18,6 +20,7 @@ final class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(InboundEventFactory::class, SearchInboundEventFactory::class);
         $this->app->singleton(function (): Client {
             $hosts = config('opensearch.hosts', ['http://search_opensearch:9200']);
 

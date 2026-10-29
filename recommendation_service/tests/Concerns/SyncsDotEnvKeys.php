@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Concerns;
 
-use Illuminate\Support\Env;
-use Illuminate\Support\Facades\Request;
-
 /**
  * Docker may start the app with empty GEMINI_API_KEY in $_SERVER. Laravel Env
  * prefers $_SERVER over the bind-mounted .env file, so re-apply from .env
@@ -34,7 +31,8 @@ trait SyncsDotEnvKeys
 
     private function nonEmptyEnv(string $key): ?string
     {
-        foreach ([Env::get($key), Request::server($key) ?? null, getenv($key)] as $candidate) {
+        $fromProcess = getenv($key);
+        foreach ([$_SERVER[$key] ?? null, $_ENV[$key] ?? null, $fromProcess === false ? null : $fromProcess] as $candidate) {
             if ($candidate === false || $candidate === null) {
                 continue;
             }

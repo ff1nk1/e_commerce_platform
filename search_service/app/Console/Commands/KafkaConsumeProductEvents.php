@@ -4,25 +4,22 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Console\Commands\Concerns\RunsKafkaConsumer;
-use App\Kafka\Handlers\ProductEventsHandler;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
-use Illuminate\Console\Command;
+use Shop\Messaging\Console\ConsumeKafkaCommand;
+use Shop\Messaging\Topics;
 
-#[Description('Консьюмер Search Service для product.created / product.updated / product.deleted')]
+#[Description('Консьюмер Search Service для product.events')]
 #[Signature('kafka:consume:product-events')]
-final class KafkaConsumeProductEvents extends Command
+final class KafkaConsumeProductEvents extends ConsumeKafkaCommand
 {
-    use RunsKafkaConsumer;
-
-    public function handle(): int
+    protected function topics(): array
     {
-        return $this->runKafkaConsumer(
-            ['product.created', 'product.updated', 'product.deleted'],
-            'search-service-products-v1',
-            ProductEventsHandler::class,
-            'Запуск консьюмера для топиков product.created, product.updated, product.deleted...',
-        );
+        return [Topics::PRODUCT_EVENTS];
+    }
+
+    protected function group(): string
+    {
+        return (string) config('kafka.consumer_groups.products', 'search-service-products-v1');
     }
 }

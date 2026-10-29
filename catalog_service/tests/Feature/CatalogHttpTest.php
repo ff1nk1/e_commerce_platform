@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Category;
-use App\Models\OutboxEvent;
 use App\Models\Product;
 use App\Models\Stock;
 use App\Models\Store;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
 
 final class CatalogHttpTest extends TestCase
@@ -135,9 +135,7 @@ final class CatalogHttpTest extends TestCase
             ->assertJsonPath('stock.available', 12);
 
         $stockId = $create->json('stock.id');
-        $this->assertDatabaseHas('outbox_events', [
-            'event_type' => 'stock.changed',
-        ]);
+        $this->assertNotNull(OutboxQueue::first('stock.changed'));
 
         $list = $this->withHeaders($this->adminHeaders())
             ->getJson('/api/admin/stocks?store_id='.$store->id);
@@ -151,6 +149,6 @@ final class CatalogHttpTest extends TestCase
             ->assertJsonPath('stock.quantity', 20)
             ->assertJsonPath('stock.available', 20);
 
-        $this->assertSame(2, OutboxEvent::query()->where('event_type', 'stock.changed')->count());
+        $this->assertSame(2, OutboxQueue::count('stock.changed'));
     }
 }

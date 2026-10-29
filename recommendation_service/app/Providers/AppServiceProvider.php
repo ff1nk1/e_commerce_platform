@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Messaging\RecommendationInboundEventFactory;
 use App\Services\Catalog\CatalogApiFreshnessChecker;
 use App\Services\Catalog\Contracts\CatalogProductClient;
 use App\Services\Catalog\Contracts\ProductFreshnessChecker;
@@ -15,6 +16,7 @@ use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\Gemini\GeminiLlmClient;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
+use Shop\Messaging\InboundEventFactory;
 
 final class AppServiceProvider extends ServiceProvider
 {
@@ -23,6 +25,7 @@ final class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(InboundEventFactory::class, RecommendationInboundEventFactory::class);
         $this->app->bind(function (): LlmClient {
             $driver = (string) config('llm.driver', 'gemini');
 

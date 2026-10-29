@@ -4,39 +4,22 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Kafka\MainHandlers\OrderEventsHandler;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
-use Illuminate\Console\Command;
-use Junges\Kafka\Facades\Kafka;
+use Shop\Messaging\Console\ConsumeKafkaCommand;
+use Shop\Messaging\Topics;
 
-#[Description('Консьюмер Catalog Service для обработки событий заказов')]
+#[Description('Консьюмер Catalog Service для order.events')]
 #[Signature('kafka:consume:order-events')]
-final class KafkaConsumeOrderEvents extends Command
+final class KafkaConsumeOrderEvents extends ConsumeKafkaCommand
 {
-    public function handle(): int
+    protected function topics(): array
     {
-        $this->info('Запуск консьюмера для топика order.events...');
+        return [Topics::ORDER_EVENTS];
+    }
 
-        $consumer = Kafka::consumer(['order.events'])
-            ->withBrokers(config('kafka.brokers', 'kafka:29092'))
-
-            ->withConsumerGroupId('catalog-service-orders-v1')
-            ->withHandler(resolve(OrderEventsHandler::class))
-            ->withAutoCommit()
-            ->withOptions([
-                'auto.offset.reset' => 'earliest',
-            ])
-            ->build();
-
-        try {
-            $consumer->consume();
-        } catch (\Throwable $e) {
-            $this->error('ОШИБКА KAFKA: '.$e->getMessage());
-
-            return self::FAILURE;
-        }
-
-        return self::SUCCESS;
+    protected function group(): string
+    {
+        return (string) config('kafka.consumer_groups.orders', 'catalog-service-orders-v1');
     }
 }

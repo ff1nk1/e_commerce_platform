@@ -9,6 +9,7 @@ use App\Services\Llm\Contracts\LlmClient;
 use App\Support\PgVectorLiteral;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Shop\Messaging\CatalogPayloadNormalizer;
 
 final class ProductIndexer
 {
@@ -16,6 +17,7 @@ final class ProductIndexer
         private readonly LlmClient $llm,
         private readonly ProductTextBuilder $textBuilder,
         private readonly AttributeVocabulary $attributeVocabulary = new AttributeVocabulary,
+        private readonly CatalogPayloadNormalizer $payloads = new CatalogPayloadNormalizer,
     ) {}
 
     /**
@@ -23,6 +25,7 @@ final class ProductIndexer
      */
     public function upsertFromEvent(array $data, bool $reembed = true): ProductCatalog
     {
+        $data = $this->payloads->normalize($data);
         $productId = (int) ($data['id'] ?? $data['product_id'] ?? 0);
         throw_if($productId <= 0, \InvalidArgumentException::class, 'product event missing id');
 

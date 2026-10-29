@@ -8,6 +8,7 @@ use App\Services\Llm\Contracts\LlmClient;
 use App\Services\Llm\DTOs\ChatMessage;
 use App\Services\Llm\Exceptions\LlmException;
 use App\Services\Llm\Gemini\GeminiLlmClient;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -53,7 +54,7 @@ final class GeminiLlmClientTest extends TestCase
         $this->assertCount(768, $embedding);
         $this->assertSame(0.1, $embedding[0]);
 
-        Http::assertSent(function (array $request): bool {
+        Http::assertSent(function (Request $request): bool {
             return str_contains($request->url(), 'embedContent')
                 && $request->hasHeader('x-goog-api-key', 'test-key')
                 && ($request['taskType'] ?? null) === 'RETRIEVAL_DOCUMENT'
@@ -245,7 +246,7 @@ final class GeminiLlmClientTest extends TestCase
         $this->assertSame(0.2, $embedding[0]);
 
         Http::assertSentCount(2);
-        Http::assertSent(function (array $request): bool {
+        Http::assertSent(function (Request $request): bool {
             if (! str_contains($request->url(), 'embedContent')) {
                 return false;
             }

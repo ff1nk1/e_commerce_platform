@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Shop\Messaging\EnvelopeMessage;
 
 final class StockSagaMessage
 {
@@ -17,12 +17,9 @@ final class StockSagaMessage
         public readonly string $sagaId,
     ) {}
 
-    public static function tryFrom(ConsumerMessage $message): ?self
+    public static function tryFrom(EnvelopeMessage $message): ?self
     {
         $payload = $message->getBody();
-        if (! is_array($payload)) {
-            return null;
-        }
 
         $orderId = $payload['order_id'] ?? null;
         $items = $payload['items'] ?? [];

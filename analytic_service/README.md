@@ -122,7 +122,7 @@ docker compose restart analytic_consumers
 | `analytic-service-users-v3` | `user.events` | `user.registered` | `user_registrations` |
 | `analytic-service-orders-v5` | `order.events` | `order.created`, `order.paid`, `order.shipped`, `order.cancelled` | `order_funnel_events`, `order_line_items` (только на `created`) |
 | `analytic-service-search-v3` | `search.events` | `search.performed` | `search_queries` |
-| `analytic-service-products-v1` | `product.created`, `product.updated` | те же типы | `product_dim` |
+| `analytic-service-products-v1` | `product.events` | `product.created`, `product.updated` | `product_dim` |
 
 Семантика доставки:
 

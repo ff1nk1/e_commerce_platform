@@ -10,7 +10,7 @@
 
 | Что | Зачем |
 |-----|--------|
-| SQLite | пустое подключение Laravel, очереди не используются |
+| Postgres `notification_db` | Ecotone outbox/inbox |
 | MongoDB `email_logs` | статусы писем |
 | Kafka | `user.events`, `order.events`, свои DLQ |
 | Mailpit | SMTP на `1025` |
@@ -21,8 +21,11 @@
 
 | Переменная | Тип | Дефолт | Обязательна |
 |------------|-----|--------|-------------|
-| `DB_CONNECTION` | string | `sqlite` | нет |
-| `DB_DATABASE` | string | `database/database.sqlite` | нет |
+| `DB_CONNECTION` | string | `pgsql` | да |
+| `DB_HOST` | string | `notification_service_db` | да |
+| `DB_PORT` | int | `5432` | да |
+| `DB_DATABASE` | string | `notification_db` | да |
+| `DB_USERNAME` / `DB_PASSWORD` | string | `laravel` / `secret` | да |
 | `MONGODB_HOST` | string | `notification_service_mongodb` | да |
 | `MONGODB_PORT` | int | `27017` | да |
 | `MONGODB_DATABASE` | string | `notification_db` | да |

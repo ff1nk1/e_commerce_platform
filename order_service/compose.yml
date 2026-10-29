@@ -1,8 +1,8 @@
 services:
   order_app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: order_service/Dockerfile
       additional_contexts:
         "php-project-php-base:8.5": "service:php-base"
     image: order_service:local
@@ -14,6 +14,7 @@ services:
       - "8004"
     volumes:
       - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
     env_file:
       - .env
     environment:
@@ -92,6 +93,7 @@ services:
     command: php artisan kafka:consume:product-events
     volumes:
       - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
     env_file:
       - .env
     environment:
@@ -122,6 +124,7 @@ services:
     command: php artisan kafka:consume:stock-events
     volumes:
       - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
     env_file:
       - .env
     environment:
@@ -148,9 +151,10 @@ services:
     pull_policy: never
     container_name: order_kafka_outbox_worker
     restart: unless-stopped
-    command: php artisan kafka:outbox:work
+    command: php artisan ecotone:run kafka-outbox
     volumes:
       - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
     env_file:
       - .env
     environment:
@@ -166,6 +170,34 @@ services:
       order_db:
         condition: service_healthy
       order_redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - php_project_net
+
+  order_kafka_inbox_worker:
+    image: order_service:local
+    pull_policy: never
+    container_name: order_kafka_inbox_worker
+    restart: unless-stopped
+    command: php artisan ecotone:run inbox
+    volumes:
+      - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
+    env_file:
+      - .env
+    environment:
+      DB_HOST: order_service_db
+      DB_PORT: 5432
+      REDIS_HOST: order_service_redis
+      REDIS_PORT: 6379
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CACHE_DRIVER: array
+    depends_on:
+      order_app:
+        condition: service_healthy
+      order_db:
         condition: service_healthy
       kafka:
         condition: service_healthy

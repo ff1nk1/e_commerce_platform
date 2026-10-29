@@ -9,6 +9,8 @@ use App\Events\StockReservationFailed;
 use App\Events\StockReserved;
 use App\Models\Stock;
 use App\Services\Stock\StockItemNormalizer;
+use Closure;
+use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -33,7 +35,7 @@ final class StockReservationService
             return ['outcome' => 'reservation_failed', 'order_id' => $orderId];
         }
 
-        return DB::transaction(function () use ($orderId, $normalized, $sagaId): array {
+        return $this->withinTransaction(function () use ($orderId, $normalized, $sagaId): array {
             /** @var list<array{0: Stock, 1: int}> $toReserve */
             $toReserve = [];
 
@@ -97,7 +99,7 @@ final class StockReservationService
             return false;
         }
 
-        DB::transaction(function () use ($orderId, $normalized): void {
+        $this->withinTransaction(function () use ($orderId, $normalized): void {
             $stockChangedEvents = [];
 
             foreach ($normalized as $item) {
@@ -142,7 +144,7 @@ final class StockReservationService
             return false;
         }
 
-        DB::transaction(function () use ($orderId, $normalized): void {
+        $this->withinTransaction(function () use ($orderId, $normalized): void {
             $stockChangedEvents = [];
 
             foreach ($normalized as $item) {
@@ -187,6 +189,31 @@ final class StockReservationService
         });
 
         return true;
+    }
+
+    /**
+     * Join a PDO transaction Ecotone already opened, or start a Laravel one.
+     *
+     * Inbox workers begin the transaction through Doctrine, so Laravel's
+     * counter stays at 0. A nested begin then throws "already an active transaction".
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $callback
+     * @return T
+     */
+    private function withinTransaction(Closure $callback): mixed
+    {
+        $connection = DB::connection();
+        $pdo = $connection->getPdo();
+
+        if ($connection->transactionLevel() === 0 && $pdo->inTransaction()) {
+            return $callback();
+        }
+
+        return $connection->transaction(function (Connection $connection) use ($callback) {
+            return $callback();
+        });
     }
 
     /**

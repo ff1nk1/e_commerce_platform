@@ -8,11 +8,11 @@ use App\Kafka\Handlers\OrderCreatedHandler;
 use App\Kafka\Handlers\StockCommitHandler;
 use App\Kafka\Handlers\StockReleaseHandler;
 use Illuminate\Support\Facades\Log;
-use Junges\Kafka\Contracts\ConsumerMessage;
+use Shop\Messaging\EnvelopeMessage;
 
 final class OrderEventsHandler
 {
-    public function __invoke(ConsumerMessage $message): void
+    public function __invoke(EnvelopeMessage $message): void
     {
         $headers = $message->getHeaders();
         $eventType = $headers['event-type'] ?? null;

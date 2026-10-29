@@ -4,26 +4,22 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Kafka\Handlers\UserEventsHandler;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
+use Shop\Messaging\Console\ConsumeKafkaCommand;
+use Shop\Messaging\Topics;
 
 #[Description('Консьюмер для топика user.events')]
 #[Signature('kafka:consume:user-events')]
-final class KafkaConsumeUserEvents extends AbstractKafkaConsumeCommand
+final class KafkaConsumeUserEvents extends ConsumeKafkaCommand
 {
-    protected function topic(): string
+    protected function topics(): array
     {
-        return (string) config('kafka.topics.user_events', 'user.events');
+        return [Topics::USER_EVENTS];
     }
 
-    protected function groupId(): string
+    protected function group(): string
     {
         return (string) config('kafka.consumer_groups.user', 'notification-service-consumers-v1');
-    }
-
-    protected function handlerClass(): string
-    {
-        return UserEventsHandler::class;
     }
 }

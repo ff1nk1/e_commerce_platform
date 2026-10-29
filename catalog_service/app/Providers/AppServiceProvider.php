@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Http\Middleware\AuthenticateFromGatewayHeaders;
 use App\Http\Responses\FilamentLogoutResponse;
+use App\Messaging\CatalogInboundEventFactory;
 use App\Models\User;
 use Filament\Auth\Http\Responses\Contracts\LogoutResponse as LogoutResponseContract;
 use Illuminate\Auth\RequestGuard;
@@ -18,12 +19,14 @@ use Illuminate\Support\ServiceProvider;
 use Livewire\Features\SupportFileUploads\FilePreviewController;
 use Livewire\Features\SupportFileUploads\FileUploadController;
 use Livewire\Livewire;
+use Shop\Messaging\InboundEventFactory;
 
 final class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
         $this->app->bind(LogoutResponseContract::class, FilamentLogoutResponse::class);
+        $this->app->singleton(InboundEventFactory::class, CatalogInboundEventFactory::class);
     }
 
     public function boot(): void

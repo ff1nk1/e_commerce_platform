@@ -4,25 +4,22 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Models\OutboxEvent;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
+use Shop\Messaging\OutboxQueue;
 use Tests\Concerns\BindsInMemoryIdempotency;
-use Tests\Concerns\BindsInMemorySagaStepGuard;
 use Tests\TestCase;
 
 final class OrderCreateOutboxTest extends TestCase
 {
     use BindsInMemoryIdempotency;
-    use BindsInMemorySagaStepGuard;
     use RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->bindInMemoryIdempotency();
-        $this->bindInMemorySagaStepGuard();
     }
 
     protected function tearDown(): void
@@ -58,7 +55,7 @@ final class OrderCreateOutboxTest extends TestCase
         $response->assertCreated();
         $orderId = $response->json('id');
 
-        $event = OutboxEvent::query()->where('event_type', 'order.created')->first();
+        $event = OutboxQueue::first('order.created');
         $this->assertNotNull($event);
         $this->assertSame('order.events', $event->topic);
         $this->assertSame($orderId, $event->payload['order_id']);
@@ -87,7 +84,9 @@ final class OrderCreateOutboxTest extends TestCase
                 'unit_price' => '199.99',
             ],
         ], $event->payload['items']);
-        $this->assertArrayHasKey($event->payload['saga_id'].':order.created', $this->sagaStepStore);
+        $this->assertDatabaseHas('ecotone_document_store', [
+            'document_id' => $event->payload['saga_id'],
+        ]);
     }
 
     public function test_idempotent_create_does_not_write_second_outbox(): void
@@ -115,7 +114,7 @@ final class OrderCreateOutboxTest extends TestCase
         $second = $this->postJson('/api/orders', $payload, $headers);
         $second->assertCreated();
         $this->assertSame($first->json('id'), $second->json('id'));
-        $this->assertSame(1, OutboxEvent::query()->where('event_type', 'order.created')->count());
+        $this->assertSame(1, OutboxQueue::count('order.created'));
     }
 
     public function test_same_idempotency_key_different_user_does_not_leak(): void
@@ -148,6 +147,6 @@ final class OrderCreateOutboxTest extends TestCase
         $this->assertNotSame($first->json('id'), $second->json('id'));
         $this->assertSame(3, $first->json('user_id'));
         $this->assertSame(9, $second->json('user_id'));
-        $this->assertSame(2, OutboxEvent::query()->where('event_type', 'order.created')->count());
+        $this->assertSame(2, OutboxQueue::count('order.created'));
     }
 }
