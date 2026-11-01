@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Message;
-use App\Services\Chat\RecommendationChatService;
+use App\Services\Chat\DeleteConversationService;
+use App\Services\Chat\GetConversationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -13,13 +14,14 @@ use Illuminate\Http\Response;
 final class ConversationController extends Controller
 {
     public function __construct(
-        private readonly RecommendationChatService $chat,
+        private readonly GetConversationService $getConversation,
+        private readonly DeleteConversationService $deleteConversation,
     ) {}
 
     public function show(Request $request, string $id): JsonResponse
     {
         $userId = $this->requireUserId($request);
-        $conversation = $this->chat->getConversation($userId, $id);
+        $conversation = $this->getConversation->handle($userId, $id);
 
         $messages = $conversation->messages()->oldest()
             ->get(['id', 'role', 'content', 'products', 'created_at'])
@@ -43,7 +45,7 @@ final class ConversationController extends Controller
     public function destroy(Request $request, string $id): Response
     {
         $userId = $this->requireUserId($request);
-        $this->chat->deleteConversation($userId, $id);
+        $this->deleteConversation->handle($userId, $id);
 
         return response()->noContent();
     }

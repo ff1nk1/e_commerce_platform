@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\Enums\NotificationEventType;
+use App\Kafka\KafkaMailPipeline;
 use App\Messaging\UserNotification;
-use App\Services\KafkaMailPipeline;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Shop\Messaging\EnvelopeMessage;
 
 final class UserEventsHandler
 {
-    public const ALLOWED_TYPES = ['user.registered'];
+    /** @var list<NotificationEventType> */
+    public const ALLOWED_TYPES = [
+        NotificationEventType::UserRegistered,
+    ];
 
     public function __construct(
         private KafkaMailPipeline $pipeline,

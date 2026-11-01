@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\DTO\Search\ProductSearchQuery;
+use App\Enums\ProductSort;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -39,7 +41,7 @@ final class SearchProductsRequest extends FormRequest
             'attr.*' => ['nullable'],
             'page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PAGE],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],
-            'sort' => ['nullable', 'string', Rule::in(['relevance', 'price_asc', 'price_desc', 'new'])],
+            'sort' => ['nullable', 'string', Rule::enum(ProductSort::class)],
         ];
     }
 
@@ -53,20 +55,7 @@ final class SearchProductsRequest extends FormRequest
         }
     }
 
-    /**
-     * @return array{
-     *     q: string|null,
-     *     category_ids: list<int>,
-     *     min_price: float|null,
-     *     max_price: float|null,
-     *     in_stock: bool|null,
-     *     attributes: array<string, list<string>>,
-     *     page: int,
-     *     per_page: int,
-     *     sort: string
-     * }
-     */
-    public function searchParams(): array
+    public function searchParams(): ProductSearchQuery
     {
         $rawCategoryIds = $this->input('category_id', []);
         if (! is_array($rawCategoryIds)) {
@@ -128,20 +117,22 @@ final class SearchProductsRequest extends FormRequest
         }
 
         $requestedSort = $this->input('sort');
-        $defaultSort = $q ? 'relevance' : 'new';
-        $sort = (string) ($requestedSort ?: $defaultSort);
+        $defaultSort = $q ? ProductSort::Relevance : ProductSort::New;
+        $sort = is_string($requestedSort) && $requestedSort !== ''
+            ? (ProductSort::tryFrom($requestedSort) ?? $defaultSort)
+            : $defaultSort;
 
-        return [
-            'q' => $q,
-            'category_ids' => $categoryIds,
-            'min_price' => $this->filled('min_price') ? (float) $this->input('min_price') : null,
-            'max_price' => $this->filled('max_price') ? (float) $this->input('max_price') : null,
-            'in_stock' => $inStock,
-            'attributes' => $attributes,
-            'page' => min(self::MAX_PAGE, max(1, (int) $this->input('page', 1))),
-            'per_page' => min(self::MAX_PER_PAGE, max(1, (int) $this->input('per_page', self::DEFAULT_PER_PAGE))),
-            'sort' => $sort,
-        ];
+        return new ProductSearchQuery(
+            q: $q,
+            categoryIds: $categoryIds,
+            minPrice: $this->filled('min_price') ? (float) $this->input('min_price') : null,
+            maxPrice: $this->filled('max_price') ? (float) $this->input('max_price') : null,
+            inStock: $inStock,
+            attributes: $attributes,
+            page: min(self::MAX_PAGE, max(1, (int) $this->input('page', 1))),
+            perPage: min(self::MAX_PER_PAGE, max(1, (int) $this->input('per_page', self::DEFAULT_PER_PAGE))),
+            sort: $sort,
+        );
     }
 
     /**

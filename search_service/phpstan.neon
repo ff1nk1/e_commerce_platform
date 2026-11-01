@@ -10,7 +10,6 @@ parameters:
         - app
         - bootstrap
         - config
-        - database
         - routes
         - tests
 

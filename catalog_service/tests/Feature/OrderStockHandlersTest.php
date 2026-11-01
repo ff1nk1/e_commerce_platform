@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Enums\ReservationOutcome;
+use App\Enums\SagaStep;
+use App\Enums\StockReservationStatus;
 use App\Exceptions\DuplicateStockReservationException;
 use App\Exceptions\InsufficientStockReservationException;
 use App\Exceptions\MissingStockReservationException;
@@ -11,7 +14,8 @@ use App\Exceptions\SagaStepBusyException;
 use App\Kafka\Handlers\OrderCreatedHandler;
 use App\Kafka\Handlers\StockCommitHandler;
 use App\Kafka\Handlers\StockReleaseHandler;
-use App\Messaging\HoldStockStep;
+use App\Kafka\Saga\HoldStockStep;
+use App\Kafka\Saga\StockSagaMessage;
 use App\Messaging\OrderCreatedMessage;
 use App\Messaging\StockCommitRequested;
 use App\Messaging\StockReleaseRequested;
@@ -19,7 +23,7 @@ use App\Models\Product;
 use App\Models\Stock;
 use App\Models\StockReservation;
 use App\Models\Store;
-use App\Services\StockReservationService;
+use App\Services\Stock\ReserveStockService;
 use Ecotone\Modelling\EventBus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -73,7 +77,7 @@ final class OrderStockHandlersTest extends TestCase
             'product_id' => $product->id,
             'store_id' => $store->id,
             'quantity' => 3,
-            'status' => StockReservation::STATUS_HELD,
+            'status' => StockReservationStatus::Held->value,
         ]);
         $stored = OutboxQueue::first('stock.reserved');
         $this->assertNotNull($stored);
@@ -151,7 +155,7 @@ final class OrderStockHandlersTest extends TestCase
         $this->assertDatabaseHas('stock_reservations', [
             'order_id' => 1003,
             'product_id' => $product->id,
-            'status' => StockReservation::STATUS_RELEASED,
+            'status' => StockReservationStatus::Released->value,
         ]);
         $changed = OutboxQueue::first('stock.changed');
         $this->assertNotNull($changed);
@@ -283,13 +287,13 @@ final class OrderStockHandlersTest extends TestCase
             'order_id' => 2001,
             'product_id' => $productA->id,
             'quantity' => 2,
-            'status' => StockReservation::STATUS_HELD,
+            'status' => StockReservationStatus::Held->value,
         ]);
         $this->assertDatabaseHas('stock_reservations', [
             'order_id' => 2001,
             'product_id' => $productB->id,
             'quantity' => 3,
-            'status' => StockReservation::STATUS_HELD,
+            'status' => StockReservationStatus::Held->value,
         ]);
 
         $reserved = OutboxQueue::first('stock.reserved');
@@ -401,7 +405,7 @@ final class OrderStockHandlersTest extends TestCase
         ]);
         $sagaId = (string) Str::uuid();
 
-        resolve(EventBus::class)->publish(new HoldStockStep($sagaId, 'stock.reserve'));
+        resolve(EventBus::class)->publish(new HoldStockStep($sagaId, SagaStep::Reserve));
 
         try {
             resolve(OrderCreatedHandler::class)->onInbound($this->consumerMessage('order.created', [
@@ -450,7 +454,7 @@ final class OrderStockHandlersTest extends TestCase
         $this->assertEquals(7, $fresh->available);
         $this->assertDatabaseHas('stock_reservations', [
             'order_id' => 4001,
-            'status' => StockReservation::STATUS_COMMITTED,
+            'status' => StockReservationStatus::Committed->value,
             'quantity' => 3,
         ]);
         $stored = OutboxQueue::first('stock.changed');
@@ -690,7 +694,7 @@ final class OrderStockHandlersTest extends TestCase
         $this->assertEquals(1, $fresh->reserved);
         $this->assertDatabaseHas('stock_reservations', [
             'order_id' => 5005,
-            'status' => StockReservation::STATUS_HELD,
+            'status' => StockReservationStatus::Held->value,
             'quantity' => 1,
         ]);
     }
@@ -710,11 +714,11 @@ final class OrderStockHandlersTest extends TestCase
             'store_id' => $store->id,
             'quantity' => 2,
         ]];
-        $service = resolve(StockReservationService::class);
-        $service->reserve(42, $items, (string) Str::uuid());
+        $service = resolve(ReserveStockService::class);
+        $service->handle(new StockSagaMessage(42, $items, (string) Str::uuid()));
 
         try {
-            $service->reserve(42, $items, (string) Str::uuid());
+            $service->handle(new StockSagaMessage(42, $items, (string) Str::uuid()));
             $this->fail('Expected a duplicate reservation to throw.');
         } catch (DuplicateStockReservationException) {
         }
@@ -782,13 +786,13 @@ final class OrderStockHandlersTest extends TestCase
                 'reserved' => 0,
             ]);
 
-            $result = resolve(StockReservationService::class)->reserve(42, [[
+            $result = resolve(ReserveStockService::class)->handle(new StockSagaMessage(42, [[
                 'product_id' => $product->id,
                 'store_id' => $store->id,
                 'quantity' => 4,
-            ]], (string) Str::uuid());
+            ]], (string) Str::uuid()));
 
-            $this->assertSame('reserved', $result['outcome']);
+            $this->assertSame(ReservationOutcome::Reserved, $result->outcome);
             $fresh = $stock->fresh();
             $this->assertNotNull($fresh);
             $this->assertEquals(10, $fresh->quantity);
@@ -807,7 +811,7 @@ final class OrderStockHandlersTest extends TestCase
             'product_id' => $productId,
             'store_id' => $storeId,
             'quantity' => $quantity,
-            'status' => StockReservation::STATUS_HELD,
+            'status' => StockReservationStatus::Held->value,
         ]);
     }
 

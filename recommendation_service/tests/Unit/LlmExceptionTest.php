@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Services\Llm\Exceptions\LlmException;
+use App\Enums\LlmErrorKind;
+use App\Infrastructure\Llm\Exceptions\LlmException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -96,7 +97,7 @@ final class LlmExceptionTest extends TestCase
 
         $this->assertSame($technical, $exception->getMessage());
         $this->assertSame(503, $exception->statusCode());
-        $this->assertSame(LlmException::KIND_HTTP, $exception->kind());
+        $this->assertSame(LlmErrorKind::Http, $exception->kind());
         $this->assertStringNotContainsString('high demand', $exception->userMessage());
         $this->assertStringNotContainsString('{', $exception->userMessage());
     }

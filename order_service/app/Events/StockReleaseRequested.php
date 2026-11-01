@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Events;
 
 use App\Contracts\Outboxable;
+use App\Enums\OrderEventType;
 use Illuminate\Foundation\Events\Dispatchable;
 
 final class StockReleaseRequested implements Outboxable
@@ -25,7 +26,7 @@ final class StockReleaseRequested implements Outboxable
 
     public function outboxEventType(): string
     {
-        return 'stock.release_requested';
+        return OrderEventType::StockReleaseRequested->value;
     }
 
     public function outboxPayload(): array

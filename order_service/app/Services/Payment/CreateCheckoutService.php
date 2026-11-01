@@ -6,11 +6,13 @@ namespace App\Services\Payment;
 
 use App\Contracts\IdempotencyStore;
 use App\Contracts\PaymentGateway;
+use App\DTO\Payments\CheckoutSession;
+use App\Enums\PaymentStatus;
+use App\Infrastructure\Stripe\StripeCheckoutSessionParams;
+use App\Infrastructure\Stripe\StripeIdempotencyKey;
+use App\Infrastructure\Stripe\StripeLineItems;
 use App\Models\Order;
 use App\Models\Payment;
-use App\Services\Stripe\StripeCheckoutSessionParams;
-use App\Services\Stripe\StripeIdempotencyKey;
-use App\Services\Stripe\StripeLineItems;
 use Illuminate\Support\Sleep;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -27,10 +29,7 @@ final class CreateCheckoutService
         private IdempotencyStore $idempotency,
     ) {}
 
-    /**
-     * @return array{checkout_url: string, payment_id: int}
-     */
-    public function forOrder(Order $order, string $idempotencyKey): array
+    public function handle(Order $order, string $idempotencyKey): CheckoutSession
     {
         $scopeKey = $this->idempotency->scopeKey(
             'pay',
@@ -41,10 +40,7 @@ final class CreateCheckoutService
 
         $cached = $this->idempotency->get($scopeKey);
         if ($cached !== null) {
-            /** @var array{checkout_url: string, payment_id: int} $body */
-            $body = $cached['body'];
-
-            return $body;
+            return $this->checkoutFromCache($cached['body']);
         }
 
         if (! $this->idempotency->acquireLock($scopeKey)) {
@@ -52,10 +48,7 @@ final class CreateCheckoutService
                 Sleep::usleep(self::LOCK_RETRY_SLEEP_MICROS);
                 $cached = $this->idempotency->get($scopeKey);
                 if ($cached !== null) {
-                    /** @var array{checkout_url: string, payment_id: int} $body */
-                    $body = $cached['body'];
-
-                    return $body;
+                    return $this->checkoutFromCache($cached['body']);
                 }
             }
 
@@ -65,22 +58,19 @@ final class CreateCheckoutService
         try {
             $cached = $this->idempotency->get($scopeKey);
             if ($cached !== null) {
-                /** @var array{checkout_url: string, payment_id: int} $body */
-                $body = $cached['body'];
-
-                return $body;
+                return $this->checkoutFromCache($cached['body']);
             }
 
             $order->loadMissing(['items.productSnapshot', 'payments']);
 
             $pendingWithSession = $order->payments
-                ->where('status', 'pending')
+                ->where('status', PaymentStatus::Pending->value)
                 ->filter(static fn (Payment $payment): bool => filled($payment->stripe_checkout_session_id))
                 ->sortByDesc('id')
                 ->first();
 
             $result = $this->createCheckout($order, $pendingWithSession);
-            $this->idempotency->put($scopeKey, 200, $result);
+            $this->idempotency->put($scopeKey, 200, $result->toArray());
 
             return $result;
         } finally {
@@ -88,35 +78,32 @@ final class CreateCheckoutService
         }
     }
 
-    /**
-     * @return array{checkout_url: string, payment_id: int}
-     */
-    private function createCheckout(Order $order, ?Payment $pendingWithSession): array
+    private function createCheckout(Order $order, ?Payment $pendingWithSession): CheckoutSession
     {
         $order->assertPayable();
 
         if ($pendingWithSession instanceof Payment) {
             try {
                 $session = $this->stripe->retrieveCheckoutSession($pendingWithSession->stripe_checkout_session_id);
-                $sessionIsReusable = ($session['status'] ?? null) === 'open' && ! empty($session['url']);
+                $sessionIsReusable = $session->status === 'open' && ! empty($session->url);
                 if ($sessionIsReusable) {
-                    return [
-                        'checkout_url' => (string) $session['url'],
-                        'payment_id' => (int) $pendingWithSession->id,
-                    ];
+                    return new CheckoutSession(
+                        (string) $session->url,
+                        (int) $pendingWithSession->id,
+                    );
                 }
             } catch (RuntimeException) {
                 // Session unusable — create a new one below.
             }
 
-            $pendingWithSession->status = 'failed';
+            $pendingWithSession->status = PaymentStatus::Failed->value;
             $pendingWithSession->save();
         }
 
         $payment = Payment::query()->create([
             'order_id' => $order->id,
             'amount' => $order->total_amount,
-            'status' => 'pending',
+            'status' => PaymentStatus::Pending->value,
         ]);
 
         $lineItems = StripeLineItems::fromOrder($order);
@@ -131,20 +118,26 @@ final class CreateCheckoutService
             StripeIdempotencyKey::forOrder($order->id, 'checkout', (string) $payment->id),
         );
 
-        $paymentIntentId = is_string($session['payment_intent'] ?? null)
-            ? $session['payment_intent']
-            : null;
+        $paymentIntentId = is_string($session->paymentIntent) ? $session->paymentIntent : null;
 
-        $payment->stripe_checkout_session_id = $session['id'] ?? null;
+        $payment->stripe_checkout_session_id = is_string($session->id) ? $session->id : null;
         $payment->stripe_payment_intent_id = $paymentIntentId;
         $payment->save();
 
-        $url = $session['url'] ?? null;
+        $url = $session->url;
         throw_if(! is_string($url) || $url === '', RuntimeException::class, 'Stripe Checkout Session did not return a URL.');
 
-        return [
-            'checkout_url' => $url,
-            'payment_id' => (int) $payment->id,
-        ];
+        return new CheckoutSession($url, (int) $payment->id);
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     */
+    private function checkoutFromCache(array $body): CheckoutSession
+    {
+        return new CheckoutSession(
+            (string) $body['checkout_url'],
+            (int) $body['payment_id'],
+        );
     }
 }

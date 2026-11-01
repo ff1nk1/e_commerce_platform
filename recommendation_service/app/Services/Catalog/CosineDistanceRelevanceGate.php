@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Catalog;
 
-use App\Services\Catalog\Contracts\RelevanceGate;
-use App\Services\Catalog\DTOs\SearchHit;
+use App\Contracts\RelevanceGate;
+use App\DTO\Catalog\SearchHit;
 
 final class CosineDistanceRelevanceGate implements RelevanceGate
 {

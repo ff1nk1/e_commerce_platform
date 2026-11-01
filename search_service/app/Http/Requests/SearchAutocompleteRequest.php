@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\DTO\Search\AutocompleteQuery;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -30,10 +31,7 @@ final class SearchAutocompleteRequest extends FormRequest
         }
     }
 
-    /**
-     * @return array{q: string|null, limit: int, fuzziness: string|int}
-     */
-    public function autocompleteParams(): array
+    public function autocompleteParams(): AutocompleteQuery
     {
         $q = $this->input('q');
         $q = is_string($q) ? trim($q) : null;
@@ -46,10 +44,10 @@ final class SearchAutocompleteRequest extends FormRequest
             ? (int) $fuzzinessRaw
             : 'AUTO';
 
-        return [
-            'q' => $q,
-            'limit' => min(20, max(1, (int) $this->input('limit', 8))),
-            'fuzziness' => $fuzziness,
-        ];
+        return new AutocompleteQuery(
+            q: $q,
+            limit: min(20, max(1, (int) $this->input('limit', 8))),
+            fuzziness: $fuzziness,
+        );
     }
 }

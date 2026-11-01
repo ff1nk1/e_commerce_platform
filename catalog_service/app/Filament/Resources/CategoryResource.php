@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources;
 
+use App\DTO\Catalog\CategoryData;
 use App\Filament\Resources\CategoryResource\Pages\ManageCategories;
 use App\Models\Category;
-use App\Services\CatalogService;
+use App\Services\Categories\CreateCategoryService;
+use App\Services\Categories\DeleteCategoryService;
+use App\Services\Categories\UpdateCategoryService;
 use BackedEnum;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -49,14 +52,14 @@ final class CategoryResource extends Resource
             ])
             ->headerActions([
                 CreateAction::make()
-                    ->using(fn (array $data): Category => resolve(CatalogService::class)->createCategory($data)),
+                    ->using(fn (array $data): Category => resolve(CreateCategoryService::class)->handle(CategoryData::fromArray($data))),
             ])
             ->recordActions([
                 EditAction::make()
-                    ->using(fn (Category $record, array $data): Category => resolve(CatalogService::class)->updateCategory($record, $data)),
+                    ->using(fn (Category $record, array $data): Category => resolve(UpdateCategoryService::class)->handle($record, CategoryData::fromArray($data))),
                 DeleteAction::make()
                     ->using(function (Category $record): bool {
-                        return resolve(CatalogService::class)->deleteCategory($record);
+                        return resolve(DeleteCategoryService::class)->handle($record);
                     }),
             ]);
     }

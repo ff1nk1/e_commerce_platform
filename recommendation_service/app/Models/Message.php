@@ -30,10 +30,6 @@ final class Message extends Model
     use HasFactory;
     use HasUuids;
 
-    public const ROLE_USER = 'user';
-
-    public const ROLE_ASSISTANT = 'assistant';
-
     /** @return BelongsTo<Conversation, $this> */
     public function conversation(): BelongsTo
     {

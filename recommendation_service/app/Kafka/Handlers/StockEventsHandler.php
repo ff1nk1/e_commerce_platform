@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\Enums\CatalogEventType;
 use App\Messaging\CatalogStockChanged;
-use App\Services\Catalog\ProductIndexer;
+use App\Services\Catalog\SetProductInStockService;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Illuminate\Support\Facades\Log;
 use Shop\Messaging\EnvelopeMessage;
@@ -13,7 +14,7 @@ use Shop\Messaging\EnvelopeMessage;
 final class StockEventsHandler
 {
     public function __construct(
-        private readonly ProductIndexer $indexer,
+        private readonly SetProductInStockService $setInStock,
     ) {}
 
     #[EventHandler(endpointId: 'recommendation.stock')]
@@ -30,7 +31,7 @@ final class StockEventsHandler
         $headerEventType = $headers['event-type'] ?? null;
         $bodyEventType = $body['event'] ?? null;
         $eventType = $headerEventType ?? $bodyEventType;
-        $isStockChangedEvent = $eventType === 'stock.changed';
+        $isStockChangedEvent = $eventType === CatalogEventType::StockChanged->value;
         if (! $isStockChangedEvent) {
             Log::debug('Recommendation: ignore catalog.events', [
                 'event' => is_string($eventType) ? $eventType : get_debug_type($eventType),
@@ -52,7 +53,7 @@ final class StockEventsHandler
         }
 
         $inStock = ((int) $quantity) > 0;
-        $this->indexer->setInStock((int) $productId, $inStock);
+        $this->setInStock->handle((int) $productId, $inStock);
 
         Log::info('Recommendation: stock updated', [
             'product_id' => (int) $productId,

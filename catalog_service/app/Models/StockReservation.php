@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\StockReservationStatus;
 use Database\Factories\StockReservationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $product_id
  * @property int $store_id
  * @property int $quantity
- * @property string $status
+ * @property StockReservationStatus $status
  */
 #[Fillable([
     'order_id',
@@ -28,12 +29,6 @@ final class StockReservation extends Model
     /** @use HasFactory<StockReservationFactory> */
     use HasFactory;
 
-    public const STATUS_HELD = 'held';
-
-    public const STATUS_COMMITTED = 'committed';
-
-    public const STATUS_RELEASED = 'released';
-
     /**
      * @return array<string, string>
      */
@@ -44,6 +39,7 @@ final class StockReservation extends Model
             'product_id' => 'integer',
             'store_id' => 'integer',
             'quantity' => 'integer',
+            'status' => StockReservationStatus::class,
         ];
     }
 }

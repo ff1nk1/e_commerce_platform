@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Services\SearchIndexService;
+use App\Infrastructure\OpenSearch\OpenSearchIndexManager;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -15,7 +15,7 @@ use Illuminate\Console\Command;
                             {--force : Skip confirmation when using --recreate}')]
 final class OpenSearchSetup extends Command
 {
-    public function handle(SearchIndexService $index): int
+    public function handle(OpenSearchIndexManager $indices): int
     {
         if ($this->option('recreate')) {
             if (! $this->option('force') && ! $this->confirm('This will DELETE products/categories OpenSearch data and recreate empty indices. Continue?', true)) {
@@ -24,13 +24,13 @@ final class OpenSearchSetup extends Command
                 return self::SUCCESS;
             }
 
-            $index->recreateIndices();
+            $indices->recreateIndices();
             $this->info('OpenSearch indices recreated (empty). Re-publish products from catalog to refill.');
 
             return self::SUCCESS;
         }
 
-        $index->ensureIndices();
+        $indices->ensureIndices();
         $this->info('OpenSearch indices are ready.');
 
         return self::SUCCESS;

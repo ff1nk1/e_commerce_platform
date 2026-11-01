@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\DTO\Search\ProductDocument;
+use App\Enums\SearchEventType;
 use App\Kafka\Concerns\ResolvesEventType;
 use App\Messaging\ProductLifecycle;
-use App\Services\SearchIndexService;
+use App\Services\Indexing\ProductIndexer;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Illuminate\Support\Facades\Log;
 use Shop\Messaging\EnvelopeMessage;
@@ -16,7 +18,7 @@ final class ProductEventsHandler
     use ResolvesEventType;
 
     public function __construct(
-        private readonly SearchIndexService $index,
+        private readonly ProductIndexer $products,
     ) {}
 
     #[EventHandler(endpointId: 'search.product')]
@@ -27,10 +29,11 @@ final class ProductEventsHandler
 
     public function __invoke(EnvelopeMessage $message): void
     {
-        [$eventType, $body] = $this->resolveEventTypeAndBody($message);
+        [$eventTypeRaw, $body] = $this->resolveEventTypeAndBody($message);
+        $eventType = is_string($eventTypeRaw) ? SearchEventType::tryFrom($eventTypeRaw) : null;
 
-        if (! in_array($eventType, ['product.created', 'product.updated', 'product.deleted', 'product.published', 'product.unpublished'], true)) {
-            Log::debug("Игнорируем неизвестное событие продукта: {$eventType}");
+        if ($eventType === null || ! $eventType->isProduct()) {
+            Log::debug("Игнорируем неизвестное событие продукта: {$eventTypeRaw}");
 
             return;
         }
@@ -38,7 +41,7 @@ final class ProductEventsHandler
         $data = $body['data'] ?? null;
         if (! is_array($data)) {
             Log::warning('Kafka: product event без data', [
-                'event' => $eventType,
+                'event' => $eventType->value,
             ]);
 
             return;
@@ -47,15 +50,18 @@ final class ProductEventsHandler
         $id = $data['id'] ?? null;
         if ($id === null) {
             Log::warning('Kafka: product event без id', [
-                'event' => $eventType,
+                'event' => $eventType->value,
             ]);
 
             return;
         }
 
-        if ($eventType === 'product.deleted') {
-            $this->index->deleteProduct((int) $id);
-            Log::info('Kafka: product removed from OpenSearch', ['product_id' => (int) $id]);
+        /** @var array<string, mixed> $data */
+        $document = ProductDocument::fromArray($data);
+
+        if ($eventType === SearchEventType::ProductDeleted) {
+            $this->products->delete($document->id);
+            Log::info('Kafka: product removed from OpenSearch', ['product_id' => $document->id]);
 
             return;
         }
@@ -64,18 +70,18 @@ final class ProductEventsHandler
         $hasStoreId = ($data['store_id'] ?? null) !== null;
         if (! $hasName || ! $hasStoreId) {
             Log::warning('Kafka: product event с неполными полями', [
-                'event' => $eventType,
-                'product_id' => (int) $id,
+                'event' => $eventType->value,
+                'product_id' => $document->id,
             ]);
 
             return;
         }
 
-        $this->index->indexProduct($data, preserveStock: true);
+        $this->products->upsert($document, preserveStock: true);
 
         Log::info('Kafka: product indexed in OpenSearch', [
-            'event' => $eventType,
-            'product_id' => (int) $id,
+            'event' => $eventType->value,
+            'product_id' => $document->id,
         ]);
     }
 }

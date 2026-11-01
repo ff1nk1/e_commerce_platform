@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\DTO\Catalog\ProductFilters;
+use App\Enums\CatalogAvailabilityFilter;
+use App\Enums\ProductSort;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 final class CatalogFilterRequest extends FormRequest
 {
@@ -21,8 +25,14 @@ final class CatalogFilterRequest extends FormRequest
             'min_price' => ['nullable', 'numeric', 'min:0'],
             // max_price не может быть меньше min_price
             'max_price' => ['nullable', 'numeric', 'min:0', 'gte:min_price'],
-            'status' => ['nullable', 'string', 'in:in_stock'],
-            'sort' => ['nullable', 'string', 'in:new,price_asc,price_desc'],
+            'status' => ['nullable', 'string', Rule::enum(CatalogAvailabilityFilter::class)],
+            'sort' => ['nullable', 'string', Rule::enum(ProductSort::class)],
+            'page' => ['nullable', 'integer', 'min:1'],
         ];
+    }
+
+    public function filters(): ProductFilters
+    {
+        return ProductFilters::fromArray($this->validated());
     }
 }

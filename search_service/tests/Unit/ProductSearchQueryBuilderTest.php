@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Services\ProductSearchService;
+use App\DTO\Search\AutocompleteQuery;
+use App\Services\Search\AutocompleteProductsService;
+use App\Services\Search\SearchProductsService;
 use Junges\Kafka\Facades\Kafka;
 use Mockery;
 use Shop\Messaging\OutboxPublisher;
@@ -27,7 +29,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        resolve(ProductSearchService::class)->search($this->searchParams([
+        resolve(SearchProductsService::class)->handle($this->searchParams([
             'q' => null,
             'sort' => 'new',
         ]));
@@ -48,7 +50,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        resolve(ProductSearchService::class)->search($this->searchParams([
+        resolve(SearchProductsService::class)->handle($this->searchParams([
             'q' => 'wireless headphones',
             'sort' => 'relevance',
         ]));
@@ -68,7 +70,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        resolve(ProductSearchService::class)->search($this->searchParams([
+        resolve(SearchProductsService::class)->handle($this->searchParams([
             'q' => 'phone',
             'category_ids' => [3, 5],
             'min_price' => 100.0,
@@ -102,7 +104,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        resolve(ProductSearchService::class)->search($this->searchParams([
+        resolve(SearchProductsService::class)->handle($this->searchParams([
             'min_price' => 50.0,
         ]));
         $this->assertContains(
@@ -110,7 +112,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
             $this->lastSearchBody()['post_filter']['bool']['filter']
         );
 
-        resolve(ProductSearchService::class)->search($this->searchParams([
+        resolve(SearchProductsService::class)->handle($this->searchParams([
             'max_price' => 999.0,
         ]));
         $this->assertContains(
@@ -123,27 +125,27 @@ final class ProductSearchQueryBuilderTest extends TestCase
     {
         $this->mockOpenSearchClient();
         Kafka::fake();
-        $service = resolve(ProductSearchService::class);
+        $service = resolve(SearchProductsService::class);
 
-        $service->search($this->searchParams(['q' => 'x', 'sort' => 'relevance']));
+        $service->handle($this->searchParams(['q' => 'x', 'sort' => 'relevance']));
         $this->assertSame(
             [['_score' => ['order' => 'desc']], ['id' => ['order' => 'desc']]],
             $this->lastSearchBody()['sort']
         );
 
-        $service->search($this->searchParams(['sort' => 'price_asc']));
+        $service->handle($this->searchParams(['sort' => 'price_asc']));
         $this->assertSame(
             [['price' => ['order' => 'asc']], ['id' => ['order' => 'desc']]],
             $this->lastSearchBody()['sort']
         );
 
-        $service->search($this->searchParams(['sort' => 'price_desc']));
+        $service->handle($this->searchParams(['sort' => 'price_desc']));
         $this->assertSame(
             [['price' => ['order' => 'desc']], ['id' => ['order' => 'desc']]],
             $this->lastSearchBody()['sort']
         );
 
-        $service->search($this->searchParams(['sort' => 'new']));
+        $service->handle($this->searchParams(['sort' => 'new']));
         $this->assertSame(
             [['id' => ['order' => 'desc']]],
             $this->lastSearchBody()['sort']
@@ -151,7 +153,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
 
         // unknown sort + empty q → id desc (same shape as "new"; assert via body key presence)
         $beforeCount = count($this->capturedSearchRequests);
-        $service->search($this->searchParams(['q' => null, 'sort' => 'relevance']));
+        $service->handle($this->searchParams(['q' => null, 'sort' => 'relevance']));
         $this->assertCount($beforeCount + 1, $this->capturedSearchRequests);
         $this->assertSame(
             [['id' => ['order' => 'desc']]],
@@ -164,7 +166,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        resolve(ProductSearchService::class)->search($this->searchParams([
+        resolve(SearchProductsService::class)->handle($this->searchParams([
             'page' => 3,
             'per_page' => 15,
         ]));
@@ -179,7 +181,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
         $this->mockOpenSearchClient();
         Kafka::fake();
 
-        resolve(ProductSearchService::class)->search($this->searchParams([
+        resolve(SearchProductsService::class)->handle($this->searchParams([
             'category_ids' => [1],
             'q' => 'phone',
             'sort' => 'relevance',
@@ -245,28 +247,27 @@ final class ProductSearchQueryBuilderTest extends TestCase
         ]));
         Kafka::fake();
 
-        $result = resolve(ProductSearchService::class)->search($this->searchParams());
+        $result = resolve(SearchProductsService::class)->handle($this->searchParams());
 
         $this->assertSame([
             ['id' => 3, 'name' => 'Gadgets', 'count' => 10],
-        ], $result['facets']['categories']);
-        $this->assertSame('0-500', $result['facets']['price_ranges'][0]['key']);
-        $this->assertSame(4, $result['facets']['price_ranges'][0]['count']);
-        $this->assertTrue($result['facets']['availability'][0]['value']);
-        $this->assertFalse($result['facets']['availability'][1]['value']);
+        ], $result->facets['categories']);
+        $this->assertSame('0-500', $result->facets['price_ranges'][0]['key']);
+        $this->assertSame(4, $result->facets['price_ranges'][0]['count']);
+        $this->assertTrue($result->facets['availability'][0]['value']);
+        $this->assertFalse($result->facets['availability'][1]['value']);
         $this->assertSame([
             ['value' => 'Black', 'count' => 3],
-        ], $result['facets']['attributes']['Color']);
+        ], $result->facets['attributes']['Color']);
     }
 
     public function test_autocomplete_short_query_skips_search(): void
     {
         $this->mockOpenSearchClient();
 
-        $result = resolve(ProductSearchService::class)->autocomplete('a');
+        $result = resolve(AutocompleteProductsService::class)->handle(new AutocompleteQuery(q: 'a'));
 
-        $this->assertArrayHasKey('suggestions', $result);
-        $this->assertCount(0, $result['suggestions']);
+        $this->assertCount(0, $result->suggestions);
         $this->assertCount(0, $this->capturedSearchRequests);
     }
 
@@ -288,7 +289,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
             ],
         ]);
 
-        $result = resolve(ProductSearchService::class)->autocomplete('ph', 100);
+        $result = resolve(AutocompleteProductsService::class)->handle(new AutocompleteQuery(q: 'ph', limit: 100));
 
         $body = $this->lastSearchBody();
         $this->assertSame(20, $body['size']);
@@ -308,7 +309,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
                 'price' => 99.5,
                 'image_url' => null,
             ],
-        ], $result['suggestions']);
+        ], $result->suggestions);
     }
 
     public function test_search_publishes_search_performed_event(): void
@@ -322,7 +323,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
         ]);
         Kafka::fake();
 
-        resolve(ProductSearchService::class)->search($this->searchParams([
+        resolve(SearchProductsService::class)->handle($this->searchParams([
             'q' => 'laptop',
             'category_ids' => [2],
             'min_price' => 10.0,
@@ -363,7 +364,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
         ]);
         Kafka::fake();
 
-        resolve(ProductSearchService::class)->search($this->searchParams([
+        resolve(SearchProductsService::class)->handle($this->searchParams([
             'q' => 'loadtest',
             'sort' => 'relevance',
         ]), skipAnalytics: true);
@@ -407,6 +408,6 @@ final class ProductSearchQueryBuilderTest extends TestCase
         $this->app->instance(OutboxPublisher::class, $outbox);
 
         $this->expectException(\RuntimeException::class);
-        resolve(ProductSearchService::class)->search($this->searchParams(['q' => 'ok', 'sort' => 'relevance']));
+        resolve(SearchProductsService::class)->handle($this->searchParams(['q' => 'ok', 'sort' => 'relevance']));
     }
 }

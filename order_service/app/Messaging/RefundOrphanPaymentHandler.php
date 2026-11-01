@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Messaging;
 
 use App\Contracts\PaymentGateway;
+use App\Enums\PaymentStatus;
+use App\Infrastructure\Stripe\StripeIdempotencyKey;
 use App\Models\Payment;
-use App\Services\Stripe\StripeIdempotencyKey;
 use Ecotone\Messaging\Attribute\Asynchronous;
 use Ecotone\Modelling\Attribute\EventHandler;
 
@@ -32,7 +33,7 @@ final class RefundOrphanPaymentHandler
 
         Payment::query()
             ->whereKey($event->paymentId)
-            ->where('status', 'refund_pending')
-            ->update(['status' => 'refunded']);
+            ->where('status', PaymentStatus::RefundPending->value)
+            ->update(['status' => PaymentStatus::Refunded->value]);
     }
 }

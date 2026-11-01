@@ -17,9 +17,9 @@ final class AttributeResolverTest extends TestCase
         $resolved = $resolver->resolveOne('Диагональ', '6.1', $vocab);
 
         $this->assertNotNull($resolved);
-        $this->assertSame('Экран', $resolved['name']);
-        $this->assertSame('6.1', $resolved['value']);
-        $this->assertArrayNotHasKey('value_only', $resolved);
+        $this->assertSame('Экран', $resolved->name);
+        $this->assertSame('6.1', $resolved->value);
+        $this->assertFalse($resolved->valueOnly);
     }
 
     public function test_unresolved_in_scoped_vocab_is_value_only(): void
@@ -27,7 +27,8 @@ final class AttributeResolverTest extends TestCase
         $resolver = new AttributeResolver;
         $resolved = $resolver->resolveOne('НесуществующееПоле', '6.1', ['Экран', 'Память']);
 
-        $this->assertTrue($resolved['value_only'] ?? false);
+        $this->assertNotNull($resolved);
+        $this->assertTrue($resolved->valueOnly);
     }
 
     public function test_empty_vocab_keeps_canonical_name(): void
@@ -35,7 +36,8 @@ final class AttributeResolverTest extends TestCase
         $resolver = new AttributeResolver;
         $resolved = $resolver->resolveOne('color', 'синий', []);
 
-        $this->assertSame('Цвет', $resolved['name']);
-        $this->assertArrayNotHasKey('value_only', $resolved);
+        $this->assertNotNull($resolved);
+        $this->assertSame('Цвет', $resolved->name);
+        $this->assertFalse($resolved->valueOnly);
     }
 }

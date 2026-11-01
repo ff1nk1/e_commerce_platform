@@ -4,22 +4,23 @@ declare(strict_types=1);
 
 namespace App\Services\Stock;
 
+use App\DTO\Stock\StockLine;
+
 final class StockItemNormalizer
 {
     /**
      * Validate, merge duplicate (product_id, store_id) lines, and sort for lock order.
      *
      * @param  list<array<string, mixed>>  $items
-     * @return list<array{product_id: int, store_id: int, quantity: int}>|null
+     * @return list<StockLine>
      */
-    public function normalize(array $items): ?array
+    public function normalize(array $items): array
     {
         if ($items === []) {
-            return null;
+            return [];
         }
 
-        /** @var array<string, array{product_id: int, store_id: int, quantity: int}> $merged */
-        $merged = [];
+        $parsed = [];
 
         foreach ($items as $item) {
             $productId = filter_var($item['product_id'] ?? null, FILTER_VALIDATE_INT);
@@ -30,24 +31,42 @@ final class StockItemNormalizer
             $hasValidStoreId = $storeId !== false && $storeId >= 1;
             $hasValidQuantity = $quantity !== false && $quantity >= 1;
             if (! $hasValidProductId || ! $hasValidStoreId || ! $hasValidQuantity) {
-                return null;
+                return [];
             }
 
-            $key = $productId.':'.$storeId;
+            $parsed[] = new StockLine($productId, $storeId, $quantity);
+        }
+
+        return $this->merge($parsed);
+    }
+
+    /**
+     * Merge duplicate (product_id, store_id) lines and sort for lock order.
+     *
+     * @param  list<StockLine>  $items
+     * @return list<StockLine>
+     */
+    public function merge(array $items): array
+    {
+        /** @var array<string, StockLine> $merged */
+        $merged = [];
+
+        foreach ($items as $item) {
+            $key = $item->productId.':'.$item->storeId;
             if (isset($merged[$key])) {
-                $merged[$key]['quantity'] += $quantity;
+                $merged[$key] = new StockLine(
+                    $item->productId,
+                    $item->storeId,
+                    $merged[$key]->quantity + $item->quantity,
+                );
             } else {
-                $merged[$key] = [
-                    'product_id' => $productId,
-                    'store_id' => $storeId,
-                    'quantity' => $quantity,
-                ];
+                $merged[$key] = $item;
             }
         }
 
         $normalized = array_values($merged);
-        usort($normalized, static function (array $a, array $b): int {
-            return [$a['product_id'], $a['store_id']] <=> [$b['product_id'], $b['store_id']];
+        usort($normalized, static function (StockLine $a, StockLine $b): int {
+            return [$a->productId, $a->storeId] <=> [$b->productId, $b->storeId];
         });
 
         return $normalized;

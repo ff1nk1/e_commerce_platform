@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use App\Infrastructure\Stripe\StripeClient;
 use App\Models\Order;
 use App\Models\Payment;
-use App\Services\Stripe\StripeClient;
 use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
 use Shop\Messaging\OutboxQueue;

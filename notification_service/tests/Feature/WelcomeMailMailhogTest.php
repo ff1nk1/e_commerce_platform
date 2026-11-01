@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\EmailLog;
-use App\Services\MailDeliveryService;
+use App\Services\Mail\SendNotificationMailService;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -58,11 +58,11 @@ final class WelcomeMailMailhogTest extends TestCase
             'name' => 'Mailhog User',
         ];
 
-        $result = resolve(MailDeliveryService::class)->sendMailWithRetry($payload, 'user.registered');
+        $result = resolve(SendNotificationMailService::class)->handle($payload, 'user.registered');
 
-        $this->assertTrue($result['isSent']);
-        $result['emailLog']->refresh();
-        $this->assertEquals('sent', $result['emailLog']->status);
+        $this->assertTrue($result->isSent);
+        $result->emailLog->refresh();
+        $this->assertEquals('sent', $result->emailLog->status);
 
         $this->assertDatabaseHas('email_logs', [
             'email' => $email,

@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Contracts\LlmClient;
+use App\Enums\EmbedTask;
+use App\Infrastructure\Llm\Exceptions\LlmException;
 use App\Kafka\Handlers\ProductEventsHandler;
 use App\Kafka\Handlers\StockEventsHandler;
 use App\Messaging\CatalogStockChanged;
 use App\Messaging\ProductLifecycle;
 use App\Models\ProductCatalog;
-use App\Services\Llm\Contracts\LlmClient;
-use App\Services\Llm\Exceptions\LlmException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
@@ -396,7 +397,7 @@ final class ProductKafkaHandlersTest extends TestCase
             $this->assertSame(503, $event->context['status'] ?? null);
         });
 
-        $this->llm->embedHandler = static function (string $text, string $taskType): array {
+        $this->llm->embedHandler = static function (string $text, EmbedTask $taskType): array {
             throw LlmException::http('Gemini embed failed (503): unavailable', 503);
         };
 

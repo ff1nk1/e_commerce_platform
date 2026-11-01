@@ -4,25 +4,17 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\Rules\PhoneNumber;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 final class RegistrationRequest extends FormRequest
 {
-    /**
-     * Normalize phone input before validation.
-     */
     protected function prepareForValidation(): void
     {
-        if (! $this->has('number') || ! is_string($this->input('number'))) {
-            return;
+        if ($this->has('number')) {
+            $this->merge(['number' => PhoneNumber::normalize($this->input('number'))]);
         }
-
-        $normalized = preg_replace('/[\s\-()]/', '', $this->input('number'));
-
-        $this->merge([
-            'number' => $normalized,
-        ]);
     }
 
     /**
@@ -36,7 +28,7 @@ final class RegistrationRequest extends FormRequest
             'name' => ['required', 'string', 'min:3', 'max:30'],
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
-            'number' => ['required', 'string', 'max:16', 'regex:/^\+[1-9]\d{9,14}$/'],
+            'number' => ['required', 'string', new PhoneNumber],
         ];
     }
 
@@ -47,8 +39,6 @@ final class RegistrationRequest extends FormRequest
     {
         return [
             'number.required' => 'Укажите номер телефона.',
-            'number.regex' => 'Номер телефона должен быть в формате E.164 (например +48123456789).',
-            'number.max' => 'Номер телефона слишком длинный.',
         ];
     }
 }

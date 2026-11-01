@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests;
 
-use App\Services\Catalog\Contracts\ProductFreshnessChecker;
+use App\Contracts\ProductFreshnessChecker;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Tests\Concerns\SyncsDotEnvKeys;
 use Tests\Fakes\PassthroughFreshnessChecker;

@@ -4,17 +4,20 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\DTO\Stock\StockData;
 use App\Http\Requests\StoreStockRequest;
 use App\Http\Requests\UpdateStockRequest;
 use App\Models\Stock;
-use App\Services\StockService;
+use App\Services\Stock\CreateStockService;
+use App\Services\Stock\UpdateStockQuantityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 final class AdminStockController extends Controller
 {
     public function __construct(
-        private StockService $stockService
+        private CreateStockService $createStock,
+        private UpdateStockQuantityService $updateStockQuantity,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -46,7 +49,7 @@ final class AdminStockController extends Controller
 
     public function store(StoreStockRequest $request): JsonResponse
     {
-        $stock = $this->stockService->createStock($request->validated());
+        $stock = $this->createStock->handle(StockData::fromArray($request->validated()));
 
         return response()->json([
             'message' => 'Stock created',
@@ -56,7 +59,7 @@ final class AdminStockController extends Controller
 
     public function update(UpdateStockRequest $request, Stock $stock): JsonResponse
     {
-        $stock = $this->stockService->updateQuantity($stock, (int) $request->validated()['quantity']);
+        $stock = $this->updateStockQuantity->handle($stock, (int) $request->validated()['quantity']);
 
         return response()->json([
             'message' => 'Stock updated',

@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources;
 
+use App\DTO\Stock\StockData;
 use App\Filament\Resources\StockResource\Pages\ManageStocks;
 use App\Models\Stock;
 use App\Models\Store;
-use App\Services\StockService;
+use App\Services\Stock\CreateStockService;
+use App\Services\Stock\UpdateStockQuantityService;
 use BackedEnum;
 use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
@@ -86,11 +88,11 @@ final class StockResource extends Resource
             ])
             ->headerActions([
                 CreateAction::make()
-                    ->using(fn (array $data): Stock => resolve(StockService::class)->createStock([
+                    ->using(fn (array $data): Stock => resolve(CreateStockService::class)->handle(StockData::fromArray([
                         'product_id' => (int) $data['product_id'],
                         'store_id' => (int) $data['store_id'],
                         'quantity' => (int) $data['quantity'],
-                    ])),
+                    ]))),
             ])
             ->recordActions([
                 EditAction::make()
@@ -98,7 +100,7 @@ final class StockResource extends Resource
                     ->schema([
                         TextInput::make('quantity')->numeric()->required()->minValue(0),
                     ])
-                    ->using(fn (Stock $record, array $data): Stock => resolve(StockService::class)->updateQuantity(
+                    ->using(fn (Stock $record, array $data): Stock => resolve(UpdateStockQuantityService::class)->handle(
                         $record,
                         (int) $data['quantity']
                     )),

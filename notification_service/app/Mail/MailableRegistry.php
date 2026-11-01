@@ -4,31 +4,25 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\DTO\Notifications\NotificationMailData;
+use App\Enums\NotificationEventType;
 use Illuminate\Contracts\Mail\Mailable;
 use InvalidArgumentException;
 
 final class MailableRegistry
 {
-    /**
-     * @var array<string, class-string<Mailable>>
-     */
-    private const MAP = [
-        'order.paid' => OrderPaidMail::class,
-        'order.confirmed' => OrderConfirmedMail::class,
-        'order.cancelled' => OrderCancelledMail::class,
-        'user.registered' => WelcomeMail::class,
-    ];
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    public function make(string $eventType, array $payload): Mailable
+    public function make(string $eventType, NotificationMailData $mailData): Mailable
     {
-        throw_if($eventType === '' || ! isset(self::MAP[$eventType]), InvalidArgumentException::class, "Unknown notification event_type: {$eventType}");
+        $type = NotificationEventType::tryFrom($eventType);
 
-        $class = self::MAP[$eventType];
+        throw_if($type === null, InvalidArgumentException::class, "Unknown notification event_type: {$eventType}");
 
-        return new $class($payload);
+        return match ($type) {
+            NotificationEventType::OrderPaid => new OrderPaidMail($mailData),
+            NotificationEventType::OrderConfirmed => new OrderConfirmedMail($mailData),
+            NotificationEventType::OrderCancelled => new OrderCancelledMail($mailData),
+            NotificationEventType::UserRegistered => new WelcomeMail($mailData),
+        };
     }
 
     /**
@@ -36,11 +30,14 @@ final class MailableRegistry
      */
     public function knownEventTypes(): array
     {
-        return array_keys(self::MAP);
+        return array_map(
+            static fn (NotificationEventType $type): string => $type->value,
+            NotificationEventType::cases(),
+        );
     }
 
     public function supports(string $eventType): bool
     {
-        return isset(self::MAP[$eventType]);
+        return NotificationEventType::tryFrom($eventType) !== null;
     }
 }

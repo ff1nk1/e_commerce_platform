@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Services\Stripe\StripeClient;
+use App\Infrastructure\Stripe\StripeClient;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 use Tests\TestCase;

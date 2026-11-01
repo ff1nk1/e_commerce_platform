@@ -11,7 +11,7 @@ use App\Mail\OrderConfirmedMail;
 use App\Mail\OrderPaidMail;
 use App\Messaging\OrderNotification;
 use App\Models\EmailLog;
-use App\Services\MailDeliveryService;
+use App\Services\Mail\MailSender;
 use Illuminate\Mail\PendingMail;
 use Illuminate\Support\Facades\Mail;
 use Junges\Kafka\Facades\Kafka;
@@ -150,7 +150,7 @@ final class OrderEventsHandlerTest extends TestCase
     {
         Kafka::fake();
 
-        $maxRetries = MailDeliveryService::MAX_RETRIES;
+        $maxRetries = MailSender::MAX_RETRIES;
         $pendingMailMock = Mockery::mock(PendingMail::class);
         $pendingMailMock->shouldReceive('send')
             ->times($maxRetries)
@@ -161,11 +161,11 @@ final class OrderEventsHandlerTest extends TestCase
             ->with('dlq-order@example.com')
             ->andReturn($pendingMailMock);
 
-        /** @var MailDeliveryService&MockInterface $service */
-        $service = Mockery::mock(MailDeliveryService::class, [new MailableRegistry])->makePartial();
-        $service->shouldAllowMockingProtectedMethods();
-        $service->shouldReceive('sleepInTest')->times($maxRetries - 1);
-        $this->app->instance(MailDeliveryService::class, $service);
+        /** @var MailSender&MockInterface $sender */
+        $sender = Mockery::mock(MailSender::class, [new MailableRegistry])->makePartial();
+        $sender->shouldAllowMockingProtectedMethods();
+        $sender->shouldReceive('sleepInTest')->times($maxRetries - 1);
+        $this->app->instance(MailSender::class, $sender);
 
         $body = $this->orderBody(['email' => 'dlq-order@example.com']);
         $message = $this->message('order.paid', $body, '99');

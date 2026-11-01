@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Catalog;
 
+use App\DTO\Catalog\AttributeConstraint;
+use App\Enums\MessageRole;
 use App\Support\RuText;
 
 /**
@@ -17,11 +19,11 @@ final class AttributeConstraintDetector
     ) {}
 
     /**
-     * @param  list<array{name: string, value: string}>  $attributes
+     * @param  list<AttributeConstraint>  $attributes
      * @return array{
-     *     required: list<array{name: string, value: string}>,
-     *     preferred: list<array{name: string, value: string}>,
-     *     soft: list<array{name: string, value: string}>
+     *     required: list<AttributeConstraint>,
+     *     preferred: list<AttributeConstraint>,
+     *     soft: list<AttributeConstraint>
      * }
      */
     public function split(string $userMessage, array $attributes, bool $exclusiveFromHistory = false): array
@@ -32,17 +34,20 @@ final class AttributeConstraintDetector
         $soft = [];
 
         foreach ($attributes as $attr) {
-            $name = trim($attr['name']);
-            $value = trim($attr['value']);
+            $name = trim($attr->name);
+            $value = trim($attr->value);
             if ($name === '' || $value === '') {
                 continue;
             }
             $canonical = $this->names->canonicalize($name);
-            $row = ['name' => $canonical !== '' ? $canonical : $name, 'value' => $value];
+            $row = new AttributeConstraint(
+                name: $canonical !== '' ? $canonical : $name,
+                value: $value,
+            );
 
-            if ($exclusive || $this->isSizeAttributeName($row['name'])) {
+            if ($exclusive || $this->isSizeAttributeName($row->name)) {
                 $required[] = $row;
-            } elseif ($this->isPreferredAttributeName($row['name'])) {
+            } elseif ($this->isPreferredAttributeName($row->name)) {
                 $preferred[] = $row;
             } else {
                 $soft[] = $row;
@@ -74,7 +79,7 @@ final class AttributeConstraintDetector
         foreach ($history as $row) {
             $role = is_array($row) ? ($row['role'] ?? '') : ($row->role ?? '');
             $content = is_array($row) ? (string) ($row['content'] ?? '') : (string) ($row->content ?? '');
-            if ($role === 'user' && $this->messageImpliesExclusive($content)) {
+            if ($role === MessageRole::User->value && $this->messageImpliesExclusive($content)) {
                 return true;
             }
         }

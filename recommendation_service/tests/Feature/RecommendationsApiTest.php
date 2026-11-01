@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Contracts\LlmClient;
+use App\Contracts\RelevanceGate;
+use App\DTO\Chat\SearchFilters;
+use App\Enums\EmbedTask;
+use App\Enums\MessageRole;
+use App\Infrastructure\Llm\Exceptions\LlmException;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\ProductCatalog;
-use App\Services\Catalog\Contracts\RelevanceGate;
-use App\Services\Llm\Contracts\LlmClient;
-use App\Services\Llm\DTOs\SearchFilters;
-use App\Services\Llm\Exceptions\LlmException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -97,11 +99,11 @@ final class RecommendationsApiTest extends TestCase
         ]);
         $this->assertDatabaseHas('messages', [
             'conversation_id' => $conversationId,
-            'role' => Message::ROLE_USER,
+            'role' => MessageRole::User->value,
         ]);
         $this->assertDatabaseHas('messages', [
             'conversation_id' => $conversationId,
-            'role' => Message::ROLE_ASSISTANT,
+            'role' => MessageRole::Assistant->value,
         ]);
 
         $this->assertSame(1, $this->llm->extractAndEmbedCalls);
@@ -324,12 +326,12 @@ final class RecommendationsApiTest extends TestCase
         ]);
         Message::query()->create([
             'conversation_id' => $conversation->id,
-            'role' => Message::ROLE_USER,
+            'role' => MessageRole::User->value,
             'content' => 'черные джинсы 32 размера',
         ]);
         Message::query()->create([
             'conversation_id' => $conversation->id,
-            'role' => Message::ROLE_ASSISTANT,
+            'role' => MessageRole::Assistant->value,
             'content' => 'По вашему запросу на черные джинсы 32 размера подходящих товаров не нашлось.',
         ]);
 
@@ -348,7 +350,7 @@ final class RecommendationsApiTest extends TestCase
         $this->assertSame(301, $response->json('products.0.product_id'));
 
         $this->assertCount(1, $this->llm->lastChatMessages);
-        $this->assertSame('user', $this->llm->lastChatMessages[0]->role);
+        $this->assertSame(MessageRole::User, $this->llm->lastChatMessages[0]->role);
         $this->assertStringContainsString('телефон с экраном 6.1', $this->llm->lastChatMessages[0]->content);
         $this->assertStringContainsString('Candidates:', $this->llm->lastChatMessages[0]->content);
         $this->assertStringNotContainsString('джинсы', $this->llm->lastChatMessages[0]->content);
@@ -636,7 +638,7 @@ final class RecommendationsApiTest extends TestCase
         ]);
         Message::query()->create([
             'conversation_id' => $conversation->id,
-            'role' => Message::ROLE_USER,
+            'role' => MessageRole::User->value,
             'content' => 'Hi',
         ]);
 
@@ -707,12 +709,12 @@ final class RecommendationsApiTest extends TestCase
             'in_stock' => true,
         ]);
 
-        $this->llm->embedHandler = static function (string $text, string $taskType): array {
+        $this->llm->embedHandler = static function (string $text, EmbedTask $taskType): array {
             if (str_contains($text, 'Fail Jacket')) {
                 throw LlmException::http('Gemini embed failed (503): down', 503);
             }
 
-            return array_fill(0, 768, $taskType === 'RETRIEVAL_DOCUMENT' ? 0.02 : 0.01);
+            return array_fill(0, 768, $taskType === EmbedTask::RetrievalDocument ? 0.02 : 0.01);
         };
 
         $this->postJson('/api/recommendations/reindex')
@@ -727,7 +729,7 @@ final class RecommendationsApiTest extends TestCase
     {
         $this->app->instance(LlmClient::class, new class implements LlmClient
         {
-            public function embed(string $text, string $taskType = 'RETRIEVAL_DOCUMENT'): array
+            public function embed(string $text, EmbedTask $taskType = EmbedTask::RetrievalDocument): array
             {
                 return [];
             }
@@ -747,7 +749,7 @@ final class RecommendationsApiTest extends TestCase
 
             public function extractFiltersAndEmbed(
                 string $userMessage,
-                string $embedTaskType = 'RETRIEVAL_QUERY',
+                EmbedTask $embedTaskType = EmbedTask::RetrievalQuery,
                 ?string $embedText = null,
                 array $catalogAttributeNames = [],
             ): array {

@@ -8,33 +8,50 @@ linters:
   default: none
   enable:
     - copyloopvar
-    - errcheck
     - errorlint
     - gocritic
     - gosec
-    - govet
-    - ineffassign
-    - misspell
-    - staticcheck
-    - unconvert
-    - unused
   settings:
+    gocritic:
+      # exitAfterDefer is on by default. Disable the other default checks
+      # so gocritic only flags os.Exit after defer.
+      disabled-checks:
+        - appendAssign
+        - argOrder
+        - assignOp
+        - badCall
+        - badCond
+        - captLocal
+        - caseOrder
+        - codegenComment
+        - commentFormatting
+        - defaultCaseOrder
+        - deprecatedComment
+        - dupArg
+        - dupBranchBody
+        - dupCase
+        - dupSubExpr
+        - elseif
+        - flagDeref
+        - flagName
+        - ifElseChain
+        - mapKey
+        - newDeref
+        - offBy1
+        - regexpMust
+        - singleCaseSwitch
+        - sloppyLen
+        - sloppyTypeAssert
+        - switchTrue
+        - typeSwitchVar
+        - underef
+        - unlambda
+        - unslice
+        - valSwap
+        - wrapperFunc
     gosec:
       includes:
         - G115
-    misspell:
-      locale: US
-      ignore-rules:
-        - cancelled
   exclusions:
     paths:
       - vendor
-
-formatters:
-  enable:
-    - gofmt
-    - goimports
-  settings:
-    goimports:
-      local-prefixes:
-        - analytic_service

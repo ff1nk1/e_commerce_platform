@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Enums\MatchStrategy;
 use App\Services\Catalog\AttributeValueMatcher;
 use App\Services\Catalog\ValueMatchStrategyResolver;
 use Tests\TestCase;
@@ -44,12 +45,12 @@ final class AttributeValueMatcherTest extends TestCase
         $this->assertTrue($numericMatcher->matches('Экран', '6.1', '6,1'));
 
         config([
-            'attributes.value_match.strategies_by_concept.screen' => ValueMatchStrategyResolver::STRATEGY_TEXT,
+            'attributes.value_match.strategies_by_concept.screen' => MatchStrategy::Text->value,
         ]);
 
         $textMatcher = new AttributeValueMatcher;
         $this->assertFalse($textMatcher->matches('Экран', '6.1', '6,1'));
-        $this->assertSame(ValueMatchStrategyResolver::STRATEGY_TEXT, $textMatcher->strategyFor('Экран'));
+        $this->assertSame(MatchStrategy::Text, $textMatcher->strategyFor('Экран'));
     }
 
     public function test_resolver_maps_size_aliases_to_size_range(): void
@@ -59,6 +60,6 @@ final class AttributeValueMatcherTest extends TestCase
         $this->assertTrue($resolver->isSizeRange('Размер'));
         $this->assertTrue($resolver->isSizeRange('size'));
         $this->assertFalse($resolver->isSizeRange('Цвет'));
-        $this->assertSame(ValueMatchStrategyResolver::STRATEGY_NUMERIC, $resolver->strategyFor('Экран'));
+        $this->assertSame(MatchStrategy::Numeric, $resolver->strategyFor('Экран'));
     }
 }

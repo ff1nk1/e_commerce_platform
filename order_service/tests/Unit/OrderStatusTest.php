@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Domain\OrderStatus;
+use App\Enums\OrderStatus;
 use PHPUnit\Framework\TestCase;
 
 final class OrderStatusTest extends TestCase

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\DTO\Catalog\ProductData;
 use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Product;
-use App\Services\ProductService;
-use App\Support\CatalogCacheKeys;
+use App\Services\Products\CreateProductService;
+use App\Services\Products\DeleteProductService;
+use App\Services\Products\ProductCache;
+use App\Services\Products\UpdateProductService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -18,7 +21,9 @@ final class ProductController extends Controller
     private const PRODUCT_CACHE_TTL_SECONDS = 86400;
 
     public function __construct(
-        private ProductService $productService
+        private CreateProductService $createProduct,
+        private UpdateProductService $updateProduct,
+        private DeleteProductService $deleteProduct,
     ) {}
 
     // GET /api/admin/products
@@ -42,14 +47,14 @@ final class ProductController extends Controller
     public function store(StoreProductRequest $request): JsonResponse
     {
         // Сервис создаст товар и отправит событие в Kafka
-        $product = $this->productService->createProduct($request->validated());
+        $product = $this->createProduct->handle(ProductData::fromArray($request->validated()));
 
         return response()->json(['message' => 'Товар добавлен', 'product' => $product], 201);
     }
 
     public function show(int|string $id): JsonResponse
     {   // Когда память редиса заполнится, он будет убирать самые редко вызываемые
-        $product = Cache::tags(['products'])->remember(CatalogCacheKeys::product($id), self::PRODUCT_CACHE_TTL_SECONDS, function () use ($id) {
+        $product = Cache::tags(['products'])->remember(ProductCache::product($id), self::PRODUCT_CACHE_TTL_SECONDS, function () use ($id) {
             return Product::with(['category', 'store', 'attributes'])->findOrFail($id)->toArray();
         });
 
@@ -61,7 +66,7 @@ final class ProductController extends Controller
     {
 
         // Сервис обновит товар и отправит событие в Kafka
-        $product = $this->productService->updateProduct($product, $request->validated());
+        $product = $this->updateProduct->handle($product, ProductData::fromArray($request->validated()));
 
         return response()->json(['message' => 'Товар обновлен', 'product' => $product]);
     }
@@ -70,7 +75,7 @@ final class ProductController extends Controller
     public function destroy(Product $product): JsonResponse
     {
         // Сервис удалит товар и отправит старые данные в Kafka
-        $this->productService->deleteProduct($product);
+        $this->deleteProduct->handle($product);
 
         return response()->json(['message' => 'Товар удален']);
     }

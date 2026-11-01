@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use App\Services\CatalogService;
-use App\Services\ProductService;
+use App\Services\Categories\CategoriesCache;
+use App\Services\Products\ProductCache;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -22,7 +22,7 @@ final class DatabaseSeeder extends Seeder
         ]);
 
         // Safety net after StockSeeder: Redis must match freshly seeded DB.
-        resolve(CatalogService::class)->clearCategoryCache();
-        resolve(ProductService::class)->clearProductCache();
+        resolve(CategoriesCache::class)->clear();
+        resolve(ProductCache::class)->clear();
     }
 }

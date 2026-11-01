@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Concerns;
 
 use App\Contracts\IdempotencyStore;
-use App\Services\IdempotencyService;
+use App\Infrastructure\Cache\CacheIdempotencyStore;
 use Mockery;
 
 trait BindsInMemoryIdempotency
@@ -17,7 +17,7 @@ trait BindsInMemoryIdempotency
     {
         $store = &$this->idempotencyStore;
 
-        $idem = Mockery::mock(IdempotencyService::class);
+        $idem = Mockery::mock(CacheIdempotencyStore::class);
         $idem->shouldReceive('scopeKey')->andReturnUsing(
             function (string $operation, int $userId, string $clientKey, ?int $resourceId = null): string {
                 $parts = ['order', 'idempotency', $operation, (string) $userId];
@@ -39,7 +39,7 @@ trait BindsInMemoryIdempotency
             $store[$key] = ['status' => $status, 'body' => $body];
         });
 
-        $this->app->instance(IdempotencyService::class, $idem);
+        $this->app->instance(CacheIdempotencyStore::class, $idem);
         $this->app->instance(IdempotencyStore::class, $idem);
     }
 }

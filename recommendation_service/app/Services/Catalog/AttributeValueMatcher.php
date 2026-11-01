@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Catalog;
 
+use App\Enums\MatchStrategy;
 use App\Services\Catalog\ValueMatchers\NumericValueMatcher;
 use App\Services\Catalog\ValueMatchers\SizeRangeMatcher;
 use App\Services\Catalog\ValueMatchers\TextValueMatcher;
@@ -23,13 +24,13 @@ final class AttributeValueMatcher
     public function matches(string $attributeName, string $productValue, string $requestedValue): bool
     {
         return match ($this->strategies->strategyFor($attributeName)) {
-            ValueMatchStrategyResolver::STRATEGY_NUMERIC => $this->numeric->matches($productValue, $requestedValue),
-            ValueMatchStrategyResolver::STRATEGY_SIZE_RANGE => $this->sizeRange->matches($productValue, $requestedValue),
-            default => $this->text->matches($productValue, $requestedValue),
+            MatchStrategy::Numeric => $this->numeric->matches($productValue, $requestedValue),
+            MatchStrategy::SizeRange => $this->sizeRange->matches($productValue, $requestedValue),
+            MatchStrategy::Text => $this->text->matches($productValue, $requestedValue),
         };
     }
 
-    public function strategyFor(string $attributeName): string
+    public function strategyFor(string $attributeName): MatchStrategy
     {
         return $this->strategies->strategyFor($attributeName);
     }

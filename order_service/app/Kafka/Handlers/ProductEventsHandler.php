@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\Enums\OrderEventType;
 use App\Messaging\ProductSnapshotReceived;
 use App\Models\ProductSnapshot;
 use Ecotone\Modelling\Attribute\EventHandler;
@@ -33,7 +34,7 @@ final class ProductEventsHandler
         $eventTypeFromBody = $body['event_type'] ?? $body['event'] ?? null;
         $eventType = $eventTypeFromHeader ?? $eventTypeFromBody;
 
-        if (! in_array($eventType, ['product.created', 'product.updated'], true)) {
+        if (! in_array($eventType, [OrderEventType::ProductCreated->value, OrderEventType::ProductUpdated->value], true)) {
             Log::debug("Игнорируем неизвестное событие продукта: {$eventType}");
 
             return;

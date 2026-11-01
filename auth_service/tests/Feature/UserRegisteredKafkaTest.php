@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\DTO\Auth\RegisterUserData;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\Auth\AuthService;
+use App\Services\Auth\RegisterUserService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Junges\Kafka\Facades\Kafka;
@@ -39,8 +40,7 @@ final class UserRegisteredKafkaTest extends TestCase
             'password' => 'secret123',
         ];
 
-        $service = resolve(AuthService::class);
-        $user = $service->register($userData);
+        $user = resolve(RegisterUserService::class)->handle(RegisterUserData::fromArray($userData));
 
         $this->assertDatabaseHas('users', [
             'id' => $user->id,
@@ -74,11 +74,11 @@ final class UserRegisteredKafkaTest extends TestCase
         $this->app->instance(OutboxPublisher::class, $outbox);
 
         try {
-            resolve(AuthService::class)->register([
+            resolve(RegisterUserService::class)->handle(RegisterUserData::fromArray([
                 'name' => 'Jane Doe',
                 'email' => 'jane@example.com',
                 'password' => 'secret123',
-            ]);
+            ]));
             $this->fail('registration should roll back');
         } catch (RuntimeException) {
         }

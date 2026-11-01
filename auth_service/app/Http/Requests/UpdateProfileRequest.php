@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\Rules\PhoneNumber;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -17,20 +18,11 @@ final class UpdateProfileRequest extends FormRequest
         return $this->user() !== null;
     }
 
-    /**
-     * Normalize phone input before validation.
-     */
     protected function prepareForValidation(): void
     {
-        if (! $this->has('number') || ! is_string($this->input('number'))) {
-            return;
+        if ($this->has('number')) {
+            $this->merge(['number' => PhoneNumber::normalize($this->input('number'))]);
         }
-
-        $normalized = preg_replace('/[\s\-()]/', '', $this->input('number'));
-
-        $this->merge([
-            'number' => $normalized,
-        ]);
     }
 
     /**
@@ -40,18 +32,7 @@ final class UpdateProfileRequest extends FormRequest
     {
         return [
             'name' => ['sometimes', 'string', 'max:255'],
-            'number' => ['sometimes', 'string', 'max:16', 'regex:/^\+[1-9]\d{9,14}$/'],
-        ];
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    public function messages(): array
-    {
-        return [
-            'number.regex' => 'Номер телефона должен быть в формате E.164 (например +48123456789).',
-            'number.max' => 'Номер телефона слишком длинный.',
+            'number' => ['sometimes', 'string', new PhoneNumber],
         ];
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Catalog;
 
+use App\DTO\Catalog\AttributeConstraint;
 use App\Support\RuText;
 
 /**
@@ -18,20 +19,16 @@ final class AttributeResolver
     ) {}
 
     /**
-     * @param  list<array{name: string, value: string}>  $attributes
+     * @param  list<AttributeConstraint>  $attributes
      * @param  list<string>  $vocabulary
-     * @return list<array{name: string, value: string, value_only?: bool}>
+     * @return list<AttributeConstraint>
      */
     public function resolveList(array $attributes, array $vocabulary): array
     {
         $out = [];
         foreach ($attributes as $row) {
-            $resolved = $this->resolveOne(
-                (string) $row['name'],
-                (string) $row['value'],
-                $vocabulary,
-            );
-            if ($resolved !== null) {
+            $resolved = $this->resolveOne($row->name, $row->value, $vocabulary);
+            if ($resolved instanceof AttributeConstraint) {
                 $out[] = $resolved;
             }
         }
@@ -41,9 +38,8 @@ final class AttributeResolver
 
     /**
      * @param  list<string>  $vocabulary
-     * @return array{name: string, value: string, value_only?: bool}|null
      */
-    public function resolveOne(string $name, string $value, array $vocabulary): ?array
+    public function resolveOne(string $name, string $value, array $vocabulary): ?AttributeConstraint
     {
         $name = trim($name);
         $value = trim($value);
@@ -52,36 +48,39 @@ final class AttributeResolver
         }
 
         if ($name === '') {
-            return ['name' => '', 'value' => $value, 'value_only' => true];
+            return new AttributeConstraint(name: '', value: $value, valueOnly: true);
         }
 
         $canonical = $this->names->canonicalize($name);
         if ($vocabulary === []) {
             // No product-type scope: keep aliased name, skip value_only demotion.
-            return ['name' => $canonical !== '' ? $canonical : $name, 'value' => $value];
+            return new AttributeConstraint(
+                name: $canonical !== '' ? $canonical : $name,
+                value: $value,
+            );
         }
 
         $vocabExact = $this->findExactInVocabulary($canonical, $vocabulary);
         if ($vocabExact !== null) {
-            return ['name' => $vocabExact, 'value' => $value];
+            return new AttributeConstraint(name: $vocabExact, value: $value);
         }
 
         $fromSynonym = $this->resolveViaSynonymGroup($canonical, $vocabulary);
         if ($fromSynonym !== null) {
-            return ['name' => $fromSynonym, 'value' => $value];
+            return new AttributeConstraint(name: $fromSynonym, value: $value);
         }
 
         $fuzzy = $this->resolveFuzzy($canonical, $vocabulary);
         if ($fuzzy !== null) {
-            return ['name' => $fuzzy, 'value' => $value];
+            return new AttributeConstraint(name: $fuzzy, value: $value);
         }
 
         // Scoped vocab present but name unknown → match by value across product attrs.
-        return [
-            'name' => $canonical !== '' ? $canonical : $name,
-            'value' => $value,
-            'value_only' => true,
-        ];
+        return new AttributeConstraint(
+            name: $canonical !== '' ? $canonical : $name,
+            value: $value,
+            valueOnly: true,
+        );
     }
 
     /**

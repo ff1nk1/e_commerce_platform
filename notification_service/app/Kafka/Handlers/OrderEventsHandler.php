@@ -4,14 +4,20 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\Enums\NotificationEventType;
+use App\Kafka\KafkaMailPipeline;
 use App\Messaging\OrderNotification;
-use App\Services\KafkaMailPipeline;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Shop\Messaging\EnvelopeMessage;
 
 final class OrderEventsHandler
 {
-    public const ALLOWED_TYPES = ['order.paid', 'order.confirmed', 'order.cancelled'];
+    /** @var list<NotificationEventType> */
+    public const ALLOWED_TYPES = [
+        NotificationEventType::OrderPaid,
+        NotificationEventType::OrderConfirmed,
+        NotificationEventType::OrderCancelled,
+    ];
 
     public function __construct(
         private KafkaMailPipeline $pipeline,

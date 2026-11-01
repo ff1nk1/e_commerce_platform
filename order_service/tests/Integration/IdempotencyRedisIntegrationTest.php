@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
-use App\Services\IdempotencyService;
+use App\Infrastructure\Cache\CacheIdempotencyStore;
 use Illuminate\Support\Str;
 use Shop\Messaging\OutboxQueue;
 
@@ -29,7 +29,7 @@ final class IdempotencyRedisIntegrationTest extends IntegrationTestCase
         $this->assertSame(1, OutboxQueue::count('order.created'));
         $this->assertDatabaseCount('orders', 1);
 
-        $idem = resolve(IdempotencyService::class);
+        $idem = resolve(CacheIdempotencyStore::class);
         $scopeKey = $idem->scopeKey('create', (int) $payload['user_id'], $clientKey);
         $cached = $idem->get($scopeKey);
         $this->assertSame(201, $cached['status'] ?? null);
@@ -39,7 +39,7 @@ final class IdempotencyRedisIntegrationTest extends IntegrationTestCase
     public function test_lock_contention_returns_conflict_when_response_not_cached_yet(): void
     {
         $clientKey = 'it-lock-'.Str::uuid();
-        $idem = resolve(IdempotencyService::class);
+        $idem = resolve(CacheIdempotencyStore::class);
         $scopeKey = $idem->scopeKey('create', 42, $clientKey);
 
         $this->assertTrue($idem->acquireLock($scopeKey));

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\DTO\Payments\StripeCheckoutSession;
 use App\Models\Order;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -86,15 +87,15 @@ final class MultiItemCartCheckoutTest extends TestCase
         $stripe = $this->mockPaymentGateway();
         $stripe->shouldReceive('createCheckoutSession')
             ->once()
-            ->andReturnUsing(function (array $params) use (&$capturedLineItems): array {
+            ->andReturnUsing(function (array $params) use (&$capturedLineItems): StripeCheckoutSession {
                 $capturedLineItems = $params['line_items'] ?? null;
 
-                return [
+                return StripeCheckoutSession::fromArray([
                     'id' => 'cs_cart_multi',
                     'url' => 'https://checkout.stripe.com/c/pay/cs_cart_multi',
                     'payment_intent' => 'pi_cart_multi',
                     'status' => 'open',
-                ];
+                ]);
             });
 
         $this->postJson('/api/orders/'.$orderId.'/pay', ['user_id' => 7], [

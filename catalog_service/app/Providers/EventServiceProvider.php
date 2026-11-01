@@ -14,11 +14,8 @@ use App\Events\ProductUpdated;
 use App\Events\StockChanged;
 use App\Events\StockReservationFailed;
 use App\Events\StockReserved;
-use App\Listeners\PublishCategoryToKafka;
-use App\Listeners\PublishProductToKafka;
-use App\Listeners\WriteStockChangedOutbox;
-use App\Listeners\WriteStockReservationFailedOutbox;
-use App\Listeners\WriteStockReservedOutbox;
+use App\Listeners\PublishCatalogEventToKafka;
+use App\Listeners\WriteOutboxableToOutbox;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 
 final class EventServiceProvider extends ServiceProvider
@@ -27,16 +24,16 @@ final class EventServiceProvider extends ServiceProvider
      * @var array<class-string, list<class-string>>
      */
     protected $listen = [
-        ProductCreated::class => [PublishProductToKafka::class],
-        ProductUpdated::class => [PublishProductToKafka::class],
-        ProductDeleted::class => [PublishProductToKafka::class],
-        ProductPublishStateChanged::class => [PublishProductToKafka::class],
-        CategoryCreated::class => [PublishCategoryToKafka::class],
-        CategoryUpdated::class => [PublishCategoryToKafka::class],
-        CategoryDeleted::class => [PublishCategoryToKafka::class],
-        StockChanged::class => [WriteStockChangedOutbox::class],
-        StockReserved::class => [WriteStockReservedOutbox::class],
-        StockReservationFailed::class => [WriteStockReservationFailedOutbox::class],
+        ProductCreated::class => [PublishCatalogEventToKafka::class],
+        ProductUpdated::class => [PublishCatalogEventToKafka::class],
+        ProductDeleted::class => [PublishCatalogEventToKafka::class],
+        ProductPublishStateChanged::class => [PublishCatalogEventToKafka::class],
+        CategoryCreated::class => [PublishCatalogEventToKafka::class],
+        CategoryUpdated::class => [PublishCatalogEventToKafka::class],
+        CategoryDeleted::class => [PublishCatalogEventToKafka::class],
+        StockChanged::class => [WriteOutboxableToOutbox::class],
+        StockReserved::class => [WriteOutboxableToOutbox::class],
+        StockReservationFailed::class => [WriteOutboxableToOutbox::class],
     ];
 
     public function shouldDiscoverEvents(): bool

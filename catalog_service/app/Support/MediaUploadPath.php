@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-use Illuminate\Support\Str;
+use App\Services\Media\MediaStorage;
 
 final class MediaUploadPath
 {
     public static function new(string $extension): string
     {
-        $extension = ltrim($extension, '.');
-
-        return 'uploads/'.Str::uuid().'.'.$extension;
+        return MediaStorage::newUploadPath($extension);
     }
 }

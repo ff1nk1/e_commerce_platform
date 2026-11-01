@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\DTO\Auth\LoginCredentials;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\Auth\AuthService;
+use App\Services\Auth\LoginUserService;
 use Firebase\JWT\JWT;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -41,10 +42,10 @@ final class EnsureValidAccessTokenTest extends TestCase
             'role_id' => $role->id,
         ]);
 
-        $tokens = resolve(AuthService::class)->login([
+        $tokens = resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
             'email' => 'silent@example.com',
             'password' => 'password123',
-        ]);
+        ]));
 
         $now = now()->getTimestamp();
         $expiredAccess = JWT::encode([
@@ -60,7 +61,7 @@ final class EnsureValidAccessTokenTest extends TestCase
             [],
             [
                 'access_token' => $expiredAccess,
-                'refresh_token' => $tokens['refresh_token'],
+                'refresh_token' => $tokens->refreshToken,
             ],
             [],
             ['HTTP_ACCEPT' => 'application/json']

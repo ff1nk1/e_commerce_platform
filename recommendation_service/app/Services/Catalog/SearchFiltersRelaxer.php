@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Catalog;
 
-use App\Services\Llm\DTOs\SearchFilters;
+use App\DTO\Catalog\AttributeConstraint;
+use App\DTO\Chat\SearchFilters;
 use App\Support\RuText;
 
 /**
@@ -73,8 +74,8 @@ final class SearchFiltersRelaxer
     }
 
     /**
-     * @param  list<array{name: string, value: string}>  $attributes
-     * @return array{kept: list<array{name: string, value: string}>, label: string}|null
+     * @param  list<AttributeConstraint>  $attributes
+     * @return array{kept: list<AttributeConstraint>, label: string}|null
      */
     private function dropNamedAttribute(array $attributes, string $canonical): ?array
     {
@@ -83,7 +84,7 @@ final class SearchFiltersRelaxer
         $key = RuText::fold($canonical);
 
         foreach ($attributes as $row) {
-            $nameKey = RuText::fold((string) $row['name']);
+            $nameKey = RuText::fold($row->name);
             if ($dropped === null && $nameKey === $key) {
                 $dropped = $row;
 
@@ -98,7 +99,7 @@ final class SearchFiltersRelaxer
 
         return [
             'kept' => $kept,
-            'label' => $dropped['name'].'='.$dropped['value'],
+            'label' => $dropped->name.'='.$dropped->value,
         ];
     }
 }

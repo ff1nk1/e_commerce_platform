@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Services\SearchIndexService;
+use App\DTO\Search\CategoryDocument;
+use App\DTO\Search\ProductDocument;
+use App\Infrastructure\OpenSearch\OpenSearchIndexManager;
+use App\Services\Indexing\CategoryIndexer;
+use App\Services\Indexing\ProductIndexer;
 use Mockery;
 use OpenSearch\Client;
 use OpenSearch\Common\Exceptions\Missing404Exception;
@@ -26,7 +30,7 @@ final class SearchIndexServiceTest extends TestCase
     {
         $this->mockOpenSearchClient();
 
-        resolve(SearchIndexService::class)->indexProduct([
+        resolve(ProductIndexer::class)->upsert(ProductDocument::fromArray([
             'id' => 10,
             'name' => 'Phone',
             'store_id' => 7,
@@ -42,7 +46,7 @@ final class SearchIndexServiceTest extends TestCase
                 ['name' => 'Size', 'value' => ''],
                 'invalid',
             ],
-        ], preserveStock: false);
+        ]), preserveStock: false);
 
         $doc = $this->capturedIndexRequests[0]['body'];
         $this->assertSame(10, $doc['id']);
@@ -72,13 +76,13 @@ final class SearchIndexServiceTest extends TestCase
             return $params['index'] === 'products' && $params['id'] === '10';
         }))->andReturn(['result' => 'updated']);
 
-        resolve(SearchIndexService::class)->indexProduct([
+        resolve(ProductIndexer::class)->upsert(ProductDocument::fromArray([
             'id' => 10,
             'name' => 'Updated',
             'store_id' => 1,
             'quantity' => 0,
             'in_stock' => false,
-        ], preserveStock: true);
+        ]), preserveStock: true);
 
         $this->assertSame([], $this->capturedIndexRequests);
         $this->assertIsArray($updateDoc);
@@ -91,11 +95,11 @@ final class SearchIndexServiceTest extends TestCase
     {
         $this->mockOpenSearchClient();
 
-        resolve(SearchIndexService::class)->indexProduct([
+        resolve(ProductIndexer::class)->upsert(ProductDocument::fromArray([
             'id' => 0,
             'name' => 'Nope',
             'store_id' => 1,
-        ], preserveStock: false);
+        ]), preserveStock: false);
 
         $this->assertSame([], $this->capturedIndexRequests);
     }
@@ -105,19 +109,19 @@ final class SearchIndexServiceTest extends TestCase
         $client = $this->mockOpenSearchClient();
         $client->shouldReceive('delete')->once()->andThrow(new Missing404Exception('not found'));
 
-        resolve(SearchIndexService::class)->deleteProduct(99);
+        resolve(ProductIndexer::class)->delete(99);
     }
 
     public function test_index_category_document_shape(): void
     {
         $this->mockOpenSearchClient();
 
-        resolve(SearchIndexService::class)->indexCategory([
+        resolve(CategoryIndexer::class)->upsert(CategoryDocument::fromArray([
             'id' => 5,
             'parent_id' => 1,
             'name' => 'Phones',
             'slug' => 'phones',
-        ]);
+        ]));
 
         $req = $this->capturedIndexRequests[0];
         $this->assertSame('categories', $req['index']);
@@ -135,7 +139,7 @@ final class SearchIndexServiceTest extends TestCase
         $client = $this->mockOpenSearchClient();
         $client->shouldReceive('delete')->once()->andThrow(new \RuntimeException('index_not_found_exception 404'));
 
-        resolve(SearchIndexService::class)->deleteCategory(5);
+        resolve(CategoryIndexer::class)->delete(5);
     }
 
     public function test_sync_category_name_on_products_builds_update_by_query(): void
@@ -152,7 +156,7 @@ final class SearchIndexServiceTest extends TestCase
             return true;
         }))->andReturn(['updated' => 2]);
 
-        resolve(SearchIndexService::class)->syncCategoryNameOnProducts(3, 'New Name');
+        resolve(CategoryIndexer::class)->syncNameOnProducts(3, 'New Name');
     }
 
     public function test_update_product_stock_skips_missing_product(): void
@@ -166,7 +170,7 @@ final class SearchIndexServiceTest extends TestCase
         $client->shouldNotReceive('update');
         $this->app->instance(Client::class, $client);
 
-        resolve(SearchIndexService::class)->updateProductStock(44, 5);
+        resolve(ProductIndexer::class)->updateStock(44, 5);
     }
 
     public function test_update_product_stock_sets_in_stock_false_for_zero_qty(): void
@@ -185,7 +189,7 @@ final class SearchIndexServiceTest extends TestCase
         }))->andReturn(['result' => 'updated']);
         $this->app->instance(Client::class, $client);
 
-        resolve(SearchIndexService::class)->updateProductStock(44, 0);
+        resolve(ProductIndexer::class)->updateStock(44, 0);
     }
 
     public function test_ensure_indices_creates_missing_once(): void
@@ -198,9 +202,9 @@ final class SearchIndexServiceTest extends TestCase
         $client->shouldReceive('indices')->andReturn($indices);
         $this->app->instance(Client::class, $client);
 
-        $service = resolve(SearchIndexService::class);
-        $service->ensureIndices();
-        $service->ensureIndices(); // second call must be no-op (in-process flag)
+        $indices = resolve(OpenSearchIndexManager::class);
+        $indices->ensureIndices();
+        $indices->ensureIndices(); // second call must be no-op (in-process flag)
     }
 
     public function test_ensure_indices_skips_create_when_indices_exist(): void
@@ -213,19 +217,19 @@ final class SearchIndexServiceTest extends TestCase
         $client->shouldReceive('indices')->andReturn($indices);
         $this->app->instance(Client::class, $client);
 
-        resolve(SearchIndexService::class)->ensureIndices();
+        resolve(OpenSearchIndexManager::class)->ensureIndices();
     }
 
     public function test_non_array_attributes_normalize_to_empty(): void
     {
         $this->mockOpenSearchClient();
 
-        resolve(SearchIndexService::class)->indexProduct([
+        resolve(ProductIndexer::class)->upsert(ProductDocument::fromArray([
             'id' => 1,
             'name' => 'X',
             'store_id' => 1,
             'attributes' => 'bad',
-        ], preserveStock: false);
+        ]), preserveStock: false);
 
         $this->assertSame([], $this->capturedIndexRequests[0]['body']['attributes']);
     }

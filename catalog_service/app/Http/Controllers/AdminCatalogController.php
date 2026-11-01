@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\DTO\Catalog\CategoryData;
 use App\Http\Requests\StoreCategoryRequest;
 use App\Http\Requests\UpdateCategoryRequest;
 use App\Models\Category;
-use App\Services\CatalogService;
+use App\Services\Categories\CreateCategoryService;
+use App\Services\Categories\DeleteCategoryService;
+use App\Services\Categories\UpdateCategoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 final class AdminCatalogController extends Controller
 {
     public function __construct(
-        private CatalogService $catalogService
+        private CreateCategoryService $createCategory,
+        private UpdateCategoryService $updateCategory,
+        private DeleteCategoryService $deleteCategory,
     ) {}
 
     // GET /api/admin/categories
@@ -34,14 +39,14 @@ final class AdminCatalogController extends Controller
     public function store(StoreCategoryRequest $request): JsonResponse
     {
         // $request->validated() вернет только те данные, которые прошли проверку в StoreCategoryRequest
-        $category = $this->catalogService->createCategory($request->validated());
+        $category = $this->createCategory->handle(CategoryData::fromArray($request->validated()));
 
         return response()->json(['message' => 'Категория создана', 'category' => $category], 201);
     }
 
     public function update(UpdateCategoryRequest $request, Category $category): JsonResponse
     {
-        $category = $this->catalogService->updateCategory($category, $request->validated());
+        $category = $this->updateCategory->handle($category, CategoryData::fromArray($request->validated()));
 
         return response()->json(['message' => 'Категория обновлена', 'category' => $category]);
     }
@@ -55,7 +60,7 @@ final class AdminCatalogController extends Controller
     // DELETE /api/admin/categories/{category}
     public function destroy(Category $category): JsonResponse
     {
-        $this->catalogService->deleteCategory($category);
+        $this->deleteCategory->handle($category);
 
         return response()->json(['message' => 'Категория удалена']);
     }

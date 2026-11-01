@@ -4,23 +4,18 @@ declare(strict_types=1);
 
 namespace App\Contracts;
 
+use App\DTO\Payments\StripeCheckoutSession;
+
 interface PaymentGateway
 {
     /**
      * @param  array<string, mixed>  $params
-     * @return array<string, mixed>
      */
-    public function createCheckoutSession(array $params, string $idempotencyKey): array;
+    public function createCheckoutSession(array $params, string $idempotencyKey): StripeCheckoutSession;
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function retrieveCheckoutSession(string $sessionId): array;
+    public function retrieveCheckoutSession(string $sessionId): StripeCheckoutSession;
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function expireCheckoutSession(string $sessionId, string $idempotencyKey): array;
+    public function expireCheckoutSession(string $sessionId, string $idempotencyKey): StripeCheckoutSession;
 
     /**
      * @return array{id: string, type: string, data: array{object: array<string, mixed>}}

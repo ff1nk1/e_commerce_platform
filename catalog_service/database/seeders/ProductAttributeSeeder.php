@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\DTO\Catalog\ProductData;
 use App\Models\Product;
 use App\Models\ProductAttribute;
-use App\Services\ProductService;
+use App\Services\Products\ProductCache;
+use App\Services\Products\UpdateProductService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 
@@ -109,16 +111,17 @@ final class ProductAttributeSeeder extends Seeder
             ProductAttribute::query()->insert($rows);
         }
 
-        $service = resolve(ProductService::class);
-        $service->clearProductCache();
+        resolve(ProductCache::class)->clear();
+
+        $updates = resolve(UpdateProductService::class);
 
         // Publish product.updated so search_service and recommendation_service reindex.
         Product::query()
             ->with(['store', 'category', 'attributes'])
             ->orderBy('id')
-            ->each(fn (Product $product) => $service->updateProduct($product, [
+            ->each(fn (Product $product) => $updates->handle($product, ProductData::fromArray([
                 'name' => $product->name,
-            ]));
+            ])));
 
         $this->command?->info(sprintf(
             'Seeded attributes and republished %d products to Kafka.',

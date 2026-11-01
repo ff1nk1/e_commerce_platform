@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Notifications\NotificationMailData;
 use App\Mail\MailableRegistry;
 use App\Mail\WelcomeMail;
 use App\Models\EmailLog;
-use App\Services\MailDeliveryService;
+use App\Services\Mail\MailSender;
+use App\Services\Mail\ResendNotificationMailService;
+use App\Services\Mail\SendNotificationMailService;
 use Illuminate\Mail\PendingMail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -34,7 +37,7 @@ final class NotificationTest extends TestCase
             'event_type' => 'user.registered',
         ]);
 
-        $result = resolve(MailDeliveryService::class)->resend($notification);
+        $result = resolve(ResendNotificationMailService::class)->handle($notification);
 
         $this->assertTrue($result);
 
@@ -55,7 +58,7 @@ final class NotificationTest extends TestCase
 
     public function test_resend_email_failure_handles_exception(): void
     {
-        $maxRetries = MailDeliveryService::MAX_RETRIES;
+        $maxRetries = MailSender::MAX_RETRIES;
 
         $pendingMailMock = Mockery::mock(PendingMail::class);
         $pendingMailMock->shouldReceive('send')
@@ -74,7 +77,7 @@ final class NotificationTest extends TestCase
             'event_type' => 'user.registered',
         ]);
 
-        $result = resolve(MailDeliveryService::class)->resend($notification);
+        $result = resolve(ResendNotificationMailService::class)->handle($notification);
 
         $this->assertFalse($result);
 
@@ -113,7 +116,7 @@ final class NotificationTest extends TestCase
             ],
         ]);
 
-        $result = resolve(MailDeliveryService::class)->resend($notification);
+        $result = resolve(ResendNotificationMailService::class)->handle($notification);
 
         $this->assertTrue($result);
         $notification->refresh();
@@ -129,7 +132,7 @@ final class NotificationTest extends TestCase
             'name' => 'Иван Иванов',
         ];
 
-        $mail = new WelcomeMail($payload);
+        $mail = new WelcomeMail(NotificationMailData::fromArray($payload));
 
         $this->assertEquals('Добро пожаловать на наш сайт!', $mail->envelope()->subject);
         $mail->assertSeeInHtml('Иван Иванов');
@@ -141,15 +144,15 @@ final class NotificationTest extends TestCase
         Mail::fake();
         $logSpy = Log::spy();
 
-        $result = resolve(MailDeliveryService::class)->sendMailWithRetry(
+        $result = resolve(SendNotificationMailService::class)->handle(
             ['email' => 'test@example.com', 'name' => 'John'],
             'user.registered',
         );
 
-        $this->assertTrue($result['isSent']);
-        $this->assertEmpty($result['lastError']);
-        $this->assertEquals('sent', $result['emailLog']->status);
-        $this->assertEquals(1, $result['emailLog']->retries);
+        $this->assertTrue($result->isSent);
+        $this->assertEmpty($result->lastError);
+        $this->assertEquals('sent', $result->emailLog->status);
+        $this->assertEquals(1, $result->emailLog->retries);
 
         Mail::assertSent(WelcomeMail::class, function ($mail) {
             return $mail->hasTo('test@example.com');
@@ -183,21 +186,21 @@ final class NotificationTest extends TestCase
 
         $logSpy = Log::spy();
 
-        /** @var MailDeliveryService&MockInterface $service */
-        $service = Mockery::mock(MailDeliveryService::class, [new MailableRegistry])->makePartial();
-        $service->shouldAllowMockingProtectedMethods();
-        $service->shouldReceive('sleepInTest')
+        /** @var MailSender&MockInterface $sender */
+        $sender = Mockery::mock(MailSender::class, [new MailableRegistry])->makePartial();
+        $sender->shouldAllowMockingProtectedMethods();
+        $sender->shouldReceive('sleepInTest')
             ->once()
             ->with(Mockery::type('numeric'));
 
-        $result = $service->sendMailWithRetry(
+        $result = (new SendNotificationMailService($sender))->handle(
             ['email' => 'test@example.com', 'name' => 'John'],
             'user.registered',
         );
 
-        $this->assertTrue($result['isSent']);
-        $this->assertEquals(2, $result['emailLog']->retries);
-        $this->assertEquals('sent', $result['emailLog']->status);
+        $this->assertTrue($result->isSent);
+        $this->assertEquals(2, $result->emailLog->retries);
+        $this->assertEquals('sent', $result->emailLog->status);
 
         $logSpy->shouldHaveReceived('warning')->once();
         $logSpy->shouldHaveReceived('info')->once();
@@ -205,7 +208,7 @@ final class NotificationTest extends TestCase
 
     public function test_it_fails_after_max_retries(): void
     {
-        $maxRetries = MailDeliveryService::MAX_RETRIES;
+        $maxRetries = MailSender::MAX_RETRIES;
 
         $pendingMailMock = Mockery::mock(PendingMail::class);
         $pendingMailMock->shouldReceive('send')
@@ -219,21 +222,21 @@ final class NotificationTest extends TestCase
 
         $logSpy = Log::spy();
 
-        /** @var MailDeliveryService&MockInterface $service */
-        $service = Mockery::mock(MailDeliveryService::class, [new MailableRegistry])->makePartial();
-        $service->shouldAllowMockingProtectedMethods();
-        $service->shouldReceive('sleepInTest')
+        /** @var MailSender&MockInterface $sender */
+        $sender = Mockery::mock(MailSender::class, [new MailableRegistry])->makePartial();
+        $sender->shouldAllowMockingProtectedMethods();
+        $sender->shouldReceive('sleepInTest')
             ->times($maxRetries - 1);
 
-        $result = $service->sendMailWithRetry(
+        $result = (new SendNotificationMailService($sender))->handle(
             ['email' => 'test@example.com'],
             'user.registered',
         );
 
-        $this->assertFalse($result['isSent']);
-        $this->assertEquals('Critical SMTP Error', $result['lastError']);
-        $this->assertEquals($maxRetries, $result['emailLog']->retries);
-        $this->assertEquals('failed', $result['emailLog']->status);
+        $this->assertFalse($result->isSent);
+        $this->assertEquals('Critical SMTP Error', $result->lastError);
+        $this->assertEquals($maxRetries, $result->emailLog->retries);
+        $this->assertEquals('failed', $result->emailLog->status);
 
         $logSpy->shouldHaveReceived('warning')->times($maxRetries - 1);
         $logSpy->shouldNotHaveReceived('info');
@@ -241,7 +244,7 @@ final class NotificationTest extends TestCase
 
     public function test_retry_backoff_sleeps_follow_exponential_sequence(): void
     {
-        $maxRetries = MailDeliveryService::MAX_RETRIES;
+        $maxRetries = MailSender::MAX_RETRIES;
 
         $pendingMailMock = Mockery::mock(PendingMail::class);
         $pendingMailMock->shouldReceive('send')
@@ -255,16 +258,16 @@ final class NotificationTest extends TestCase
 
         $sleeps = [];
 
-        /** @var MailDeliveryService&MockInterface $service */
-        $service = Mockery::mock(MailDeliveryService::class, [new MailableRegistry])->makePartial();
-        $service->shouldAllowMockingProtectedMethods();
-        $service->shouldReceive('sleepInTest')
+        /** @var MailSender&MockInterface $sender */
+        $sender = Mockery::mock(MailSender::class, [new MailableRegistry])->makePartial();
+        $sender->shouldAllowMockingProtectedMethods();
+        $sender->shouldReceive('sleepInTest')
             ->times($maxRetries - 1)
             ->andReturnUsing(function (int $seconds) use (&$sleeps): void {
                 $sleeps[] = $seconds;
             });
 
-        $service->sendMailWithRetry([
+        (new SendNotificationMailService($sender))->handle([
             'email' => 'backoff@example.com',
             'name' => 'Backoff',
         ], 'user.registered');

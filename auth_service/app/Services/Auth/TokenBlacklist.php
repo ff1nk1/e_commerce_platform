@@ -1,0 +1,56 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\Auth;
+
+use App\Support\JwtConfig;
+use App\Support\TokenBlacklistKeys;
+use Illuminate\Support\Facades\Cache;
+
+final class TokenBlacklist
+{
+    public function __construct(
+        private JwtConfig $config,
+    ) {}
+
+    public function isJwtBlacklisted(string $jti): bool
+    {
+        return Cache::has(TokenBlacklistKeys::jwt($jti));
+    }
+
+    public function blacklistJwt(string $jti, int $ttl): void
+    {
+        $ttl = $this->normalizeTtl($ttl, $this->config->ttlSeconds());
+        if ($ttl <= 0) {
+            return;
+        }
+
+        Cache::put(TokenBlacklistKeys::jwt($jti), '1', $ttl);
+    }
+
+    public function isRefreshTokenBlacklisted(string $hash): bool
+    {
+        return Cache::has(TokenBlacklistKeys::refresh($hash));
+    }
+
+    public function blacklistRefreshToken(string $hash, int $ttl): void
+    {
+        // Redis TTL -1 (no expiry) / 0 / missing → use configured refresh lifetime
+        $ttl = $this->normalizeTtl($ttl, $this->config->refreshTtl);
+        if ($ttl <= 0) {
+            return;
+        }
+
+        Cache::put(TokenBlacklistKeys::refresh($hash), '1', $ttl);
+    }
+
+    private function normalizeTtl(int $ttl, int $fallback): int
+    {
+        if ($ttl > 0) {
+            return $ttl;
+        }
+
+        return max(0, $fallback);
+    }
+}

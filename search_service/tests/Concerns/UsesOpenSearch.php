@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Concerns;
 
-use App\Services\SearchIndexService;
+use App\Infrastructure\OpenSearch\OpenSearchIndexManager;
 use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Request;
 use OpenSearch\Client;
@@ -50,7 +50,7 @@ trait UsesOpenSearch
         // Client is a singleton — rebuild if hosts changed in tests.
         $this->app->forgetInstance(Client::class);
 
-        resolve(SearchIndexService::class)->recreateIndices();
+        resolve(OpenSearchIndexManager::class)->recreateIndices();
     }
 
     /**

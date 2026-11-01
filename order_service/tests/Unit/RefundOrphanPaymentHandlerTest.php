@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Infrastructure\Stripe\StripeIdempotencyKey;
 use App\Messaging\RefundOrphanPayment;
 use App\Messaging\RefundOrphanPaymentHandler;
 use App\Models\Order;
 use App\Models\Payment;
-use App\Services\Stripe\StripeIdempotencyKey;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Mockery;

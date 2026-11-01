@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Messaging;
 
+use App\Enums\FulfillmentState;
 use Ecotone\Messaging\Attribute\MediaTypeConverter;
 use Ecotone\Messaging\Conversion\Converter;
 use Ecotone\Messaging\Conversion\MediaType;
@@ -22,7 +23,7 @@ final class OrderFulfillmentConverter implements Converter
             return json_encode(
                 [
                     'sagaId' => $source->sagaId,
-                    'state' => $source->state,
+                    'state' => $source->state->value,
                     'releaseRequested' => $source->releaseRequested,
                 ],
                 JSON_THROW_ON_ERROR,
@@ -36,7 +37,7 @@ final class OrderFulfillmentConverter implements Converter
 
         return OrderFulfillment::restore(
             (string) $data['sagaId'],
-            (string) $data['state'],
+            FulfillmentState::from((string) $data['state']),
             (bool) ($data['releaseRequested'] ?? false),
         );
     }

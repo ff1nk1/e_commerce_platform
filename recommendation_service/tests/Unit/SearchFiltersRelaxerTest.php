@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Catalog\AttributeConstraint;
+use App\DTO\Chat\SearchFilters;
 use App\Services\Catalog\SearchFiltersRelaxer;
-use App\Services\Llm\DTOs\SearchFilters;
 use PHPUnit\Framework\TestCase;
 
 final class SearchFiltersRelaxerTest extends TestCase
@@ -24,8 +25,8 @@ final class SearchFiltersRelaxerTest extends TestCase
         $step = $relaxer->relaxOnce($filters);
         $this->assertNotNull($step);
         $this->assertSame('Материал=шёлк', $step['relaxed']);
-        $this->assertSame([
-            ['name' => 'Цвет', 'value' => 'синий'],
+        $this->assertEquals([
+            new AttributeConstraint('Цвет', 'синий'),
         ], $step['filters']->requiredAttributes);
     }
 

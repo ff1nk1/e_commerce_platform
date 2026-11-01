@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Messaging;
 
-use App\Domain\OrderStatus;
+use App\DTO\Orders\OrderNotification;
+use App\Enums\CancelReason;
+use App\Enums\FulfillmentState;
+use App\Enums\OrderStatus;
 use App\Events\OrderCancelled;
 use App\Models\Order;
-use App\Services\Order\OrderPayloadFactory;
-use App\Services\Order\RequestStockCommit;
-use App\Services\Order\RequestStockRelease;
+use App\Services\Order\RequestStockCommitService;
+use App\Services\Order\RequestStockReleaseService;
 use App\Support\KafkaPayload;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Ecotone\Modelling\Attribute\Identifier;
@@ -21,7 +23,7 @@ final class OrderFulfillment
     private function __construct(
         #[Identifier]
         public string $sagaId,
-        public string $state = 'placed',
+        public FulfillmentState $state = FulfillmentState::Placed,
         public bool $releaseRequested = false,
     ) {}
 
@@ -31,13 +33,13 @@ final class OrderFulfillment
         return new self($event->sagaId);
     }
 
-    public static function restore(string $sagaId, string $state, bool $releaseRequested = false): self
+    public static function restore(string $sagaId, FulfillmentState $state, bool $releaseRequested = false): self
     {
         return new self($sagaId, $state, $releaseRequested);
     }
 
     #[EventHandler]
-    public function onStockReserved(StockReserved $event, RequestStockRelease $release): void
+    public function onStockReserved(StockReserved $event, RequestStockReleaseService $release): void
     {
         $body = $event->envelope->payload;
         $orderId = $body['order_id'] ?? null;
@@ -58,24 +60,26 @@ final class OrderFulfillment
         $status = $order->statusEnum();
         if (in_array($status, [OrderStatus::Cancelled, OrderStatus::PaymentFailed], true)) {
             $this->requestRelease($order, $release);
-            if ($this->state === 'placed') {
-                $this->state = $status === OrderStatus::PaymentFailed ? 'payment_failed' : 'cancelled';
+            if ($this->state === FulfillmentState::Placed) {
+                $this->state = $status === OrderStatus::PaymentFailed
+                    ? FulfillmentState::PaymentFailed
+                    : FulfillmentState::Cancelled;
             }
 
             return;
         }
 
-        if ($status === OrderStatus::Pending && $this->state === 'placed') {
+        if ($status === OrderStatus::Pending && $this->state === FulfillmentState::Placed) {
             $order->markAwaitingPayment();
             $order->save();
-            $this->state = 'stock_reserved';
+            $this->state = FulfillmentState::StockReserved;
         }
     }
 
     #[EventHandler]
-    public function onStockReservationFailed(StockReservationFailed $event, OrderPayloadFactory $payloads): void
+    public function onStockReservationFailed(StockReservationFailed $event): void
     {
-        if ($this->state === 'reservation_failed') {
+        if ($this->state === FulfillmentState::ReservationFailed) {
             return;
         }
 
@@ -96,20 +100,25 @@ final class OrderFulfillment
         }
 
         $order->cancel();
-        $order->cancel_reason = 'insufficient_stock';
+        $order->cancel_reason = CancelReason::InsufficientStock->value;
         $order->save();
 
         event(new OrderCancelled(
-            $payloads->notificationPayload($order, ['reason' => 'insufficient_stock'])
+            OrderNotification::fromOrder($order, ['reason' => CancelReason::InsufficientStock->value])->toArray()
         ));
 
-        $this->state = 'reservation_failed';
+        $this->state = FulfillmentState::ReservationFailed;
     }
 
     #[EventHandler]
-    public function onPaymentCaptured(PaymentCaptured $event, RequestStockCommit $commit): void
+    public function onPaymentCaptured(PaymentCaptured $event, RequestStockCommitService $commit): void
     {
-        if (in_array($this->state, ['paid', 'cancelled', 'reservation_failed', 'payment_failed'], true)) {
+        if (in_array($this->state, [
+            FulfillmentState::Paid,
+            FulfillmentState::Cancelled,
+            FulfillmentState::ReservationFailed,
+            FulfillmentState::PaymentFailed,
+        ], true)) {
             return;
         }
 
@@ -118,30 +127,30 @@ final class OrderFulfillment
             return;
         }
 
-        $commit->dispatch($order);
-        $this->state = 'paid';
+        $commit->handle($order);
+        $this->state = FulfillmentState::Paid;
     }
 
     #[EventHandler]
-    public function onOrderCancelRequested(OrderCancelRequested $event, RequestStockRelease $release): void
+    public function onOrderCancelRequested(OrderCancelRequested $event, RequestStockReleaseService $release): void
     {
         $order = $this->order();
         if ($order instanceof Order) {
             $this->requestRelease($order, $release);
         }
 
-        $this->state = 'cancelled';
+        $this->state = FulfillmentState::Cancelled;
     }
 
     #[EventHandler]
-    public function onPaymentFailed(PaymentFailed $event, RequestStockRelease $release): void
+    public function onPaymentFailed(PaymentFailed $event, RequestStockReleaseService $release): void
     {
         $order = $this->order();
         if ($order instanceof Order) {
             $this->requestRelease($order, $release);
         }
 
-        $this->state = 'payment_failed';
+        $this->state = FulfillmentState::PaymentFailed;
     }
 
     private function order(): ?Order
@@ -151,13 +160,13 @@ final class OrderFulfillment
         return $order instanceof Order ? $order : null;
     }
 
-    private function requestRelease(Order $order, RequestStockRelease $release): void
+    private function requestRelease(Order $order, RequestStockReleaseService $release): void
     {
         if ($this->releaseRequested) {
             return;
         }
 
-        $release->dispatch($order);
+        $release->handle($order);
         $this->releaseRequested = true;
     }
 }

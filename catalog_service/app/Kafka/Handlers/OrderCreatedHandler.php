@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
-use App\Messaging\ApplyStockStep;
+use App\Enums\CatalogEventType;
+use App\Enums\SagaStep;
+use App\Kafka\Saga\ApplyStockStep;
+use App\Kafka\Saga\StockSagaMessage;
 use App\Messaging\OrderCreatedMessage;
-use App\Support\StockSagaMessage;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Ecotone\Modelling\EventBus;
 use Illuminate\Support\Facades\Log;
@@ -29,7 +31,7 @@ final class OrderCreatedHandler
         $headers = $message->getHeaders();
         $eventType = $headers['event-type'] ?? null;
 
-        if ($eventType !== 'order.created') {
+        if (! is_string($eventType) || CatalogEventType::tryFrom($eventType) !== CatalogEventType::OrderCreated) {
             return;
         }
 
@@ -58,7 +60,7 @@ final class OrderCreatedHandler
         try {
             $this->events->publish(new ApplyStockStep(
                 $parsed->sagaId,
-                'stock.reserve',
+                SagaStep::Reserve,
                 $parsed->orderId,
                 $parsed->items,
             ));

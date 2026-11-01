@@ -4,26 +4,34 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\DTO\Orders\OrderItemRequest;
+use App\DTO\Orders\OrderView;
 use App\Http\Requests\ListOrdersRequest;
 use App\Http\Requests\PayOrderRequest;
 use App\Http\Requests\StoreOrderRequest;
 use App\Http\Requests\UserScopedOrderRequest;
-use App\Services\OrderService;
-use App\Services\PaymentService;
+use App\Services\Order\CancelOrderService;
+use App\Services\Order\CreateOrderService;
+use App\Services\Order\FindUserOrderService;
+use App\Services\Order\ListUserOrdersService;
+use App\Services\Payment\CreateCheckoutService;
 use Illuminate\Http\JsonResponse;
 
 final class OrderController extends Controller
 {
     public function __construct(
-        private OrderService $orders,
-        private PaymentService $payments,
+        private ListUserOrdersService $listUserOrders,
+        private CreateOrderService $createOrder,
+        private FindUserOrderService $findUserOrder,
+        private CancelOrderService $cancelOrder,
+        private CreateCheckoutService $createCheckout,
     ) {}
 
     public function index(ListOrdersRequest $request): JsonResponse
     {
         $validated = $request->validated();
 
-        $paginator = $this->orders->listForUser(
+        $paginator = $this->listUserOrders->handle(
             (int) $validated['user_id'],
             (int) ($validated['per_page'] ?? 15)
         );
@@ -35,36 +43,36 @@ final class OrderController extends Controller
     {
         $validated = $request->validated();
 
-        $result = $this->orders->create(
+        $result = $this->createOrder->handle(
             (int) $validated['user_id'],
             $validated['email'],
             $validated['name'],
-            $validated['items'],
+            OrderItemRequest::fromArray($validated['items']),
             $request->idempotencyKey()
         );
 
-        return response()->json($result['body'], $result['status']);
+        return response()->json($result->body, $result->status);
     }
 
     public function show(UserScopedOrderRequest $request, int $id): JsonResponse
     {
-        $order = $this->orders->findForUser($id, (int) $request->validated()['user_id']);
+        $order = $this->findUserOrder->handle($id, (int) $request->validated()['user_id']);
 
-        return response()->json($this->orders->serializeOrder($order));
+        return response()->json(OrderView::fromOrder($order)->toArray());
     }
 
     public function cancel(UserScopedOrderRequest $request, int $id): JsonResponse
     {
-        $order = $this->orders->cancelForUser($id, (int) $request->validated()['user_id']);
+        $order = $this->cancelOrder->handle($id, (int) $request->validated()['user_id']);
 
-        return response()->json($this->orders->serializeOrder($order));
+        return response()->json(OrderView::fromOrder($order)->toArray());
     }
 
     public function pay(PayOrderRequest $request, int $id): JsonResponse
     {
-        $order = $this->orders->findForUser($id, (int) $request->validated()['user_id']);
-        $result = $this->payments->createCheckout($order, $request->idempotencyKey());
+        $order = $this->findUserOrder->handle($id, (int) $request->validated()['user_id']);
+        $result = $this->createCheckout->handle($order, $request->idempotencyKey());
 
-        return response()->json($result);
+        return response()->json($result->toArray());
     }
 }

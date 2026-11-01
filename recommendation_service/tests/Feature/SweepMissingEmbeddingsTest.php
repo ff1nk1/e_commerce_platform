@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Contracts\LlmClient;
+use App\Enums\EmbedTask;
+use App\Infrastructure\Llm\Exceptions\LlmException;
 use App\Models\ProductCatalog;
-use App\Services\Llm\Contracts\LlmClient;
-use App\Services\Llm\Exceptions\LlmException;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -28,7 +29,7 @@ final class SweepMissingEmbeddingsTest extends TestCase
     public function test_sweep_embeds_only_products_missing_a_vector(): void
     {
         $llm = new FakeLlmClient;
-        $llm->embedHandler = static function (string $text, string $taskType): array {
+        $llm->embedHandler = static function (string $text, EmbedTask $taskType): array {
             if (str_contains($text, 'Broken')) {
                 throw LlmException::http('Gemini embed failed (429): quota', 429);
             }

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Concerns;
 
 use App\Contracts\PaymentGateway;
-use App\Services\Stripe\StripeClient;
+use App\Infrastructure\Stripe\StripeClient;
 use Mockery;
 use Mockery\MockInterface;
 

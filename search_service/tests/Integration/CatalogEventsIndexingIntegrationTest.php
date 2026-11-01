@@ -4,24 +4,25 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use App\DTO\Search\ProductSearchQuery;
 use App\Kafka\Handlers\CategoryEventsHandler;
 use App\Kafka\Handlers\ProductEventsHandler;
 use App\Kafka\Handlers\StockEventsHandler;
 use App\Messaging\CatalogStockChanged;
 use App\Messaging\CategoryLifecycle;
 use App\Messaging\ProductLifecycle;
-use App\Services\ProductSearchService;
+use App\Services\Search\SearchProductsService;
 use OpenSearch\Client;
 
 final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 {
     /**
      * @param  array<string, mixed>  $overrides
-     * @return array<string, mixed>
      */
-    private function params(array $overrides = []): array
+    private function params(array $overrides = []): ProductSearchQuery
     {
-        return array_merge([
+        /** @var array{q?: string|null, category_ids?: list<int>, min_price?: float|null, max_price?: float|null, in_stock?: bool|null, attributes?: array<string, list<string>>, page?: int, per_page?: int, sort?: string} $params */
+        $params = array_merge([
             'q' => null,
             'category_ids' => [],
             'min_price' => null,
@@ -32,6 +33,8 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
             'per_page' => 20,
             'sort' => 'new',
         ], $overrides);
+
+        return ProductSearchQuery::fromArray($params);
     }
 
     public function test_product_created_event_indexes_document(): void
@@ -56,14 +59,14 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
 
         resolve(ProductEventsHandler::class)->onInbound($message);
 
-        $result = resolve(ProductSearchService::class)->search($this->params([
+        $result = resolve(SearchProductsService::class)->handle($this->params([
             'q' => 'Kafka Created Phone',
             'sort' => 'relevance',
         ]));
 
-        $this->assertSame(1, $result['products']['total']);
-        $this->assertSame(9001, $result['products']['data'][0]['id']);
-        $this->assertTrue($result['products']['data'][0]['in_stock']);
+        $this->assertSame(1, $result->products['total']);
+        $this->assertSame(9001, $result->products['data'][0]['id']);
+        $this->assertTrue($result->products['data'][0]['in_stock']);
     }
 
     public function test_product_updated_preserves_stock_from_index(): void
@@ -125,11 +128,11 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
             'data' => ['id' => 9003],
         ], 'product.deleted')));
 
-        $result = resolve(ProductSearchService::class)->search($this->params([
+        $result = resolve(SearchProductsService::class)->handle($this->params([
             'q' => 'To Be Deleted Via Kafka',
             'sort' => 'relevance',
         ]));
-        $this->assertSame(0, $result['products']['total']);
+        $this->assertSame(0, $result->products['total']);
     }
 
     public function test_category_updated_syncs_name_on_products(): void
@@ -188,14 +191,14 @@ final class CatalogEventsIndexingIntegrationTest extends IntegrationTestCase
             'quantity' => 0,
         ], 'catalog.events')));
 
-        $result = resolve(ProductSearchService::class)->search($this->params([
+        $result = resolve(SearchProductsService::class)->handle($this->params([
             'q' => 'Stock Event Product',
             'in_stock' => false,
             'sort' => 'relevance',
         ]));
 
-        $this->assertSame(1, $result['products']['total']);
-        $this->assertFalse($result['products']['data'][0]['in_stock']);
-        $this->assertSame(0, $result['products']['data'][0]['quantity']);
+        $this->assertSame(1, $result->products['total']);
+        $this->assertFalse($result->products['data'][0]['in_stock']);
+        $this->assertSame(0, $result->products['data'][0]['quantity']);
     }
 }

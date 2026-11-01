@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Concerns;
 
+use App\DTO\Search\ProductSearchQuery;
 use Mockery;
 use Mockery\MockInterface;
 use OpenSearch\Client;
@@ -93,21 +94,11 @@ trait CapturesOpenSearchRequests
 
     /**
      * @param  array<string, mixed>  $overrides
-     * @return array{
-     *     q: string|null,
-     *     category_ids: list<int>,
-     *     min_price: float|null,
-     *     max_price: float|null,
-     *     in_stock: bool|null,
-     *     attributes: array<string, list<string>>,
-     *     page: int,
-     *     per_page: int,
-     *     sort: string
-     * }
      */
-    protected function searchParams(array $overrides = []): array
+    protected function searchParams(array $overrides = []): ProductSearchQuery
     {
-        return array_merge([
+        /** @var array{q?: string|null, category_ids?: list<int>, min_price?: float|null, max_price?: float|null, in_stock?: bool|null, attributes?: array<string, list<string>>, page?: int, per_page?: int, sort?: string} $params */
+        $params = array_merge([
             'q' => null,
             'category_ids' => [],
             'min_price' => null,
@@ -118,6 +109,8 @@ trait CapturesOpenSearchRequests
             'per_page' => 20,
             'sort' => 'new',
         ], $overrides);
+
+        return ProductSearchQuery::fromArray($params);
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Catalog;
 
+use App\Enums\MatchStrategy;
 use App\Support\RuText;
 
 /**
@@ -11,28 +12,23 @@ use App\Support\RuText;
  */
 final class ValueMatchStrategyResolver
 {
-    public const STRATEGY_NUMERIC = 'numeric';
-
-    public const STRATEGY_TEXT = 'text';
-
-    public const STRATEGY_SIZE_RANGE = 'size_range';
-
-    public function strategyFor(string $attributeName): string
+    public function strategyFor(string $attributeName): MatchStrategy
     {
         $concept = $this->conceptFor($attributeName);
+        $default = config('attributes.value_match.default_strategy', MatchStrategy::Text->value);
         if ($concept === null) {
-            return (string) config('attributes.value_match.default_strategy', self::STRATEGY_TEXT);
+            return $this->strategyFromConfig($default);
         }
 
         /** @var array<string, string> $byConcept */
         $byConcept = config('attributes.value_match.strategies_by_concept', []);
 
-        return (string) ($byConcept[$concept] ?? config('attributes.value_match.default_strategy', self::STRATEGY_TEXT));
+        return $this->strategyFromConfig($byConcept[$concept] ?? $default);
     }
 
     public function isSizeRange(string $attributeName): bool
     {
-        return $this->strategyFor($attributeName) === self::STRATEGY_SIZE_RANGE;
+        return $this->strategyFor($attributeName) === MatchStrategy::SizeRange;
     }
 
     public function conceptFor(string $attributeName): ?string
@@ -67,5 +63,10 @@ final class ValueMatchStrategyResolver
     private function normalizeKey(string $value): string
     {
         return RuText::fold($value);
+    }
+
+    private function strategyFromConfig(mixed $value): MatchStrategy
+    {
+        return MatchStrategy::tryFrom((string) $value) ?? MatchStrategy::Text;
     }
 }

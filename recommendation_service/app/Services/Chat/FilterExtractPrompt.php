@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Chat;
 
+use App\Enums\MessageRole;
 use App\Models\Message;
 use Illuminate\Support\Collection;
 
@@ -29,7 +30,7 @@ final class FilterExtractPrompt
         if (! $history->isEmpty()) {
             $lines = [];
             foreach ($history as $row) {
-                if ($row->role !== Message::ROLE_USER) {
+                if ($row->role !== MessageRole::User->value) {
                     continue;
                 }
                 $lines[] = 'user: '.$row->content;

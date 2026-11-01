@@ -16,55 +16,60 @@ parameters:
 			count: 1
 			path: app/Models/Stock.php
 		-
-			message: '#^Property App\\Models\\User\:\:\$id \(int\<0, max\>\) does not accept int\.$#'
-			identifier: assign.propertyType
-			count: 1
-			path: app/Models/User.php
-		-
-			message: '#^Method App\\Services\\CatalogService\:\:getAllCategories\(\) should return list\<array\<string, mixed\>\> but returns array\<mixed\>\.$#'
+			message: '#^Method App\\Services\\Categories\\ListCategoriesService\:\:handle\(\) should return list\<array\<string, mixed\>\> but returns array\<mixed\>\.$#'
 			identifier: return.type
 			count: 1
-			path: app/Services/CatalogService.php
+			path: app/Services/Categories/ListCategoriesService.php
 		-
 			message: '#^Access to an undefined property App\\Models\\Stock\:\:\$available\.$#'
 			identifier: property.notFound
-			count: 2
-			path: app/Services/StockReservationService.php
+			count: 1
+			path: app/Services/Stock/ReserveStockService.php
+		-
+			message: '#^Access to an undefined property App\\Models\\Stock\:\:\$available\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Stock/StockReservationLedger.php
 		-
 			message: '#^Property App\\Models\\Stock\:\:\$quantity \(int\<0, max\>\) does not accept int\.$#'
 			identifier: assign.propertyType
 			count: 1
-			path: app/Services/StockReservationService.php
+			path: app/Services/Stock/StockReservationLedger.php
 		-
 			message: '#^Property App\\Models\\Stock\:\:\$reserved \(int\<0, max\>\) does not accept int\.$#'
 			identifier: assign.propertyType
-			count: 2
-			path: app/Services/StockReservationService.php
+			count: 1
+			path: app/Services/Stock/ReserveStockService.php
+		-
+			message: '#^Property App\\Models\\Stock\:\:\$reserved \(int\<0, max\>\) does not accept int\.$#'
+			identifier: assign.propertyType
+			count: 1
+			path: app/Services/Stock/StockReservationLedger.php
 		-
 			message: '#^Access to an undefined property App\\Models\\Stock\:\:\$available\.$#'
 			identifier: property.notFound
 			count: 1
-			path: app/Services/StockService.php
+			path: app/Services/Stock/CreateStockService.php
+		-
+			message: '#^Access to an undefined property App\\Models\\Stock\:\:\$available\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Stock/UpdateStockQuantityService.php
 		-
 			message: '#^Property App\\Models\\Stock\:\:\$quantity \(int\<0, max\>\) does not accept int\.$#'
 			identifier: assign.propertyType
 			count: 1
-			path: app/Services/StockService.php
+			path: app/Services/Stock/UpdateStockQuantityService.php
 		-
-			message: '#^Parameter \#2 \$items of class App\\Support\\StockSagaMessage constructor expects list\<array\<string, mixed\>\>, non\-empty\-array\<mixed, mixed\> given\.$#'
+			message: '#^Parameter \#2 \$items of class App\\Kafka\\Saga\\StockSagaMessage constructor expects list\<array\<string, mixed\>\>, non\-empty\-array\<mixed, mixed\> given\.$#'
 			identifier: argument.type
 			count: 1
-			path: app/Support/StockSagaMessage.php
+			path: app/Kafka/Saga/StockSagaMessage.php
 		-
 			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
 			identifier: argument.type
 			count: 1
 			path: config/filesystems.php
-		-
-			message: '#^Static property Database\\Factories\\UserFactory\:\:\$password \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
-			identifier: property.unusedType
-			count: 1
-			path: database/factories/UserFactory.php
 		-
 			message: '#^Possibly invalid array key type string\|null\.$#'
 			identifier: offsetAccess.invalidOffset

@@ -9,7 +9,7 @@ use App\Mail\MailableRegistry;
 use App\Mail\WelcomeMail;
 use App\Messaging\UserNotification;
 use App\Models\EmailLog;
-use App\Services\MailDeliveryService;
+use App\Services\Mail\MailSender;
 use Illuminate\Mail\PendingMail;
 use Illuminate\Support\Facades\Mail;
 use Junges\Kafka\Facades\Kafka;
@@ -111,7 +111,7 @@ final class UserEventsHandlerTest extends TestCase
     {
         Kafka::fake();
 
-        $maxRetries = MailDeliveryService::MAX_RETRIES;
+        $maxRetries = MailSender::MAX_RETRIES;
         $pendingMailMock = Mockery::mock(PendingMail::class);
         $pendingMailMock->shouldReceive('send')
             ->times($maxRetries)
@@ -122,11 +122,11 @@ final class UserEventsHandlerTest extends TestCase
             ->with('dlq@example.com')
             ->andReturn($pendingMailMock);
 
-        /** @var MailDeliveryService&MockInterface $service */
-        $service = Mockery::mock(MailDeliveryService::class, [new MailableRegistry])->makePartial();
-        $service->shouldAllowMockingProtectedMethods();
-        $service->shouldReceive('sleepInTest')->times($maxRetries - 1);
-        $this->app->instance(MailDeliveryService::class, $service);
+        /** @var MailSender&MockInterface $sender */
+        $sender = Mockery::mock(MailSender::class, [new MailableRegistry])->makePartial();
+        $sender->shouldAllowMockingProtectedMethods();
+        $sender->shouldReceive('sleepInTest')->times($maxRetries - 1);
+        $this->app->instance(MailSender::class, $sender);
 
         $handler = resolve(UserEventsHandler::class);
         $handler->onInbound($this->message([

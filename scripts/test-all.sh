@@ -182,11 +182,16 @@ run_php_suite() {
 
 run_analytic() {
   local start end elapsed rc
+  local -a mod_mount=()
+  if [[ -d "${HOME}/go/pkg/mod" ]]; then
+    mod_mount=(-v "${HOME}/go/pkg/mod:/go/pkg/mod")
+  fi
   log ""
   log "${BOLD}═══ [analytic] go test ./... + -tags=integration ═══${NC}"
   start=$(date +%s)
   if docker run --rm --network "$NETWORK" \
     -v "$ROOT/analytic_service:/src" -w /src \
+    "${mod_mount[@]}" \
     -v "$ROOT/packages/messaging:/packages/messaging:ro" \
     -e CLICKHOUSE_ADDR=analytic_clickhouse:9000 \
     -e CLICKHOUSE_DATABASE=analytics_test \

@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\DTO\Catalog\ProductData;
 use App\Models\Product;
-use App\Services\ProductService;
+use App\Services\Products\UpdateProductService;
 use Illuminate\Database\Seeder;
 
 /**
@@ -24,14 +25,14 @@ final class RepublishProductsSeeder extends Seeder
             return;
         }
 
-        /** @var ProductService $productsService */
-        $productsService = resolve(ProductService::class);
+        /** @var UpdateProductService $productsService */
+        $productsService = resolve(UpdateProductService::class);
 
         foreach ($products as $product) {
-            // updateProduct публикует product.updated с актуальным payload.
-            $productsService->updateProduct($product, [
+            // update публикует product.updated с актуальным payload.
+            $productsService->handle($product, ProductData::fromArray([
                 'name' => $product->name,
-            ]);
+            ]));
         }
 
         $this->command?->info(sprintf(

@@ -31,8 +31,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: [
             'access_token',
             'refresh_token',
-            // Catalog Filament session cookies proxied through this gateway
-            'catalogservice-session',
+            // Catalog Filament session (Laravel 13: Str::snake(APP_NAME).'_session')
+            'catalog_service_session',
             'XSRF-TOKEN',
         ]);
 

@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources;
 
+use App\DTO\Catalog\ProductData;
 use App\Filament\Resources\ProductResource\Pages\ManageProducts;
 use App\Models\Product;
 use App\Models\ProductAttribute;
 use App\Models\Store;
-use App\Services\ProductService;
+use App\Services\Products\CreateProductService;
+use App\Services\Products\DeleteProductService;
+use App\Services\Products\PublishProductService;
+use App\Services\Products\UpdateProductService;
 use App\Support\MediaPublicUrl;
 use App\Support\MediaUploadPath;
 use BackedEnum;
@@ -107,7 +111,7 @@ final class ProductResource extends Resource
                         ? 'Visible for AI — click to unpublish'
                         : 'Hidden from AI — click to publish')
                     ->updateStateUsing(function (Product $record): bool {
-                        $updated = resolve(ProductService::class)->togglePublished($record);
+                        $updated = resolve(PublishProductService::class)->handle($record);
 
                         Notification::make()
                             ->title($updated->is_published
@@ -126,8 +130,8 @@ final class ProductResource extends Resource
             ])
             ->headerActions([
                 CreateAction::make()
-                    ->using(fn (array $data): Product => resolve(ProductService::class)->createProduct(
-                        self::prepareProductPayload($data)
+                    ->using(fn (array $data): Product => resolve(CreateProductService::class)->handle(
+                        ProductData::fromArray(self::prepareProductPayload($data))
                     )),
             ])
             ->recordActions([
@@ -144,13 +148,13 @@ final class ProductResource extends Resource
 
                         return $data;
                     })
-                    ->using(fn (Product $record, array $data): Product => resolve(ProductService::class)->updateProduct(
+                    ->using(fn (Product $record, array $data): Product => resolve(UpdateProductService::class)->handle(
                         $record,
-                        self::prepareProductPayload($data, $record->image_url)
+                        ProductData::fromArray(self::prepareProductPayload($data, $record->image_url))
                     )),
                 DeleteAction::make()
                     ->using(function (Product $record): bool {
-                        resolve(ProductService::class)->deleteProduct($record);
+                        resolve(DeleteProductService::class)->handle($record);
 
                         return true;
                     }),

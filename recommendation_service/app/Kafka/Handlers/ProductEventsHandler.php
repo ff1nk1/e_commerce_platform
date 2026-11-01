@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\Enums\CatalogEventType;
 use App\Messaging\ProductLifecycle;
 use App\Models\ProductCatalog;
-use App\Services\Catalog\ProductIndexer;
+use App\Services\Catalog\RemoveProductService;
+use App\Services\Catalog\SetProductPublishedService;
+use App\Services\Catalog\UpsertProductService;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Illuminate\Support\Facades\Log;
 use Shop\Messaging\EnvelopeMessage;
@@ -14,15 +17,17 @@ use Shop\Messaging\EnvelopeMessage;
 final class ProductEventsHandler
 {
     public const ALLOWED_TYPES = [
-        'product.created',
-        'product.updated',
-        'product.deleted',
-        'product.published',
-        'product.unpublished',
+        CatalogEventType::ProductCreated->value,
+        CatalogEventType::ProductUpdated->value,
+        CatalogEventType::ProductDeleted->value,
+        CatalogEventType::ProductPublished->value,
+        CatalogEventType::ProductUnpublished->value,
     ];
 
     public function __construct(
-        private readonly ProductIndexer $indexer,
+        private readonly UpsertProductService $upsert,
+        private readonly RemoveProductService $remove,
+        private readonly SetProductPublishedService $setPublished,
     ) {}
 
     #[EventHandler(endpointId: 'recommendation.product')]
@@ -71,7 +76,10 @@ final class ProductEventsHandler
         }
 
         $productId = (int) $id;
-        $isUpsertEvent = in_array($eventType, ['product.created', 'product.updated'], true);
+        $isUpsertEvent = in_array($eventType, [
+            CatalogEventType::ProductCreated->value,
+            CatalogEventType::ProductUpdated->value,
+        ], true);
 
         if ($isUpsertEvent && ! $this->hasUpsertPayload($data)) {
             Log::warning('Recommendation: product upsert missing required fields', [
@@ -84,10 +92,10 @@ final class ProductEventsHandler
         }
 
         match ($eventType) {
-            'product.deleted' => $this->indexer->remove($productId),
-            'product.published' => $this->handlePublished($data, $productId),
-            'product.unpublished' => $this->indexer->setPublished($productId, false),
-            default => $this->indexer->upsertFromEvent($data, reembed: true),
+            CatalogEventType::ProductDeleted->value => $this->remove->handle($productId),
+            CatalogEventType::ProductPublished->value => $this->handlePublished($data, $productId),
+            CatalogEventType::ProductUnpublished->value => $this->setPublished->handle($productId, false),
+            default => $this->upsert->handle($data, reembed: true),
         };
 
         Log::info('Recommendation: product event handled', [
@@ -114,7 +122,7 @@ final class ProductEventsHandler
         $data['is_published'] = true;
         $existing = ProductCatalog::query()->where('product_id', $productId)->exists();
         if ($existing && ($data['name'] ?? null) === null) {
-            $this->indexer->setPublished($productId, true);
+            $this->setPublished->handle($productId, true);
 
             return;
         }
@@ -127,6 +135,6 @@ final class ProductEventsHandler
             return;
         }
 
-        $this->indexer->upsertFromEvent($data, reembed: true);
+        $this->upsert->handle($data, reembed: true);
     }
 }

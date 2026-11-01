@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Events;
 
+use App\Enums\CatalogEventType;
 use App\Models\Category;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -16,8 +17,8 @@ final class CategoryCreated
         public readonly Category $category,
     ) {}
 
-    public function topic(): string
+    public function topic(): CatalogEventType
     {
-        return 'category.created';
+        return CatalogEventType::CategoryCreated;
     }
 }

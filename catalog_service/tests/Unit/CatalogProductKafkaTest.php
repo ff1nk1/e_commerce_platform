@@ -4,11 +4,18 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Catalog\CategoryData;
+use App\DTO\Catalog\ProductData;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Store;
-use App\Services\CatalogService;
-use App\Services\ProductService;
+use App\Services\Categories\CreateCategoryService;
+use App\Services\Categories\DeleteCategoryService;
+use App\Services\Categories\UpdateCategoryService;
+use App\Services\Products\CreateProductService;
+use App\Services\Products\DeleteProductService;
+use App\Services\Products\PublishProductService;
+use App\Services\Products\UpdateProductService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Junges\Kafka\Facades\Kafka;
 use Shop\Messaging\OutboxPublisher;
@@ -23,10 +30,10 @@ final class CatalogProductKafkaTest extends TestCase
     {
         Kafka::fake();
 
-        $category = resolve(CatalogService::class)->createCategory([
+        $category = resolve(CreateCategoryService::class)->handle(CategoryData::fromArray([
             'name' => 'Laptops',
             'slug' => 'laptops',
-        ]);
+        ]));
 
         OutboxQueue::flush();
         Kafka::assertPublishedOn('category.events', null, function ($message) use ($category): bool {
@@ -48,7 +55,7 @@ final class CatalogProductKafkaTest extends TestCase
         Kafka::fake();
 
         $category = Category::factory()->create(['name' => 'Old', 'slug' => 'old']);
-        resolve(CatalogService::class)->updateCategory($category, ['name' => 'New']);
+        resolve(UpdateCategoryService::class)->handle($category, CategoryData::fromArray(['name' => 'New']));
 
         OutboxQueue::flush();
         Kafka::assertPublishedOn('category.events', null, function ($message) use ($category): bool {
@@ -71,7 +78,7 @@ final class CatalogProductKafkaTest extends TestCase
             'parent_id' => $parent->id,
         ]);
 
-        resolve(CatalogService::class)->deleteCategory($parent);
+        resolve(DeleteCategoryService::class)->handle($parent);
 
         OutboxQueue::flush();
         Kafka::assertPublishedOn('category.events');
@@ -89,12 +96,12 @@ final class CatalogProductKafkaTest extends TestCase
         $store = Store::factory()->create();
         $category = Category::factory()->create();
 
-        $product = resolve(ProductService::class)->createProduct([
+        $product = resolve(CreateProductService::class)->handle(ProductData::fromArray([
             'store_id' => $store->id,
             'category_id' => $category->id,
             'name' => 'Phone',
             'price' => 199.99,
-        ]);
+        ]));
 
         OutboxQueue::flush();
         Kafka::assertPublishedOn('product.events', null, function ($message) use ($product): bool {
@@ -117,7 +124,7 @@ final class CatalogProductKafkaTest extends TestCase
         Kafka::fake();
 
         $product = Product::factory()->create(['name' => 'Old phone']);
-        resolve(ProductService::class)->updateProduct($product, ['name' => 'New phone']);
+        resolve(UpdateProductService::class)->handle($product, ProductData::fromArray(['name' => 'New phone']));
 
         OutboxQueue::flush();
         Kafka::assertPublishedOn('product.events', null, function ($message) use ($product): bool {
@@ -135,7 +142,7 @@ final class CatalogProductKafkaTest extends TestCase
 
         $product = Product::factory()->create();
         $productId = $product->id;
-        resolve(ProductService::class)->deleteProduct($product);
+        resolve(DeleteProductService::class)->handle($product);
 
         OutboxQueue::flush();
         Kafka::assertPublishedOn('product.events', null, function ($message) use ($productId): bool {
@@ -155,12 +162,12 @@ final class CatalogProductKafkaTest extends TestCase
         $category = Category::factory()->create();
 
         try {
-            resolve(ProductService::class)->createProduct([
+            resolve(CreateProductService::class)->handle(ProductData::fromArray([
                 'store_id' => $store->id,
                 'category_id' => $category->id,
                 'name' => 'Resilient phone',
                 'price' => 99,
-            ]);
+            ]));
             $this->fail('product create should roll back');
         } catch (\RuntimeException) {
         }
@@ -193,7 +200,7 @@ final class CatalogProductKafkaTest extends TestCase
             'value' => 'Blue',
         ]);
 
-        $unpublished = resolve(ProductService::class)->togglePublished($product);
+        $unpublished = resolve(PublishProductService::class)->handle($product);
 
         $this->assertFalse($unpublished->is_published);
         OutboxQueue::flush();
@@ -220,7 +227,7 @@ final class CatalogProductKafkaTest extends TestCase
                 && (string) $message->getKey() === (string) $product->id;
         });
 
-        $published = resolve(ProductService::class)->togglePublished($unpublished);
+        $published = resolve(PublishProductService::class)->handle($unpublished);
 
         $this->assertTrue($published->is_published);
         OutboxQueue::flush();

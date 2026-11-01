@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use App\Http\Controllers\AdminController;
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\GatewayController;
+use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Gateway\GatewayController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {

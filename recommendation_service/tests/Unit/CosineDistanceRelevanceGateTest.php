@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Catalog\SearchHit;
 use App\Models\ProductCatalog;
 use App\Services\Catalog\CosineDistanceRelevanceGate;
-use App\Services\Catalog\DTOs\SearchHit;
 use PHPUnit\Framework\TestCase;
 
 final class CosineDistanceRelevanceGateTest extends TestCase

@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Catalog;
 
-use App\Services\Llm\DTOs\SearchFilters;
+use App\DTO\Catalog\AttributeConstraint;
+use App\DTO\Chat\SearchFilters;
 
 final class SearchFiltersNormalizer
 {
@@ -43,32 +44,31 @@ final class SearchFiltersNormalizer
     }
 
     /**
-     * @param  list<array{name: string, value: string, value_only?: bool}>  $attributes
-     * @return list<array{name: string, value: string, value_only?: bool}>
+     * @param  list<AttributeConstraint>  $attributes
+     * @return list<AttributeConstraint>
      */
     private function normalizeAttrRows(array $attributes): array
     {
         $out = [];
         foreach ($attributes as $row) {
-            $valueOnly = (bool) ($row['value_only'] ?? false);
-            $value = trim((string) $row['value']);
+            $value = trim($row->value);
             if ($value === '') {
                 continue;
             }
-            if ($valueOnly) {
-                $out[] = [
-                    'name' => trim((string) $row['name']),
-                    'value' => $value,
-                    'value_only' => true,
-                ];
+            if ($row->valueOnly) {
+                $out[] = new AttributeConstraint(
+                    name: trim($row->name),
+                    value: $value,
+                    valueOnly: true,
+                );
 
                 continue;
             }
-            $name = $this->attributeNames->canonicalize((string) $row['name']);
+            $name = $this->attributeNames->canonicalize($row->name);
             if ($name === '') {
                 continue;
             }
-            $out[] = ['name' => $name, 'value' => $value];
+            $out[] = new AttributeConstraint(name: $name, value: $value);
         }
 
         return $out;

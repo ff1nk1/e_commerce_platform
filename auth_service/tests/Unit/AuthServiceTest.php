@@ -4,17 +4,20 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Auth\LoginCredentials;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\Auth\AuthService;
-use App\Services\Auth\JwtService;
-use App\Services\Auth\TokenBlacklistService;
+use App\Services\Auth\JwtCodec;
+use App\Services\Auth\LoginUserService;
+use App\Services\Auth\LogoutUserService;
+use App\Services\Auth\RefreshTokensService;
+use App\Services\Auth\TokenBlacklist;
+use App\Support\TokenBlacklistKeys;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Validation\ValidationException;
-use Mockery\MockInterface;
 use Tests\TestCase;
 
 final class AuthServiceTest extends TestCase
@@ -25,6 +28,7 @@ final class AuthServiceTest extends TestCase
     {
         parent::setUp();
         config(['jwt.refresh_ttl' => 20160]);
+        Cache::setDefaultDriver('array');
     }
 
     public function test_login_returns_tokens_with_mocked_jwt_service(): void
@@ -35,26 +39,18 @@ final class AuthServiceTest extends TestCase
             'password' => Hash::make('password123'),
         ]);
 
-        $fakeJwt = 'fake.access.token';
-
-        $this->mock(JwtService::class, function (MockInterface $mock) use ($user, $fakeJwt): void {
-            $mock->shouldReceive('createAccessToken')
-                ->once()
-                ->withArgs(fn ($arg): bool => $arg->id === $user->id)
-                ->andReturn($fakeJwt);
-        });
-
         Redis::shouldReceive('setex')->once();
         Redis::shouldReceive('sadd')->once();
         Redis::shouldReceive('expire')->once();
 
-        $tokens = resolve(AuthService::class)->login([
+        $tokens = resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
             'email' => $user->email,
             'password' => 'password123',
-        ]);
+        ]));
 
-        $this->assertEquals($fakeJwt, $tokens['access_token']);
-        $this->assertArrayHasKey('refresh_token', $tokens);
+        $payload = resolve(JwtCodec::class)->decode($tokens->accessToken);
+        $this->assertEquals($user->id, $payload->sub);
+        $this->assertNotSame('', $tokens->refreshToken);
     }
 
     public function test_login_throws_exception_on_invalid_credentials(): void
@@ -65,31 +61,23 @@ final class AuthServiceTest extends TestCase
             'password' => Hash::make('correct_password'),
         ]);
 
-        $this->mock(JwtService::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('createAccessToken')->never();
-        });
-
         Redis::shouldReceive('setex')->never();
 
         $this->expectException(ValidationException::class);
 
-        resolve(AuthService::class)->login([
+        resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
             'email' => $user->email,
             'password' => 'wrong_password',
-        ]);
+        ]));
     }
 
     public function test_logout_calls_revoke_on_jwt_service(): void
     {
         $accessToken = 'some.valid.token';
 
-        $this->mock(JwtService::class, function (MockInterface $mock) use ($accessToken): void {
-            $mock->shouldReceive('revokeToken')->once()->with($accessToken);
-        });
-
         Redis::shouldReceive('del')->never();
 
-        resolve(AuthService::class)->logout($accessToken, null);
+        resolve(LogoutUserService::class)->handle($accessToken, null);
     }
 
     public function test_logout_blacklists_refresh_token_in_redis(): void
@@ -97,10 +85,6 @@ final class AuthServiceTest extends TestCase
         $accessToken = 'access.token';
         $refreshToken = 'refresh-token-raw-value';
         $hash = hash('sha256', $refreshToken);
-
-        $this->mock(JwtService::class, function (MockInterface $mock) use ($accessToken): void {
-            $mock->shouldReceive('revokeToken')->once()->with($accessToken);
-        });
 
         Redis::shouldReceive('get')
             ->once()
@@ -112,12 +96,6 @@ final class AuthServiceTest extends TestCase
             ->with("refresh_token:{$hash}")
             ->andReturn(3600);
 
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($hash): void {
-            $mock->shouldReceive('blacklistRefreshToken')
-                ->once()
-                ->with($hash, 3600);
-        });
-
         Redis::shouldReceive('del')
             ->once()
             ->with("refresh_token:{$hash}");
@@ -126,13 +104,15 @@ final class AuthServiceTest extends TestCase
             ->once()
             ->with('user_refresh_tokens:42', $hash);
 
-        resolve(AuthService::class)->logout($accessToken, $refreshToken);
+        resolve(LogoutUserService::class)->handle($accessToken, $refreshToken);
+
+        $this->assertTrue(Cache::has(TokenBlacklistKeys::refresh($hash)));
     }
 
     public function test_refresh_tokens_returns_null_for_missing_token(): void
     {
-        $this->assertNull(resolve(AuthService::class)->refreshTokens(null));
-        $this->assertNull(resolve(AuthService::class)->refreshTokens(''));
+        $this->assertNull(resolve(RefreshTokensService::class)->handle(null));
+        $this->assertNull(resolve(RefreshTokensService::class)->handle(''));
     }
 
     public function test_refresh_tokens_returns_null_when_blacklisted(): void
@@ -140,14 +120,9 @@ final class AuthServiceTest extends TestCase
         $refresh = 'used-refresh';
         $hash = hash('sha256', $refresh);
 
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($hash): void {
-            $mock->shouldReceive('isRefreshTokenBlacklisted')
-                ->once()
-                ->with($hash)
-                ->andReturn(true);
-        });
+        resolve(TokenBlacklist::class)->blacklistRefreshToken($hash, 60);
 
-        $this->assertNull(resolve(AuthService::class)->refreshTokens($refresh));
+        $this->assertNull(resolve(RefreshTokensService::class)->handle($refresh));
     }
 
     public function test_refresh_tokens_returns_null_when_unknown(): void
@@ -155,19 +130,12 @@ final class AuthServiceTest extends TestCase
         $refresh = 'unknown-refresh';
         $hash = hash('sha256', $refresh);
 
-        $this->mock(TokenBlacklistService::class, function (MockInterface $mock) use ($hash): void {
-            $mock->shouldReceive('isRefreshTokenBlacklisted')
-                ->once()
-                ->with($hash)
-                ->andReturn(false);
-        });
-
         Redis::shouldReceive('get')
             ->once()
             ->with("refresh_token:{$hash}")
             ->andReturn(null);
 
-        $this->assertNull(resolve(AuthService::class)->refreshTokens($refresh));
+        $this->assertNull(resolve(RefreshTokensService::class)->handle($refresh));
     }
 
     public function test_blacklist_refresh_token_uses_fallback_ttl_when_redis_ttl_non_positive(): void
@@ -180,6 +148,6 @@ final class AuthServiceTest extends TestCase
             ->once()
             ->with("refresh_token:blacklist:{$hash}", '1', 120);
 
-        resolve(TokenBlacklistService::class)->blacklistRefreshToken($hash, -1);
+        resolve(TokenBlacklist::class)->blacklistRefreshToken($hash, -1);
     }
 }

@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Catalog\AttributeConstraint;
+use App\DTO\Chat\SearchFilters;
 use App\Services\Catalog\SearchFiltersNormalizer;
-use App\Services\Llm\DTOs\SearchFilters;
 use PHPUnit\Framework\TestCase;
 
 final class SearchFiltersNormalizerTest extends TestCase
@@ -64,7 +65,7 @@ final class SearchFiltersNormalizerTest extends TestCase
             preferredAttributes: [['name' => 'brand', 'value' => 'Nike']],
         ));
 
-        $this->assertSame([['name' => 'Цвет', 'value' => 'red']], $normalized->attributes);
-        $this->assertSame([['name' => 'Бренд', 'value' => 'Nike']], $normalized->preferredAttributes);
+        $this->assertEquals([new AttributeConstraint('Цвет', 'red')], $normalized->attributes);
+        $this->assertEquals([new AttributeConstraint('Бренд', 'Nike')], $normalized->preferredAttributes);
     }
 }

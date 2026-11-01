@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
-use App\Services\SearchIndexService;
+use App\DTO\Search\ProductDocument;
+use App\Services\Indexing\ProductIndexer;
 use Junges\Kafka\Facades\Kafka;
 use Shop\Messaging\OutboxQueue;
 
@@ -12,7 +13,7 @@ final class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
 {
     public function test_http_search_publishes_search_performed_to_kafka(): void
     {
-        resolve(SearchIndexService::class)->indexProduct([
+        resolve(ProductIndexer::class)->upsert(ProductDocument::fromArray([
             'id' => 9100,
             'name' => 'Publish Event Laptop',
             'price' => 999.0,
@@ -23,7 +24,7 @@ final class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
             'quantity' => 1,
             'in_stock' => true,
             'attributes' => [],
-        ], preserveStock: false);
+        ]), preserveStock: false);
 
         $response = $this->getJson('/api/search?q=Publish+Event+Laptop&category_id=2&sort=relevance');
 
@@ -51,14 +52,14 @@ final class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
 
     public function test_http_search_with_skip_analytics_header_still_publishes_flagged_event(): void
     {
-        resolve(SearchIndexService::class)->indexProduct([
+        resolve(ProductIndexer::class)->upsert(ProductDocument::fromArray([
             'id' => 9102,
             'name' => 'Skip Analytics Phone',
             'price' => 10.0,
             'store_id' => 1,
             'quantity' => 1,
             'in_stock' => true,
-        ], preserveStock: false);
+        ]), preserveStock: false);
 
         $this->withHeaders(['X-Skip-Analytics' => '1'])
             ->getJson('/api/search?q=Skip+Analytics+Phone')
@@ -78,14 +79,14 @@ final class SearchPerformedPublishIntegrationTest extends IntegrationTestCase
 
     public function test_autocomplete_does_not_publish_search_performed(): void
     {
-        resolve(SearchIndexService::class)->indexProduct([
+        resolve(ProductIndexer::class)->upsert(ProductDocument::fromArray([
             'id' => 9101,
             'name' => 'Autocomplete Only',
             'price' => 10.0,
             'store_id' => 1,
             'quantity' => 1,
             'in_stock' => true,
-        ], preserveStock: false);
+        ]), preserveStock: false);
 
         $this->getJson('/api/search/autocomplete?q=Autocom')->assertOk();
 

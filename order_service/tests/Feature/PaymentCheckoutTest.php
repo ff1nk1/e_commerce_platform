@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Domain\OrderStatus;
+use App\DTO\Payments\StripeCheckoutSession;
+use App\Enums\OrderStatus;
 use App\Models\Order;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -38,12 +39,12 @@ final class PaymentCheckoutTest extends TestCase
         $stripe = $this->mockPaymentGateway();
         $stripe->shouldReceive('createCheckoutSession')
             ->once()
-            ->andReturn([
+            ->andReturn(StripeCheckoutSession::fromArray([
                 'id' => 'cs_test_123',
                 'url' => 'https://checkout.stripe.com/c/pay/cs_test_123',
                 'payment_intent' => 'pi_test_123',
                 'status' => 'open',
-            ]);
+            ]));
 
         $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7], [
             'Idempotency-Key' => 'pay-key-1',
@@ -64,11 +65,11 @@ final class PaymentCheckoutTest extends TestCase
         $stripe = $this->mockPaymentGateway();
         $stripe->shouldReceive('createCheckoutSession')
             ->once()
-            ->andReturn([
+            ->andReturn(StripeCheckoutSession::fromArray([
                 'id' => 'cs_test_idem',
                 'url' => 'https://checkout.stripe.com/c/pay/cs_test_idem',
                 'status' => 'open',
-            ]);
+            ]));
 
         $headers = ['Idempotency-Key' => 'pay-dup-1'];
         $first = $this->postJson('/api/orders/'.$order->id.'/pay', ['user_id' => 7], $headers);

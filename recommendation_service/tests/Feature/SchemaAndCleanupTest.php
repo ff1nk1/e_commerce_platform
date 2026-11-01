@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Enums\MessageRole;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\ProductCatalog;
@@ -76,7 +77,7 @@ final class SchemaAndCleanupTest extends TestCase
 
         $message = Message::query()->create([
             'conversation_id' => $conversation->id,
-            'role' => Message::ROLE_USER,
+            'role' => MessageRole::User->value,
             'content' => 'Hello',
         ]);
 
@@ -101,7 +102,7 @@ final class SchemaAndCleanupTest extends TestCase
         ]);
         Message::query()->create([
             'conversation_id' => $expired->id,
-            'role' => Message::ROLE_ASSISTANT,
+            'role' => MessageRole::Assistant->value,
             'content' => 'Old reply',
         ]);
 
@@ -112,7 +113,7 @@ final class SchemaAndCleanupTest extends TestCase
         ]);
         Message::query()->create([
             'conversation_id' => $active->id,
-            'role' => Message::ROLE_USER,
+            'role' => MessageRole::User->value,
             'content' => 'Still chatting',
         ]);
 
@@ -134,7 +135,7 @@ final class SchemaAndCleanupTest extends TestCase
         ]);
         Message::query()->create([
             'conversation_id' => $insideGrace->id,
-            'role' => Message::ROLE_USER,
+            'role' => MessageRole::User->value,
             'content' => 'Just expired for API, still in grace',
         ]);
 

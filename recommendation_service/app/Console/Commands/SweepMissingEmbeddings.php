@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Infrastructure\Llm\Exceptions\LlmException;
 use App\Models\ProductCatalog;
-use App\Services\Catalog\ProductIndexer;
-use App\Services\Llm\Exceptions\LlmException;
+use App\Services\Catalog\ProductEmbedder;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -15,7 +15,7 @@ use Illuminate\Console\Command;
 #[Signature('embeddings:sweep-missing')]
 final class SweepMissingEmbeddings extends Command
 {
-    public function handle(ProductIndexer $indexer): int
+    public function handle(ProductEmbedder $embedder): int
     {
         $embedded = 0;
         $failed = 0;
@@ -23,11 +23,11 @@ final class SweepMissingEmbeddings extends Command
         ProductCatalog::query()
             ->whereNull('embedding')
             ->orderBy('id')
-            ->chunkById(50, function ($products) use ($indexer, &$embedded, &$failed): void {
+            ->chunkById(50, function ($products) use ($embedder, &$embedded, &$failed): void {
                 foreach ($products as $product) {
                     /** @var ProductCatalog $product */
                     try {
-                        $indexer->embedAndStore($product);
+                        $embedder->embed($product);
                         $embedded++;
                     } catch (LlmException) {
                         $failed++;

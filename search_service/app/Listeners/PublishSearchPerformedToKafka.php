@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Listeners;
 
+use App\Enums\SearchEventType;
 use App\Events\SearchPerformed;
 use Shop\Messaging\OutboundMessage;
 use Shop\Messaging\OutboxPublisher;
@@ -17,32 +18,34 @@ final class PublishSearchPerformedToKafka
 
     public function handle(SearchPerformed $event): void
     {
-        $params = $event->params;
+        $query = $event->query;
         $headers = [];
         if ($event->skipAnalytics) {
             $headers['skip-analytics'] = 'true';
         }
 
+        $eventType = SearchEventType::SearchPerformed->value;
+
         $this->outbox->publish(new OutboundMessage(
             topic: Topics::SEARCH_EVENTS,
-            key: hash('sha256', json_encode($params, JSON_THROW_ON_ERROR).'|'.$event->resultsCount),
-            eventType: 'search.performed',
+            key: hash('sha256', json_encode($query->toArray(), JSON_THROW_ON_ERROR).'|'.$event->resultsCount),
+            eventType: $eventType,
             payload: [
                 'timestamp' => now()->toIso8601String(),
-                'event_type' => 'search.performed',
-                'event' => 'search.performed',
+                'event_type' => $eventType,
+                'event' => $eventType,
                 'skip_analytics' => $event->skipAnalytics,
                 'data' => [
-                    'query' => $params['q'],
+                    'query' => $query->q,
                     'filters' => [
-                        'category_ids' => $params['category_ids'],
-                        'min_price' => $params['min_price'],
-                        'max_price' => $params['max_price'],
-                        'in_stock' => $params['in_stock'],
-                        'attributes' => $params['attributes'],
+                        'category_ids' => $query->categoryIds,
+                        'min_price' => $query->minPrice,
+                        'max_price' => $query->maxPrice,
+                        'in_stock' => $query->inStock,
+                        'attributes' => $query->attributes,
                     ],
                     'results_count' => $event->resultsCount,
-                    'sort' => $params['sort'],
+                    'sort' => $query->sort->value,
                 ],
             ],
             source: 'search-service',

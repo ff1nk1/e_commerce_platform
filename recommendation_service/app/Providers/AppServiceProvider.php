@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Contracts\CatalogProductClient;
+use App\Contracts\LlmClient;
+use App\Contracts\ProductFreshnessChecker;
+use App\Contracts\RelevanceGate;
+use App\Infrastructure\Catalog\CatalogApiFreshnessChecker;
+use App\Infrastructure\Catalog\HttpCatalogProductClient;
+use App\Infrastructure\Llm\Gemini\GeminiLlmClient;
 use App\Messaging\RecommendationInboundEventFactory;
-use App\Services\Catalog\CatalogApiFreshnessChecker;
-use App\Services\Catalog\Contracts\CatalogProductClient;
-use App\Services\Catalog\Contracts\ProductFreshnessChecker;
-use App\Services\Catalog\Contracts\RelevanceGate;
 use App\Services\Catalog\CosineDistanceRelevanceGate;
-use App\Services\Catalog\HttpCatalogProductClient;
 use App\Services\Catalog\SearchFiltersNormalizer;
-use App\Services\Llm\Contracts\LlmClient;
-use App\Services\Llm\Gemini\GeminiLlmClient;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;

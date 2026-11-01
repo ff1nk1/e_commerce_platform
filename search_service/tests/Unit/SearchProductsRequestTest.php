@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Search\ProductSearchQuery;
+use App\Enums\ProductSort;
 use App\Http\Requests\SearchProductsRequest;
 use Tests\TestCase;
 
@@ -11,9 +13,9 @@ final class SearchProductsRequestTest extends TestCase
 {
     public function test_normalizes_scalar_and_array_category_ids(): void
     {
-        $this->assertSame([3], $this->params(['category_id' => 3])['category_ids']);
-        $this->assertSame([1, 2], $this->params(['category_id' => [1, 2, 1, '', null]])['category_ids']);
-        $this->assertSame([], $this->params([])['category_ids']);
+        $this->assertSame([3], $this->params(['category_id' => 3])->categoryIds);
+        $this->assertSame([1, 2], $this->params(['category_id' => [1, 2, 1, '', null]])->categoryIds);
+        $this->assertSame([], $this->params([])->categoryIds);
     }
 
     public function test_normalizes_attributes_and_skips_empty_values(): void
@@ -30,24 +32,24 @@ final class SearchProductsRequestTest extends TestCase
         $this->assertSame([
             'Color' => ['Black'],
             'Size' => ['M'],
-        ], $params['attributes']);
+        ], $params->attributes);
     }
 
     public function test_in_stock_boolean_normalization(): void
     {
-        $this->assertTrue($this->params(['in_stock' => '1'])['in_stock']);
-        $this->assertFalse($this->params(['in_stock' => '0'])['in_stock']);
-        $this->assertTrue($this->params(['in_stock' => 'true'])['in_stock']);
-        $this->assertFalse($this->params(['in_stock' => 'false'])['in_stock']);
-        $this->assertNull($this->params([])['in_stock']);
-        $this->assertNull($this->params(['in_stock' => ''])['in_stock']);
+        $this->assertTrue($this->params(['in_stock' => '1'])->inStock);
+        $this->assertFalse($this->params(['in_stock' => '0'])->inStock);
+        $this->assertTrue($this->params(['in_stock' => 'true'])->inStock);
+        $this->assertFalse($this->params(['in_stock' => 'false'])->inStock);
+        $this->assertNull($this->params([])->inStock);
+        $this->assertNull($this->params(['in_stock' => ''])->inStock);
     }
 
     public function test_default_sort_depends_on_query(): void
     {
-        $this->assertSame('relevance', $this->params(['q' => 'phone'])['sort']);
-        $this->assertSame('new', $this->params([])['sort']);
-        $this->assertSame('price_asc', $this->params(['q' => 'phone', 'sort' => 'price_asc'])['sort']);
+        $this->assertSame(ProductSort::Relevance, $this->params(['q' => 'phone'])->sort);
+        $this->assertSame(ProductSort::New, $this->params([])->sort);
+        $this->assertSame(ProductSort::PriceAsc, $this->params(['q' => 'phone', 'sort' => 'price_asc'])->sort);
     }
 
     public function test_trims_query_and_clamps_pagination(): void
@@ -58,14 +60,14 @@ final class SearchProductsRequestTest extends TestCase
             'per_page' => 999,
         ]);
 
-        $this->assertSame('laptop', $params['q']);
-        $this->assertSame(1, $params['page']);
-        $this->assertSame(50, $params['per_page']);
+        $this->assertSame('laptop', $params->q);
+        $this->assertSame(1, $params->page);
+        $this->assertSame(50, $params->perPage);
 
-        $this->assertNull($this->params(['q' => '   '])['q']);
+        $this->assertNull($this->params(['q' => '   '])->q);
         $this->assertSame(
             SearchProductsRequest::MAX_PAGE,
-            $this->params(['page' => 99999])['page']
+            $this->params(['page' => 99999])->page
         );
     }
 
@@ -89,16 +91,15 @@ final class SearchProductsRequestTest extends TestCase
             'max_price' => '99',
         ]);
 
-        $this->assertSame(10.5, $params['min_price']);
-        $this->assertSame(99.0, $params['max_price']);
-        $this->assertNull($this->params([])['min_price']);
+        $this->assertSame(10.5, $params->minPrice);
+        $this->assertSame(99.0, $params->maxPrice);
+        $this->assertNull($this->params([])->minPrice);
     }
 
     /**
      * @param  array<string, mixed>  $query
-     * @return array<string, mixed>
      */
-    private function params(array $query): array
+    private function params(array $query): ProductSearchQuery
     {
         $request = SearchProductsRequest::create('/api/search', 'GET', $query);
         $request->setContainer($this->app);

@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Services\Gateway\ProxyService;
+use App\DTO\Gateway\ProxyOptions;
+use App\Services\Gateway\ForwardRequestService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -21,12 +22,11 @@ final class ProxyForwardTimeoutTest extends TestCase
             'message' => 'hello',
         ]);
 
-        $response = resolve(ProxyService::class)->forward(
+        $response = resolve(ForwardRequestService::class)->forward(
             $request,
             'http://recommendation.test',
             '/api/recommendations/chat',
-            null,
-            120,
+            new ProxyOptions(timeout: 120),
         );
 
         $this->assertSame(200, $response->getStatusCode());
@@ -45,7 +45,7 @@ final class ProxyForwardTimeoutTest extends TestCase
 
         $request = Request::create('/api/search?q=phone', 'GET');
 
-        $response = resolve(ProxyService::class)->forward(
+        $response = resolve(ForwardRequestService::class)->forward(
             $request,
             'http://search.test',
             '/api/search',

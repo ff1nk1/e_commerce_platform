@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use App\Infrastructure\Stripe\StripeClient;
 use App\Models\Order;
 use App\Models\Payment;
-use App\Services\Stripe\StripeClient;
 use Illuminate\Support\Str;
 use Junges\Kafka\Facades\Kafka;
 use Shop\Messaging\OutboxQueue;
@@ -58,7 +58,7 @@ final class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
         $this->assertNotEmpty($payment->stripe_checkout_session_id);
 
         $session = resolve(StripeClient::class)->retrieveCheckoutSession($payment->stripe_checkout_session_id);
-        $this->assertSame($payment->stripe_checkout_session_id, $session['id'] ?? null);
+        $this->assertSame($payment->stripe_checkout_session_id, $session->id);
 
         $signed = $this->signStripeWebhookPayload([
             'id' => 'evt_it_'.Str::uuid(),
@@ -66,8 +66,8 @@ final class StripeCheckoutAndWebhookFlowTest extends IntegrationTestCase
             'data' => [
                 'object' => [
                     'id' => $payment->stripe_checkout_session_id,
-                    'payment_intent' => is_string($session['payment_intent'] ?? null)
-                        ? $session['payment_intent']
+                    'payment_intent' => is_string($session->paymentIntent)
+                        ? $session->paymentIntent
                         : 'pi_it_'.Str::random(8),
                     'payment_status' => 'paid',
                     'amount_total' => 500000,

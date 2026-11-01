@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Listeners;
 
+use App\DTO\Events\UserRegisteredPayload;
 use App\Events\UserRegistered;
 use Shop\Messaging\OutboundMessage;
 use Shop\Messaging\OutboxPublisher;
@@ -17,21 +18,13 @@ final class PublishUserRegisteredToKafka
 
     public function handle(UserRegistered $event): void
     {
-        $user = $event->user;
-        $registeredAt = $user->created_at?->toIso8601String() ?? now()->toIso8601String();
+        $payload = UserRegisteredPayload::fromUser($event->user);
 
         $this->outbox->publish(new OutboundMessage(
             topic: Topics::USER_EVENTS,
-            key: (string) $user->id,
-            eventType: 'user.registered',
-            payload: [
-                'user_id' => $user->id,
-                'email' => $user->email,
-                'name' => $user->name,
-                'registered_at' => $registeredAt,
-                'event_type' => 'user.registered',
-                'event' => 'user.registered',
-            ],
+            key: (string) $payload->userId,
+            eventType: UserRegisteredPayload::EVENT_TYPE,
+            payload: $payload->toArray(),
             source: 'auth-service',
         ));
     }

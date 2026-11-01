@@ -335,7 +335,7 @@ if should_run auth; then
   run_step auth auth_app php artisan migrate --seed --force
 fi
 if should_run notification; then
-  run_step notification notification_app php artisan migrate --seed --force
+  run_step notification notification_app php artisan migrate --force
 fi
 if should_run search; then
   run_step search-migrate search_app php artisan migrate --force

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Services\Order\CancelOrderService;
+use App\Services\Order\ExpireUnpaidOrderService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -13,9 +13,9 @@ use Illuminate\Console\Command;
 #[Signature('orders:expire-unpaid')]
 final class ExpireUnpaidOrders extends Command
 {
-    public function handle(CancelOrderService $orders): int
+    public function handle(ExpireUnpaidOrderService $orders): int
     {
-        $expired = $orders->expireUnpaid();
+        $expired = $orders->handle();
         $this->info("Cancelled {$expired} unpaid orders.");
 
         return self::SUCCESS;

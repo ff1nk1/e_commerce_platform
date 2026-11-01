@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Fakes;
 
-use App\Services\Llm\Contracts\LlmClient;
-use App\Services\Llm\DTOs\ChatMessage;
-use App\Services\Llm\DTOs\SearchFilters;
+use App\Contracts\LlmClient;
+use App\DTO\Chat\ChatMessage;
+use App\DTO\Chat\SearchFilters;
+use App\Enums\EmbedTask;
 
 final class FakeLlmClient implements LlmClient
 {
@@ -33,7 +34,7 @@ final class FakeLlmClient implements LlmClient
     /**
      * When set, replaces the default embedding vector. May throw.
      *
-     * @var (\Closure(string, string): list<float>)|null
+     * @var (\Closure(string, EmbedTask): list<float>)|null
      */
     public ?\Closure $embedHandler = null;
 
@@ -42,7 +43,7 @@ final class FakeLlmClient implements LlmClient
         $this->filters = new SearchFilters(query: 'sneakers');
     }
 
-    public function embed(string $text, string $taskType = 'RETRIEVAL_DOCUMENT'): array
+    public function embed(string $text, EmbedTask $taskType = EmbedTask::RetrievalDocument): array
     {
         $this->embedCalls++;
 
@@ -72,7 +73,7 @@ final class FakeLlmClient implements LlmClient
 
     public function extractFiltersAndEmbed(
         string $userMessage,
-        string $embedTaskType = 'RETRIEVAL_QUERY',
+        EmbedTask $embedTaskType = EmbedTask::RetrievalQuery,
         ?string $embedText = null,
         array $catalogAttributeNames = [],
     ): array {

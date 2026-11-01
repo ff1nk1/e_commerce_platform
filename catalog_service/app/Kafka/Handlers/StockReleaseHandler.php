@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
-use App\Messaging\ApplyStockStep;
+use App\Enums\SagaStep;
+use App\Kafka\Saga\ApplyStockStep;
+use App\Kafka\Saga\StockSagaMessage;
 use App\Messaging\StockReleaseRequested;
-use App\Support\StockSagaMessage;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Ecotone\Modelling\EventBus;
 use Illuminate\Support\Facades\Log;
@@ -49,7 +50,7 @@ final class StockReleaseHandler
         try {
             $this->events->publish(new ApplyStockStep(
                 $parsed->sagaId,
-                'stock.release',
+                SagaStep::Release,
                 $parsed->orderId,
                 $parsed->items,
             ));

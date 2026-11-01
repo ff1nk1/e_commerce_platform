@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Services\Llm\Contracts\LlmClient;
-use App\Services\Llm\DTOs\ChatMessage;
-use App\Services\Llm\Exceptions\LlmException;
-use App\Services\Llm\Gemini\GeminiLlmClient;
+use App\Contracts\LlmClient;
+use App\DTO\Catalog\AttributeConstraint;
+use App\DTO\Chat\ChatMessage;
+use App\Enums\LlmErrorKind;
+use App\Infrastructure\Llm\Exceptions\LlmException;
+use App\Infrastructure\Llm\Gemini\GeminiLlmClient;
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
@@ -136,7 +138,8 @@ final class GeminiLlmClientTest extends TestCase
         $this->assertSame(100.0, $filters->priceMin);
         $this->assertSame(500.0, $filters->priceMax);
         $this->assertSame('джинсы', $filters->query);
-        $this->assertSame([['name' => 'Цвет', 'value' => 'чёрный']], $filters->attributes);
+        $this->assertEquals([new AttributeConstraint('Цвет', 'чёрный')], $filters->attributes);
+        $this->assertSame([['name' => 'Цвет', 'value' => 'чёрный']], $filters->toArray()['attributes']);
 
         Http::assertSent(function ($request): bool {
             $body = $request->data();
@@ -158,7 +161,7 @@ final class GeminiLlmClientTest extends TestCase
         } catch (LlmException $e) {
             $this->assertStringContainsString('Gemini embed failed (500)', $e->getMessage());
             $this->assertSame(500, $e->statusCode());
-            $this->assertSame(LlmException::KIND_HTTP, $e->kind());
+            $this->assertSame(LlmErrorKind::Http, $e->kind());
             $this->assertSame(502, $e->publicHttpStatus());
         }
     }
@@ -209,7 +212,7 @@ final class GeminiLlmClientTest extends TestCase
             $this->fail('Expected LlmException');
         } catch (LlmException $e) {
             $this->assertSame('GEMINI_API_KEY is not configured', $e->getMessage());
-            $this->assertSame(LlmException::KIND_CONFIGURATION, $e->kind());
+            $this->assertSame(LlmErrorKind::Configuration, $e->kind());
             $this->assertSame('Сервис рекомендаций временно недоступен.', $e->userMessage());
             $this->assertSame(503, $e->publicHttpStatus());
         }

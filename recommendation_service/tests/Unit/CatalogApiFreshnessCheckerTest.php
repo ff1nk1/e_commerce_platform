@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Contracts\CatalogProductClient;
+use App\DTO\Catalog\CatalogFetchResult;
+use App\DTO\Catalog\SearchHit;
+use App\Infrastructure\Catalog\CatalogApiFreshnessChecker;
 use App\Models\ProductCatalog;
-use App\Services\Catalog\CatalogApiFreshnessChecker;
-use App\Services\Catalog\Contracts\CatalogProductClient;
-use App\Services\Catalog\DTOs\CatalogFetchResult;
-use App\Services\Catalog\DTOs\SearchHit;
 use RuntimeException;
 use Tests\TestCase;
 

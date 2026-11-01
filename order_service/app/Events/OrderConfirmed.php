@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Events;
 
 use App\Contracts\Outboxable;
+use App\Enums\OrderEventType;
 use Illuminate\Foundation\Events\Dispatchable;
 
 final class OrderConfirmed implements Outboxable
@@ -25,7 +26,7 @@ final class OrderConfirmed implements Outboxable
 
     public function outboxEventType(): string
     {
-        return 'order.confirmed';
+        return OrderEventType::OrderConfirmed->value;
     }
 
     public function outboxPayload(): array

@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Contracts\IdempotencyStore;
+use App\DTO\Orders\OrderItemRequest;
+use App\Infrastructure\Cache\CacheIdempotencyStore;
 use App\Kafka\Handlers\ProductEventsHandler;
 use App\Messaging\ProductSnapshotReceived;
-use App\Services\IdempotencyService;
-use App\Services\OrderService;
+use App\Services\Order\CreateOrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Mockery;
@@ -31,9 +32,9 @@ final class ProductSnapshotOrderFlowTest extends TestCase
 
         $this->expectException(ValidationException::class);
 
-        resolve(OrderService::class)->create(1, 'a@example.com', 'A', [
+        resolve(CreateOrderService::class)->handle(1, 'a@example.com', 'A', OrderItemRequest::fromArray([
             ['product_id' => 136, 'quantity' => 1],
-        ], 'idem-missing-snapshot');
+        ]), 'idem-missing-snapshot');
     }
 
     public function test_handler_snapshot_allows_order_create(): void
@@ -59,13 +60,13 @@ final class ProductSnapshotOrderFlowTest extends TestCase
 
         $this->bindScopedIdempotencyMock(expectPut: true);
 
-        $result = resolve(OrderService::class)->create(7, 'user7@example.com', 'User Seven', [
+        $result = resolve(CreateOrderService::class)->handle(7, 'user7@example.com', 'User Seven', OrderItemRequest::fromArray([
             ['product_id' => 136, 'quantity' => 2],
-        ], 'idem-after-snapshot');
+        ]), 'idem-after-snapshot');
 
-        $this->assertSame(201, $result['status']);
-        $this->assertSame('6767.00', $result['body']['items'][0]['unit_price'] ?? null);
-        $this->assertSame('13534.00', $result['body']['total_amount'] ?? null);
+        $this->assertSame(201, $result->status);
+        $this->assertSame('6767.00', $result->body['items'][0]['unit_price'] ?? null);
+        $this->assertSame('13534.00', $result->body['total_amount'] ?? null);
         $this->assertDatabaseHas('orders', [
             'user_id' => 7,
             'customer_email' => 'user7@example.com',
@@ -119,7 +120,7 @@ final class ProductSnapshotOrderFlowTest extends TestCase
 
     private function bindScopedIdempotencyMock(bool $expectPut): void
     {
-        $idempotency = Mockery::mock(IdempotencyService::class);
+        $idempotency = Mockery::mock(CacheIdempotencyStore::class);
         $idempotency->shouldReceive('scopeKey')->andReturnUsing(
             fn (string $op, int $userId, string $key, ?int $resourceId = null): string => implode(':', array_filter(
                 ['order', 'idempotency', $op, (string) $userId, $resourceId !== null ? (string) $resourceId : null, $key],
@@ -135,7 +136,7 @@ final class ProductSnapshotOrderFlowTest extends TestCase
             $idempotency->shouldReceive('put')->never();
         }
 
-        $this->app->instance(IdempotencyService::class, $idempotency);
+        $this->app->instance(CacheIdempotencyStore::class, $idempotency);
         $this->app->instance(IdempotencyStore::class, $idempotency);
     }
 }

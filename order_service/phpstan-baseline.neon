@@ -4,32 +4,32 @@ parameters:
 			message: '#^Parameter \#1 \$num1 of function bcadd expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
-			path: app/Domain/Money.php
+			path: app/ValueObjects/Money.php
 		-
 			message: '#^Parameter \#1 \$num1 of function bccomp expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
-			path: app/Domain/Money.php
+			path: app/ValueObjects/Money.php
 		-
 			message: '#^Parameter \#1 \$num1 of function bcmul expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 2
-			path: app/Domain/Money.php
+			path: app/ValueObjects/Money.php
 		-
 			message: '#^Parameter \#2 \$num2 of function bcadd expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
-			path: app/Domain/Money.php
+			path: app/ValueObjects/Money.php
 		-
 			message: '#^Parameter \#2 \$num2 of function bccomp expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
-			path: app/Domain/Money.php
+			path: app/ValueObjects/Money.php
 		-
 			message: '#^Parameter \#2 \$num2 of function bcmul expects numeric\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
-			path: app/Domain/Money.php
+			path: app/ValueObjects/Money.php
 		-
 			message: '#^Class App\\Models\\Order uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
 			identifier: missingType.generics
@@ -51,10 +51,10 @@ parameters:
 			count: 1
 			path: app/Models/ProductSnapshot.php
 		-
-			message: '#^Method App\\Services\\IdempotencyService\:\:get\(\) should return array\{status\: int, body\: array\<string, mixed\>\}\|null but returns array\<mixed, mixed\>\|null\.$#'
+			message: '#^Method App\\Infrastructure\\Cache\\CacheIdempotencyStore\:\:get\(\) should return array\{status\: int, body\: array\<string, mixed\>\}\|null but returns array\<mixed, mixed\>\|null\.$#'
 			identifier: return.type
 			count: 1
-			path: app/Services/IdempotencyService.php
+			path: app/Infrastructure/Cache/CacheIdempotencyStore.php
 		-
 			message: '#^Cannot call method toIso8601String\(\) on Carbon\\Carbon\|null\.$#'
 			identifier: method.nonObject
@@ -66,25 +66,15 @@ parameters:
 			count: 1
 			path: app/Services/Payment/CreateCheckoutService.php
 		-
-			message: '#^Method App\\Services\\Stripe\\StripeClient\:\:constructWebhookEvent\(\) should return array\{id\: string, type\: string, data\: array\{object\: array\<string, mixed\>\}\} but returns array\.$#'
+			message: '#^Method App\\Infrastructure\\Stripe\\StripeClient\:\:constructWebhookEvent\(\) should return array\{id\: string, type\: string, data\: array\{object\: array\<string, mixed\>\}\} but returns array\.$#'
 			identifier: return.type
 			count: 1
-			path: app/Services/Stripe/StripeClient.php
+			path: app/Infrastructure/Stripe/StripeClient.php
 		-
-			message: '#^Method App\\Services\\Stripe\\StripeClient\:\:constructWebhookEvent\(\) should return array\{id\: string, type\: string, data\: array\{object\: array\<string, mixed\>\}\} but returns non\-empty\-array\.$#'
+			message: '#^Method App\\Infrastructure\\Stripe\\StripeClient\:\:constructWebhookEvent\(\) should return array\{id\: string, type\: string, data\: array\{object\: array\<string, mixed\>\}\} but returns non\-empty\-array\.$#'
 			identifier: return.type
 			count: 1
-			path: app/Services/Stripe/StripeClient.php
-		-
-			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
-			identifier: argument.type
-			count: 1
-			path: config/filesystems.php
-		-
-			message: '#^Static property Database\\Factories\\UserFactory\:\:\$password \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
-			identifier: property.unusedType
-			count: 1
-			path: database/factories/UserFactory.php
+			path: app/Infrastructure/Stripe/StripeClient.php
 		-
 			message: '#^Method Tests\\Feature\\PaymentCheckoutTest\:\:createAwaitingPaymentOrder\(\) should return App\\Models\\Order but returns App\\Models\\Order\|null\.$#'
 			identifier: return.type
@@ -116,12 +106,12 @@ parameters:
 			count: 1
 			path: tests/Feature/StripeWebhookTest.php
 		-
-			message: '#^Parameter \#1 \$sessionId of method App\\Services\\Stripe\\StripeClient\:\:retrieveCheckoutSession\(\) expects string, string\|null given\.$#'
+			message: '#^Parameter \#1 \$sessionId of method App\\Infrastructure\\Stripe\\StripeClient\:\:retrieveCheckoutSession\(\) expects string, string\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: tests/Integration/StripeCheckoutAndWebhookFlowTest.php
 		-
-			message: '#^Parameter \#1 \$sessionId of method App\\Services\\Stripe\\StripeClient\:\:retrieveCheckoutSession\(\) expects string, string\|null given\.$#'
+			message: '#^Parameter \#1 \$sessionId of method App\\Infrastructure\\Stripe\\StripeClient\:\:retrieveCheckoutSession\(\) expects string, string\|null given\.$#'
 			identifier: argument.type
 			count: 1
 			path: tests/Integration/StripeSessionExpiredCompensationTest.php

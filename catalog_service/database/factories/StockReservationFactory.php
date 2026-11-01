@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
+use App\Enums\StockReservationStatus;
 use App\Models\Product;
 use App\Models\StockReservation;
 use App\Models\Store;
@@ -21,7 +22,7 @@ final class StockReservationFactory extends Factory
             'product_id' => Product::factory(),
             'store_id' => Store::factory(),
             'quantity' => 1,
-            'status' => StockReservation::STATUS_HELD,
+            'status' => StockReservationStatus::Held,
         ];
     }
 }

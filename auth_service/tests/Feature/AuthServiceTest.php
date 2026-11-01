@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\DTO\Auth\LoginCredentials;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\Auth\AuthService;
-use App\Services\Auth\JwtService;
+use App\Services\Auth\JwtCodec;
+use App\Services\Auth\LoginUserService;
+use App\Services\Auth\LogoutUserService;
+use App\Services\Auth\RefreshTokensService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -20,9 +23,13 @@ final class AuthServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    private AuthService $authService;
+    private LoginUserService $loginUser;
 
-    private JwtService $jwtService;
+    private RefreshTokensService $refreshTokens;
+
+    private LogoutUserService $logoutUser;
+
+    private JwtCodec $jwtService;
 
     protected function setUp(): void
     {
@@ -33,8 +40,10 @@ final class AuthServiceTest extends TestCase
         Config::set('jwt.ttl', 15);
         Config::set('jwt.refresh_ttl', 100);
 
-        $this->jwtService = resolve(JwtService::class);
-        $this->authService = resolve(AuthService::class);
+        $this->jwtService = resolve(JwtCodec::class);
+        $this->loginUser = resolve(LoginUserService::class);
+        $this->refreshTokens = resolve(RefreshTokensService::class);
+        $this->logoutUser = resolve(LogoutUserService::class);
 
         Redis::connection()->select((int) config('database.redis.default.database', 15));
         Redis::flushdb();
@@ -49,12 +58,12 @@ final class AuthServiceTest extends TestCase
             'password' => Hash::make('password123'),
         ]);
 
-        $tokens = $this->authService->login([
+        $tokens = $this->loginUser->handle(LoginCredentials::fromArray([
             'email' => $user->email,
             'password' => 'password123',
-        ]);
+        ]));
 
-        $hash = hash('sha256', $tokens['refresh_token']);
+        $hash = hash('sha256', $tokens->refreshToken);
         $this->assertTrue(Redis::exists("refresh_token:{$hash}") > 0);
         $this->assertEquals((string) $user->id, Redis::get("refresh_token:{$hash}"));
     }
@@ -67,22 +76,22 @@ final class AuthServiceTest extends TestCase
             'password' => Hash::make('password123'),
         ]);
 
-        $tokens = $this->authService->login([
+        $tokens = $this->loginUser->handle(LoginCredentials::fromArray([
             'email' => $user->email,
             'password' => 'password123',
-        ]);
-        $oldRefreshToken = $tokens['refresh_token'];
+        ]));
+        $oldRefreshToken = $tokens->refreshToken;
         $oldHash = hash('sha256', $oldRefreshToken);
 
         $this->assertTrue(Redis::exists("refresh_token:{$oldHash}") > 0);
 
-        $newTokens = $this->authService->refreshTokens($oldRefreshToken);
+        $newTokens = $this->refreshTokens->handle($oldRefreshToken);
 
         $this->assertNotNull($newTokens);
         $this->assertSame(0, (int) Redis::exists("refresh_token:{$oldHash}"));
         $this->assertTrue(Cache::has("refresh_token:blacklist:{$oldHash}"));
 
-        $newHash = hash('sha256', $newTokens['refresh_token']);
+        $newHash = hash('sha256', $newTokens->refreshToken);
         $this->assertTrue(Redis::exists("refresh_token:{$newHash}") > 0);
     }
 
@@ -94,14 +103,14 @@ final class AuthServiceTest extends TestCase
             'password' => Hash::make('password'),
         ]);
 
-        $tokens = $this->authService->login([
+        $tokens = $this->loginUser->handle(LoginCredentials::fromArray([
             'email' => $user->email,
             'password' => 'password',
-        ]);
-        $refreshToken = $tokens['refresh_token'];
+        ]));
+        $refreshToken = $tokens->refreshToken;
 
-        $this->assertNotNull($this->authService->refreshTokens($refreshToken));
-        $this->assertNull($this->authService->refreshTokens($refreshToken));
+        $this->assertNotNull($this->refreshTokens->handle($refreshToken));
+        $this->assertNull($this->refreshTokens->handle($refreshToken));
     }
 
     public function test_logout_invalidates_jwt_access_and_refresh_in_redis(): void
@@ -112,19 +121,19 @@ final class AuthServiceTest extends TestCase
             'password' => Hash::make('password'),
         ]);
 
-        $tokens = $this->authService->login([
+        $tokens = $this->loginUser->handle(LoginCredentials::fromArray([
             'email' => $user->email,
             'password' => 'password',
-        ]);
-        $accessToken = $tokens['access_token'];
-        $refreshToken = $tokens['refresh_token'];
+        ]));
+        $accessToken = $tokens->accessToken;
+        $refreshToken = $tokens->refreshToken;
         $refreshHash = hash('sha256', $refreshToken);
 
         $request = Request::create('/api/test', 'GET');
         $request->headers->set('Authorization', "Bearer {$accessToken}");
         $this->assertNotNull($this->jwtService->userFromRequest($request));
 
-        $this->authService->logout($accessToken, $refreshToken);
+        $this->logoutUser->handle($accessToken, $refreshToken);
 
         $this->assertNull($this->jwtService->userFromRequest($request));
 

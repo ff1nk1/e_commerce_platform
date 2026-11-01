@@ -2,7 +2,7 @@
 
 use App\Http\Middleware\EnsureInternalToken;
 use App\Http\Middleware\ResolveGatewayUserId;
-use App\Services\Llm\Exceptions\LlmException;
+use App\Infrastructure\Llm\Exceptions\LlmException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;

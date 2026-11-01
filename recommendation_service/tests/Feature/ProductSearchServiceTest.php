@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Contracts\LlmClient;
+use App\DTO\Catalog\SearchHit;
+use App\DTO\Chat\SearchFilters;
 use App\Models\ProductCatalog;
-use App\Services\Catalog\DTOs\SearchHit;
-use App\Services\Catalog\ProductSearchService;
-use App\Services\Llm\Contracts\LlmClient;
-use App\Services\Llm\DTOs\SearchFilters;
+use App\Services\Catalog\SearchCatalogProductsDetailedService;
+use App\Services\Catalog\SearchCatalogProductsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Fakes\FakeLlmClient;
@@ -18,7 +19,9 @@ final class ProductSearchServiceTest extends TestCase
 {
     use RefreshDatabase;
 
-    private ProductSearchService $search;
+    private SearchCatalogProductsService $search;
+
+    private SearchCatalogProductsDetailedService $detailed;
 
     /** @var list<float> */
     private array $queryVector;
@@ -27,7 +30,8 @@ final class ProductSearchServiceTest extends TestCase
     {
         parent::setUp();
         $this->app->instance(LlmClient::class, new FakeLlmClient);
-        $this->search = resolve(ProductSearchService::class);
+        $this->search = resolve(SearchCatalogProductsService::class);
+        $this->detailed = resolve(SearchCatalogProductsDetailedService::class);
         $this->queryVector = array_fill(0, 768, 0.01);
     }
 
@@ -37,7 +41,7 @@ final class ProductSearchServiceTest extends TestCase
         $this->insertProduct(2, 'Draft', published: false, embedding: true);
         $this->insertProduct(3, 'No Embed', published: true, embedding: false);
 
-        $results = $this->search->search(
+        $results = $this->search->handle(
             new SearchFilters(query: 'Visible'),
             limit: 10,
             precomputedVector: $this->queryVector,
@@ -70,7 +74,7 @@ final class ProductSearchServiceTest extends TestCase
             ['name' => 'Цвет', 'value' => 'Синий'],
         ]);
 
-        $results = $this->search->search(
+        $results = $this->search->handle(
             new SearchFilters(
                 storeName: 'галерея',
                 categoryName: 'джинсы',
@@ -106,7 +110,7 @@ final class ProductSearchServiceTest extends TestCase
         ]);
 
         // Soft color only — size not required, so both remain; black ranks first.
-        $results = $this->search->search(
+        $results = $this->search->handle(
             new SearchFilters(
                 query: 'джинсы',
                 attributes: [
@@ -137,7 +141,7 @@ final class ProductSearchServiceTest extends TestCase
             ['name' => 'Размер', 'value' => '28'],
         ]);
 
-        $results = $this->search->search(
+        $results = $this->search->handle(
             new SearchFilters(
                 query: 'джинсы',
                 attributes: [['name' => 'Цвет', 'value' => 'синий']],
@@ -184,7 +188,7 @@ final class ProductSearchServiceTest extends TestCase
             embeddingVector: $far,
         );
 
-        $results = $this->search->search(
+        $results = $this->search->handle(
             new SearchFilters(
                 query: 'джинсы',
                 requiredAttributes: [
@@ -207,7 +211,7 @@ final class ProductSearchServiceTest extends TestCase
             ['name' => 'Размер', 'value' => '32'],
         ]);
 
-        $results = $this->search->search(
+        $results = $this->search->handle(
             new SearchFilters(
                 query: 'джинсы',
                 requiredAttributes: [['name' => 'Размер', 'value' => '28']],
@@ -247,7 +251,7 @@ final class ProductSearchServiceTest extends TestCase
             embeddingVector: $far,
         );
 
-        $results = $this->search->search(
+        $results = $this->search->handle(
             new SearchFilters(
                 query: 'item',
                 attributes: [
@@ -269,7 +273,7 @@ final class ProductSearchServiceTest extends TestCase
         $this->insertProduct(70, 'Blue', attributes: [['name' => 'Цвет', 'value' => 'Синий']]);
         $this->insertProduct(71, 'Red', attributes: [['name' => 'Цвет', 'value' => 'Красный']]);
 
-        $hard = $this->search->searchDetailed(
+        $hard = $this->detailed->handle(
             new SearchFilters(
                 query: 'item',
                 preferredAttributes: [['name' => 'Цвет', 'value' => 'красный']],
@@ -280,7 +284,7 @@ final class ProductSearchServiceTest extends TestCase
         $this->assertFalse($hard->preferredRelaxed);
         $this->assertSame([71], array_map(static fn (SearchHit $h): int => $h->product->product_id, $hard->hits));
 
-        $soft = $this->search->searchDetailed(
+        $soft = $this->detailed->handle(
             new SearchFilters(
                 query: 'item',
                 preferredAttributes: [['name' => 'Цвет', 'value' => 'зелёный']],
@@ -299,7 +303,7 @@ final class ProductSearchServiceTest extends TestCase
             ['name' => 'Размер', 'value' => '30'],
         ]);
 
-        $result = $this->search->searchDetailed(
+        $result = $this->detailed->handle(
             new SearchFilters(
                 query: 'джинсы',
                 requiredAttributes: [['name' => 'Размер', 'value' => '30']],
@@ -322,7 +326,7 @@ final class ProductSearchServiceTest extends TestCase
             ['name' => 'Цвет', 'value' => 'Красный'],
         ]);
 
-        $results = $this->search->search(
+        $results = $this->search->handle(
             new SearchFilters(
                 query: 'item',
                 requiredAttributes: [['name' => 'Цвет', 'value' => 'красный']],
@@ -340,7 +344,7 @@ final class ProductSearchServiceTest extends TestCase
         $this->insertProduct(20, 'InStore', storeId: 3, storeName: 'ТЦ Галерея');
         $this->insertProduct(21, 'Other', storeId: 1, storeName: 'Главный склад');
 
-        $results = $this->search->search(
+        $results = $this->search->handle(
             new SearchFilters(storeId: 3, query: 'item'),
             limit: 10,
             precomputedVector: $this->queryVector,
@@ -356,14 +360,14 @@ final class ProductSearchServiceTest extends TestCase
             $this->insertProduct($i, "P{$i}");
         }
 
-        $tooLow = $this->search->search(
+        $tooLow = $this->search->handle(
             new SearchFilters(query: 'P'),
             limit: 0,
             precomputedVector: $this->queryVector,
         );
         $this->assertCount(1, $tooLow);
 
-        $tooHigh = $this->search->search(
+        $tooHigh = $this->search->handle(
             new SearchFilters(query: 'P'),
             limit: 100,
             precomputedVector: $this->queryVector,
@@ -383,7 +387,7 @@ final class ProductSearchServiceTest extends TestCase
         $this->insertProduct(1, 'Near', embeddingVector: $near);
         $this->insertProduct(2, 'Far', embeddingVector: $far);
 
-        $results = $this->search->search(
+        $results = $this->search->handle(
             new SearchFilters(query: 'near'),
             limit: 5,
             precomputedVector: $query,

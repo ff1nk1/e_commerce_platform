@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\DTO\Catalog\ProductData;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductAttribute;
 use App\Models\Store;
-use App\Services\ProductService;
+use App\Services\Products\CreateProductService;
+use App\Services\Products\UpdateProductService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Junges\Kafka\Facades\Kafka;
 use Shop\Messaging\OutboxQueue;
@@ -25,7 +27,7 @@ final class ProductAttributesSyncTest extends TestCase
         $store = Store::factory()->create();
         $category = Category::factory()->create();
 
-        $product = resolve(ProductService::class)->createProduct([
+        $product = resolve(CreateProductService::class)->handle(ProductData::fromArray([
             'store_id' => $store->id,
             'category_id' => $category->id,
             'name' => 'Phone',
@@ -34,7 +36,7 @@ final class ProductAttributesSyncTest extends TestCase
                 ['name' => 'Color', 'value' => 'Black'],
                 ['name' => 'RAM', 'value' => '8GB'],
             ],
-        ]);
+        ]));
 
         $this->assertDatabaseHas('product_attributes', [
             'product_id' => $product->id,
@@ -74,12 +76,12 @@ final class ProductAttributesSyncTest extends TestCase
             'value' => 'Gone',
         ]);
 
-        resolve(ProductService::class)->updateProduct($product, [
+        resolve(UpdateProductService::class)->handle($product, ProductData::fromArray([
             'name' => $product->name,
             'attributes' => [
                 ['name' => 'Color', 'value' => 'Red'],
             ],
-        ]);
+        ]));
 
         $this->assertDatabaseMissing('product_attributes', [
             'product_id' => $product->id,

@@ -305,9 +305,13 @@ GOLANGCI_GOTOOLCHAIN="${GOLANGCI_GOTOOLCHAIN:-go1.27.0}"
 
 run_golangci() {
   local -a extra=("$@")
+  local -a env_vars=(GOTOOLCHAIN="$GOLANGCI_GOTOOLCHAIN")
+  if [[ -d "${HOME}/go/pkg/mod" ]]; then
+    env_vars+=(GOMODCACHE="${HOME}/go/pkg/mod")
+  fi
   (
     cd "$ROOT/analytic_service" &&
-      GOTOOLCHAIN="$GOLANGCI_GOTOOLCHAIN" "$GOLANGCI_BIN" run "${extra[@]}" ./...
+      env "${env_vars[@]}" "$GOLANGCI_BIN" run "${extra[@]}" ./...
   )
 }
 

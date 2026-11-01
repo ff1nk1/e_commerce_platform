@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\DTO\Auth\LoginCredentials;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\Auth\AuthService;
-use App\Services\Auth\JwtService;
+use App\Services\Auth\JwtCodec;
+use App\Services\Auth\LoginUserService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -134,12 +135,12 @@ final class AuthHttpTest extends TestCase
             'role_id' => $role->id,
         ]);
 
-        $tokens = resolve(AuthService::class)->login([
+        $tokens = resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
             'email' => 'me@example.com',
             'password' => 'password123',
-        ]);
+        ]));
 
-        $this->withToken($tokens['access_token'])
+        $this->withToken($tokens->accessToken)
             ->getJson('/api/user')
             ->assertOk()
             ->assertJsonPath('email', $user->email);
@@ -154,16 +155,16 @@ final class AuthHttpTest extends TestCase
             'role_id' => $role->id,
         ]);
 
-        $tokens = resolve(AuthService::class)->login([
+        $tokens = resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
             'email' => 'refresh@example.com',
             'password' => 'password123',
-        ]);
+        ]));
 
         $this->call(
             'POST',
             '/api/refresh',
             [],
-            ['refresh_token' => $tokens['refresh_token']],
+            ['refresh_token' => $tokens->refreshToken],
             [],
             ['HTTP_ACCEPT' => 'application/json']
         )->assertOk()
@@ -180,26 +181,26 @@ final class AuthHttpTest extends TestCase
             'role_id' => $role->id,
         ]);
 
-        $tokens = resolve(AuthService::class)->login([
+        $tokens = resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
             'email' => 'out@example.com',
             'password' => 'password123',
-        ]);
+        ]));
 
-        $this->withToken($tokens['access_token'])
-            ->withUnencryptedCookie('access_token', $tokens['access_token'])
-            ->withUnencryptedCookie('refresh_token', $tokens['refresh_token'])
+        $this->withToken($tokens->accessToken)
+            ->withUnencryptedCookie('access_token', $tokens->accessToken)
+            ->withUnencryptedCookie('refresh_token', $tokens->refreshToken)
             ->postJson('/api/logout')
             ->assertOk();
 
-        $jwt = resolve(JwtService::class);
-        $decoded = $jwt->decode($tokens['access_token']);
+        $jwt = resolve(JwtCodec::class);
+        $decoded = $jwt->decode($tokens->accessToken);
         $this->assertTrue(
             Cache::has("jwt:blacklist:{$decoded->jti}"),
             'Access token JTI must be blacklisted after logout'
         );
 
         $request = Request::create('/api/user', 'GET');
-        $request->headers->set('Authorization', 'Bearer '.$tokens['access_token']);
+        $request->headers->set('Authorization', 'Bearer '.$tokens->accessToken);
         $this->assertNull(
             $jwt->userFromRequest($request),
             'Blacklisted access token must not resolve a user'
@@ -245,14 +246,14 @@ final class AuthHttpTest extends TestCase
             'role_id' => $role->id,
         ]);
 
-        $tokens = resolve(AuthService::class)->login([
+        $tokens = resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
             'email' => 'pwd@example.com',
             'password' => 'old-password',
-        ]);
+        ]));
 
-        $this->withToken($tokens['access_token'])
-            ->withUnencryptedCookie('access_token', $tokens['access_token'])
-            ->withUnencryptedCookie('refresh_token', $tokens['refresh_token'])
+        $this->withToken($tokens->accessToken)
+            ->withUnencryptedCookie('access_token', $tokens->accessToken)
+            ->withUnencryptedCookie('refresh_token', $tokens->refreshToken)
             ->patchJson('/api/profile/password', [
                 'current_password' => 'old-password',
                 'new_password' => 'new-password-123',
@@ -261,16 +262,16 @@ final class AuthHttpTest extends TestCase
             ->assertCookieExpired('access_token')
             ->assertCookieExpired('refresh_token');
 
-        $jwt = resolve(JwtService::class);
-        $decoded = $jwt->decode($tokens['access_token']);
+        $jwt = resolve(JwtCodec::class);
+        $decoded = $jwt->decode($tokens->accessToken);
         $this->assertTrue(Cache::has("jwt:blacklist:{$decoded->jti}"));
 
-        $refreshHash = hash('sha256', $tokens['refresh_token']);
+        $refreshHash = hash('sha256', $tokens->refreshToken);
         $this->assertFalse(Redis::exists("refresh_token:{$refreshHash}") > 0);
         $this->assertTrue(Cache::has("refresh_token:blacklist:{$refreshHash}"));
 
         $request = Request::create('/api/user', 'GET');
-        $request->headers->set('Authorization', 'Bearer '.$tokens['access_token']);
+        $request->headers->set('Authorization', 'Bearer '.$tokens->accessToken);
         $this->assertNull($jwt->userFromRequest($request));
     }
 
@@ -284,12 +285,12 @@ final class AuthHttpTest extends TestCase
             'number' => '+10000000000',
         ]);
 
-        $tokens = resolve(AuthService::class)->login([
+        $tokens = resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
             'email' => 'profile-phone@example.com',
             'password' => 'password123',
-        ]);
+        ]));
 
-        $this->withToken($tokens['access_token'])
+        $this->withToken($tokens->accessToken)
             ->patchJson('/api/profile', [
                 'number' => '+48 123 456 789',
             ])
@@ -313,12 +314,12 @@ final class AuthHttpTest extends TestCase
             'number' => '+10000000000',
         ]);
 
-        $tokens = resolve(AuthService::class)->login([
+        $tokens = resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
             'email' => 'profile-invalid-phone@example.com',
             'password' => 'password123',
-        ]);
+        ]));
 
-        $this->withToken($tokens['access_token'])
+        $this->withToken($tokens->accessToken)
             ->patchJson('/api/profile', ['number' => $number])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['number']);

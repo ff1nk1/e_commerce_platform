@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Http\Requests\GetUploadUrlRequest;
-use App\Support\MediaPublicUrl;
-use App\Support\MediaUploadPath;
+use App\Services\Media\MediaStorage;
 use Illuminate\Filesystem\AwsS3V3Adapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
@@ -18,7 +17,7 @@ final class UploadController extends Controller
         $validated = $request->validated();
         $contentType = $validated['content_type'];
         $extension = GetUploadUrlRequest::CONTENT_TYPE_EXTENSIONS[$contentType];
-        $path = MediaUploadPath::new($extension);
+        $path = MediaStorage::newUploadPath($extension);
 
         /** @var AwsS3V3Adapter $s3Disk */
         $s3Disk = Storage::disk('s3');
@@ -36,7 +35,7 @@ final class UploadController extends Controller
             // Internal MinIO URL for server-side PUT (admin Docker network)
             'upload_url' => $uploadUrl,
             'file_path' => $path,
-            'public_url' => MediaPublicUrl::forPath($path),
+            'public_url' => MediaStorage::publicUrlForPath($path),
         ]);
     }
 }

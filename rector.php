@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Rector\Config\RectorConfig;
+use RectorLaravel\Rector\Class_\AddHasFactoryToModelsRector;
 use RectorLaravel\Set\LaravelSetList;
 use Tools\Rector\AddDeclareStrictTypesRector;
 use Tools\Rector\FinalizeClassesWithoutChildrenRector;
@@ -18,19 +19,28 @@ require_once __DIR__.'/tools/rector/FinalizeClassesWithoutChildrenRector.php';
  */
 $serviceRoot = getcwd();
 
+$paths = [
+    $serviceRoot.'/app',
+    $serviceRoot.'/tests',
+    $serviceRoot.'/routes',
+];
+
+if (is_dir($serviceRoot.'/database')) {
+    $paths[] = $serviceRoot.'/database';
+}
+
 return RectorConfig::configure()
-    ->withPaths([
-        $serviceRoot.'/app',
-        $serviceRoot.'/tests',
-        $serviceRoot.'/database',
-        $serviceRoot.'/routes',
-    ])
+    ->withPaths($paths)
     ->withSkip([
         $serviceRoot.'/vendor',
         $serviceRoot.'/storage',
         $serviceRoot.'/bootstrap/cache',
         // Reads $_SERVER/$_ENV before Laravel boots and writes them back.
         $serviceRoot.'/tests/Concerns/SyncsDotEnvKeys.php',
+        // Stateless user in catalog_service (hydrated from gateway headers, no DB table/factory).
+        AddHasFactoryToModelsRector::class => [
+            __DIR__.'/catalog_service/app/Models/User.php',
+        ],
     ])
     ->withComposerBased(laravel: true)
     ->withSets([

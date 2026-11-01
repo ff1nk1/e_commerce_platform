@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Services\IdempotencyService;
+use App\Infrastructure\Cache\CacheIdempotencyStore;
 use Illuminate\Support\Str;
 use Tests\Concerns\UsesRedis;
 use Tests\TestCase;
@@ -13,13 +13,13 @@ final class IdempotencyServiceTest extends TestCase
 {
     use UsesRedis;
 
-    private IdempotencyService $idempotency;
+    private CacheIdempotencyStore $idempotency;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->enableRedis();
-        $this->idempotency = new IdempotencyService;
+        $this->idempotency = new CacheIdempotencyStore;
     }
 
     public function test_put_and_get_round_trip(): void

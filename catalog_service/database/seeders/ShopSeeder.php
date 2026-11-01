@@ -9,8 +9,8 @@ use App\Models\Product;
 use App\Models\ProductAttribute;
 use App\Models\Stock;
 use App\Models\Store;
-use App\Services\CatalogService;
-use App\Services\ProductService;
+use App\Services\Categories\CategoriesCache;
+use App\Services\Products\ProductCache;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -32,9 +32,9 @@ final class ShopSeeder extends Seeder
         Store::query()->truncate();
         Schema::enableForeignKeyConstraints();
 
-        // Truncate bypasses CatalogService/ProductService — drop stale Redis tags now.
-        resolve(CatalogService::class)->clearCategoryCache();
-        resolve(ProductService::class)->clearProductCache();
+        // Truncate bypasses category and product services — drop stale Redis tags now.
+        resolve(CategoriesCache::class)->clear();
+        resolve(ProductCache::class)->clear();
 
         // 2. Создаем магазины
         $storesData = ['Главный склад', 'Магазин на Ленина', 'ТЦ Галерея', 'Точка выдачи'];
@@ -129,7 +129,7 @@ final class ShopSeeder extends Seeder
         }
 
         // Drop anything warmed while this seeder wrote via Model::create.
-        resolve(CatalogService::class)->clearCategoryCache();
-        resolve(ProductService::class)->clearProductCache();
+        resolve(CategoriesCache::class)->clear();
+        resolve(ProductCache::class)->clear();
     }
 }

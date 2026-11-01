@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Catalog\AttributeConstraint;
 use App\Services\Catalog\AttributeConstraintDetector;
 use Tests\TestCase;
 
@@ -20,15 +21,15 @@ final class AttributeConstraintDetectorTest extends TestCase
     public function test_size_is_always_required_and_color_is_preferred(): void
     {
         $split = $this->detector->split('синие джинсы 28 размера', [
-            ['name' => 'Цвет', 'value' => 'синий'],
-            ['name' => 'Размер', 'value' => '28'],
+            new AttributeConstraint('Цвет', 'синий'),
+            new AttributeConstraint('Размер', '28'),
         ]);
 
-        $this->assertSame([
-            ['name' => 'Размер', 'value' => '28'],
+        $this->assertEquals([
+            new AttributeConstraint('Размер', '28'),
         ], $split['required']);
-        $this->assertSame([
-            ['name' => 'Цвет', 'value' => 'синий'],
+        $this->assertEquals([
+            new AttributeConstraint('Цвет', 'синий'),
         ], $split['preferred']);
         $this->assertSame([], $split['soft']);
     }
@@ -36,13 +37,13 @@ final class AttributeConstraintDetectorTest extends TestCase
     public function test_exclusive_language_makes_all_attributes_required(): void
     {
         $split = $this->detector->split('ищу синие джинсы исключительно 28 размера', [
-            ['name' => 'Цвет', 'value' => 'синий'],
-            ['name' => 'Размер', 'value' => '28'],
+            new AttributeConstraint('Цвет', 'синий'),
+            new AttributeConstraint('Размер', '28'),
         ]);
 
-        $this->assertSame([
-            ['name' => 'Цвет', 'value' => 'синий'],
-            ['name' => 'Размер', 'value' => '28'],
+        $this->assertEquals([
+            new AttributeConstraint('Цвет', 'синий'),
+            new AttributeConstraint('Размер', '28'),
         ], $split['required']);
         $this->assertSame([], $split['preferred']);
         $this->assertSame([], $split['soft']);
@@ -53,15 +54,15 @@ final class AttributeConstraintDetectorTest extends TestCase
         $split = $this->detector->split(
             'а размер 28?',
             [
-                ['name' => 'Цвет', 'value' => 'синий'],
-                ['name' => 'Размер', 'value' => '28'],
+                new AttributeConstraint('Цвет', 'синий'),
+                new AttributeConstraint('Размер', '28'),
             ],
             exclusiveFromHistory: true,
         );
 
-        $this->assertSame([
-            ['name' => 'Цвет', 'value' => 'синий'],
-            ['name' => 'Размер', 'value' => '28'],
+        $this->assertEquals([
+            new AttributeConstraint('Цвет', 'синий'),
+            new AttributeConstraint('Размер', '28'),
         ], $split['required']);
     }
 
@@ -86,11 +87,11 @@ final class AttributeConstraintDetectorTest extends TestCase
     public function test_normalizes_color_alias_to_canonical(): void
     {
         $split = $this->detector->split('black shoes', [
-            ['name' => 'color', 'value' => 'black'],
+            new AttributeConstraint('color', 'black'),
         ]);
 
-        $this->assertSame([
-            ['name' => 'Цвет', 'value' => 'black'],
+        $this->assertEquals([
+            new AttributeConstraint('Цвет', 'black'),
         ], $split['preferred']);
     }
 }

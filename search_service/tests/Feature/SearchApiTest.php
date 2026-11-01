@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Services\SearchIndexService;
+use App\DTO\Search\ProductDocument;
+use App\Services\Indexing\ProductIndexer;
 use Junges\Kafka\Facades\Kafka;
 use Mockery;
 use OpenSearch\Client;
@@ -156,7 +157,7 @@ final class SearchApiTest extends TestCase
 
         $this->app->instance(Client::class, $client);
 
-        resolve(SearchIndexService::class)->indexProduct([
+        resolve(ProductIndexer::class)->upsert(ProductDocument::fromArray([
             'id' => 1,
             'name' => 'Phone',
             'store_id' => 1,
@@ -164,6 +165,6 @@ final class SearchApiTest extends TestCase
             'attributes' => [
                 ['name' => 'Color', 'value' => 'Black'],
             ],
-        ], preserveStock: false);
+        ]), preserveStock: false);
     }
 }

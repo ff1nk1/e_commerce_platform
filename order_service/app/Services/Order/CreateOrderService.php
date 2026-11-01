@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Services\Order;
 
 use App\Contracts\IdempotencyStore;
-use App\Domain\Money;
-use App\Domain\OrderStatus;
+use App\DTO\Orders\CreateOrderResult;
+use App\DTO\Orders\OrderItemRequest;
+use App\DTO\Orders\OrderView;
+use App\Enums\OrderStatus;
 use App\Events\OrderCreated;
 use App\Messaging\OrderPlaced;
 use App\Models\Order;
 use App\Models\ProductSnapshot;
+use App\ValueObjects\Money;
 use Ecotone\Modelling\EventBus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Sleep;
@@ -26,21 +29,19 @@ final class CreateOrderService
 
     public function __construct(
         private IdempotencyStore $idempotency,
-        private OrderPayloadFactory $payloads,
         private EventBus $events,
     ) {}
 
     /**
-     * @param  list<array{product_id: int, quantity: int}>  $items
-     * @return array{status: int, body: array<string, mixed>}
+     * @param  list<OrderItemRequest>  $items
      */
-    public function execute(int $userId, string $email, string $name, array $items, string $idempotencyKey): array
+    public function handle(int $userId, string $email, string $name, array $items, string $idempotencyKey): CreateOrderResult
     {
         $scopeKey = $this->idempotency->scopeKey('create', $userId, $idempotencyKey);
 
         $cached = $this->idempotency->get($scopeKey);
         if ($cached !== null) {
-            return $cached;
+            return new CreateOrderResult($cached['status'], $cached['body']);
         }
 
         if (! $this->idempotency->acquireLock($scopeKey)) {
@@ -48,7 +49,7 @@ final class CreateOrderService
                 Sleep::usleep(self::LOCK_RETRY_SLEEP_MICROS);
                 $cached = $this->idempotency->get($scopeKey);
                 if ($cached !== null) {
-                    return $cached;
+                    return new CreateOrderResult($cached['status'], $cached['body']);
                 }
             }
 
@@ -58,22 +59,21 @@ final class CreateOrderService
         try {
             $cached = $this->idempotency->get($scopeKey);
             if ($cached !== null) {
-                return $cached;
+                return new CreateOrderResult($cached['status'], $cached['body']);
             }
 
             $order = $this->persistOrder($userId, $email, $name, $items);
-            $body = $this->payloads->serializeOrder($order);
-            $result = ['status' => 201, 'body' => $body];
+            $body = OrderView::fromOrder($order)->toArray();
             $this->idempotency->put($scopeKey, 201, $body);
 
-            return $result;
+            return new CreateOrderResult(201, $body);
         } finally {
             $this->idempotency->releaseLock($scopeKey);
         }
     }
 
     /**
-     * @param  list<array{product_id: int, quantity: int}>  $items
+     * @param  list<OrderItemRequest>  $items
      */
     private function persistOrder(int $userId, string $email, string $name, array $items): Order
     {
@@ -83,7 +83,7 @@ final class CreateOrderService
             $total = Money::zero();
 
             $productIds = array_values(array_unique(array_map(
-                static fn (array $item): int => (int) $item['product_id'],
+                static fn (OrderItemRequest $item): int => $item->product_id,
                 $items
             )));
 
@@ -93,8 +93,8 @@ final class CreateOrderService
                 ->keyBy('id');
 
             foreach ($items as $item) {
-                $productId = (int) $item['product_id'];
-                $quantity = (int) $item['quantity'];
+                $productId = $item->product_id;
+                $quantity = $item->quantity;
 
                 $snapshot = $snapshots->get($productId);
                 if ($snapshot === null) {

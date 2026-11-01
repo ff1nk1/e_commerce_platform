@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\DTO\Payments\StripeCheckoutSession;
 use App\Models\Order;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -125,11 +126,11 @@ final class InsufficientStockSagaTest extends TestCase
         $this->assertSame('awaiting_payment', $this->getJson('/api/orders/'.$orderId.'?user_id=11')->json('status'));
 
         $stripe = $this->mockPaymentGateway();
-        $stripe->shouldReceive('createCheckoutSession')->once()->andReturn([
+        $stripe->shouldReceive('createCheckoutSession')->once()->andReturn(StripeCheckoutSession::fromArray([
             'id' => 'cs_ok',
             'url' => 'https://checkout.stripe.com/c/pay/cs_ok',
             'status' => 'open',
-        ]);
+        ]));
 
         $this->postJson('/api/orders/'.$orderId.'/pay', [
             'user_id' => 11,

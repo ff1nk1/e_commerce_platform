@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
-use App\Services\Catalog\DTOs\SearchHit;
-use App\Services\Catalog\ProductIndexer;
-use App\Services\Catalog\ProductSearchService;
-use App\Services\Llm\Contracts\LlmClient;
-use App\Services\Llm\DTOs\SearchFilters;
-use App\Services\Llm\Gemini\GeminiLlmClient;
+use App\Contracts\LlmClient;
+use App\DTO\Catalog\SearchHit;
+use App\DTO\Chat\SearchFilters;
+use App\Infrastructure\Llm\Gemini\GeminiLlmClient;
+use App\Services\Catalog\SearchCatalogProductsService;
+use App\Services\Catalog\UpsertProductService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -43,8 +43,8 @@ final class GeminiIntegrationTest extends TestCase
 
     public function test_indexer_embeds_product_via_gemini(): void
     {
-        $indexer = resolve(ProductIndexer::class);
-        $indexer->upsertFromEvent([
+        $indexer = resolve(UpsertProductService::class);
+        $indexer->handle([
             'id' => self::PRODUCT_ID,
             'store_id' => 1,
             'store' => ['id' => 1, 'name' => 'Main'],
@@ -73,7 +73,7 @@ final class GeminiIntegrationTest extends TestCase
 
     public function test_vector_search_finds_product_via_gemini(): void
     {
-        resolve(ProductIndexer::class)->upsertFromEvent([
+        resolve(UpsertProductService::class)->handle([
             'id' => self::PRODUCT_ID,
             'store_id' => 1,
             'store' => ['id' => 1, 'name' => 'Main'],
@@ -87,7 +87,7 @@ final class GeminiIntegrationTest extends TestCase
         ], reembed: true);
 
         // Distractor with unrelated text so ranking is meaningful.
-        resolve(ProductIndexer::class)->upsertFromEvent([
+        resolve(UpsertProductService::class)->handle([
             'id' => self::PRODUCT_ID + 1,
             'store_id' => 1,
             'store' => ['id' => 1, 'name' => 'Main'],
@@ -99,7 +99,7 @@ final class GeminiIntegrationTest extends TestCase
             'quantity' => 5,
         ], reembed: true);
 
-        $results = resolve(ProductSearchService::class)->search(
+        $results = resolve(SearchCatalogProductsService::class)->handle(
             new SearchFilters(query: 'алый бархатный диван для гостиной OrionX'),
             limit: 5,
         );
@@ -115,7 +115,7 @@ final class GeminiIntegrationTest extends TestCase
         config(['llm.gemini.timeout' => 60]);
         $this->app->forgetInstance(LlmClient::class);
 
-        resolve(ProductIndexer::class)->upsertFromEvent([
+        resolve(UpsertProductService::class)->handle([
             'id' => self::PRODUCT_ID,
             'store_id' => 1,
             'store' => ['id' => 1, 'name' => 'Main'],

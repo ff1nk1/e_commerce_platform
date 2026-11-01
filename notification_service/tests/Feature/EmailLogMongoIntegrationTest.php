@@ -6,7 +6,9 @@ namespace Tests\Feature;
 
 use App\Mail\MailableRegistry;
 use App\Models\EmailLog;
-use App\Services\MailDeliveryService;
+use App\Services\Mail\MailSender;
+use App\Services\Mail\ResendNotificationMailService;
+use App\Services\Mail\SendNotificationMailService;
 use Illuminate\Mail\PendingMail;
 use Illuminate\Support\Facades\Mail;
 use Mockery;
@@ -31,13 +33,12 @@ final class EmailLogMongoIntegrationTest extends TestCase
     {
         Mail::fake();
 
-        $result = resolve(MailDeliveryService::class)->sendMailWithRetry([
+        $result = resolve(SendNotificationMailService::class)->handle([
             'email' => 'mongo_user@example.com',
             'name' => 'Mongo Test User',
         ], 'user.registered');
 
-        /** @var EmailLog $emailLog */
-        $emailLog = $result['emailLog'];
+        $emailLog = $result->emailLog;
 
         $this->assertNotNull($emailLog->_id);
         $this->assertEquals('mongo_user@example.com', $emailLog->email);
@@ -57,7 +58,7 @@ final class EmailLogMongoIntegrationTest extends TestCase
 
     public function test_it_updates_status_to_failed_and_stores_error_message_in_mongodb(): void
     {
-        $maxRetries = MailDeliveryService::MAX_RETRIES;
+        $maxRetries = MailSender::MAX_RETRIES;
 
         $pendingMailMock = Mockery::mock(PendingMail::class);
         $pendingMailMock->shouldReceive('send')
@@ -75,7 +76,7 @@ final class EmailLogMongoIntegrationTest extends TestCase
             'event_type' => 'user.registered',
         ]);
 
-        $result = resolve(MailDeliveryService::class)->resend($logInMongo);
+        $result = resolve(ResendNotificationMailService::class)->handle($logInMongo);
 
         $this->assertFalse($result);
 
@@ -93,7 +94,7 @@ final class EmailLogMongoIntegrationTest extends TestCase
 
     public function test_it_increments_retries_count_in_mongodb_on_failures(): void
     {
-        $maxRetries = MailDeliveryService::MAX_RETRIES;
+        $maxRetries = MailSender::MAX_RETRIES;
 
         $pendingMailMock = Mockery::mock(PendingMail::class);
         $pendingMailMock->shouldReceive('send')
@@ -105,18 +106,17 @@ final class EmailLogMongoIntegrationTest extends TestCase
             ->with('retry_mongo@example.com')
             ->andReturn($pendingMailMock);
 
-        /** @var MailDeliveryService&MockInterface $service */
-        $service = Mockery::mock(MailDeliveryService::class, [new MailableRegistry])->makePartial();
-        $service->shouldAllowMockingProtectedMethods();
-        $service->shouldReceive('sleepInTest')->times($maxRetries - 1);
+        /** @var MailSender&MockInterface $sender */
+        $sender = Mockery::mock(MailSender::class, [new MailableRegistry])->makePartial();
+        $sender->shouldAllowMockingProtectedMethods();
+        $sender->shouldReceive('sleepInTest')->times($maxRetries - 1);
 
-        $result = $service->sendMailWithRetry([
+        $result = (new SendNotificationMailService($sender))->handle([
             'email' => 'retry_mongo@example.com',
             'name' => 'Retry User',
         ], 'user.registered');
 
-        /** @var EmailLog $emailLog */
-        $emailLog = $result['emailLog'];
+        $emailLog = $result->emailLog;
         $emailLog->refresh();
 
         $this->assertEquals($maxRetries, $emailLog->retries);

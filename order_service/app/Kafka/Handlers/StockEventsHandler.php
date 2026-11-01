@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\Enums\OrderEventType;
 use App\Messaging\FulfillmentEvents;
 use App\Messaging\StockReservationFailed;
 use App\Messaging\StockReserved;
@@ -28,7 +29,7 @@ final class StockEventsHandler
             $eventType = $payload['event_type'] ?? $payload['event'] ?? null;
         }
 
-        if (! is_string($eventType) || ! in_array($eventType, ['stock.reserved', 'stock.reservation_failed'], true)) {
+        if (! is_string($eventType) || ! in_array($eventType, [OrderEventType::StockReserved->value, OrderEventType::StockReservationFailed->value], true)) {
             Log::debug('Игнорируем неизвестное событие stock.events: '.(is_string($eventType) ? $eventType : ''));
 
             return;
@@ -54,7 +55,7 @@ final class StockEventsHandler
             headers: ['event-type' => $eventType],
         );
 
-        $event = $eventType === 'stock.reserved'
+        $event = $eventType === OrderEventType::StockReserved->value
             ? new StockReserved($envelope)
             : new StockReservationFailed($envelope);
 

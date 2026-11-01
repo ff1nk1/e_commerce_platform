@@ -120,7 +120,12 @@ final class ProductEventsHandlerTest extends TestCase
     public function test_falls_back_to_body_event_when_header_missing(): void
     {
         $client = $this->mockClientWithExistingIndices();
-        $client->shouldReceive('index')->once()->andReturn(['result' => 'created']);
+        $client->shouldReceive('index')->once()->with(Mockery::on(function (array $params): bool {
+            $this->assertSame('products', $params['index']);
+            $this->assertSame('5', $params['id']);
+
+            return true;
+        }))->andReturn(['result' => 'created']);
 
         $this->app->instance(Client::class, $client);
 
@@ -204,6 +209,7 @@ final class ProductEventsHandlerTest extends TestCase
         /** @var Client&MockInterface $client */
         $client = Mockery::mock(Client::class);
         $client->shouldReceive('indices')->andReturn($indices);
+        $client->shouldReceive('exists')->byDefault()->andReturn(false);
 
         return $client;
     }

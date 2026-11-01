@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Services\Llm\Contracts\LlmClient;
+use App\Contracts\LlmClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Fakes\FakeLlmClient;
 use Tests\TestCase;

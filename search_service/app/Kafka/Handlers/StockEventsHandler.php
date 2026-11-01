@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Kafka\Handlers;
 
+use App\Enums\SearchEventType;
 use App\Kafka\Concerns\ResolvesEventType;
 use App\Messaging\CatalogStockChanged;
-use App\Services\SearchIndexService;
+use App\Services\Indexing\ProductIndexer;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Illuminate\Support\Facades\Log;
 use Shop\Messaging\EnvelopeMessage;
@@ -16,7 +17,7 @@ final class StockEventsHandler
     use ResolvesEventType;
 
     public function __construct(
-        private readonly SearchIndexService $index,
+        private readonly ProductIndexer $products,
     ) {}
 
     #[EventHandler(endpointId: 'search.stock')]
@@ -27,10 +28,11 @@ final class StockEventsHandler
 
     public function __invoke(EnvelopeMessage $message): void
     {
-        [$eventType, $body] = $this->resolveEventTypeAndBody($message);
+        [$eventTypeRaw, $body] = $this->resolveEventTypeAndBody($message);
+        $eventType = is_string($eventTypeRaw) ? SearchEventType::tryFrom($eventTypeRaw) : null;
 
-        if ($eventType !== 'stock.changed') {
-            Log::debug("Игнорируем событие catalog.events: {$eventType}");
+        if ($eventType !== SearchEventType::StockChanged) {
+            Log::debug("Игнорируем событие catalog.events: {$eventTypeRaw}");
 
             return;
         }
@@ -40,7 +42,7 @@ final class StockEventsHandler
 
         if ($productId === null || $quantity === null) {
             Log::warning('Kafka: stock.changed с неполными полями', [
-                'event' => $eventType,
+                'event' => $eventType->value,
             ]);
 
             return;
@@ -48,7 +50,7 @@ final class StockEventsHandler
 
         $quantityInt = (int) $quantity;
         $inStock = $quantityInt > 0;
-        $this->index->updateProductStock((int) $productId, $quantityInt);
+        $this->products->updateStock((int) $productId, $quantityInt);
 
         Log::info('Kafka: product stock updated in OpenSearch', [
             'product_id' => (int) $productId,

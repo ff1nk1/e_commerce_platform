@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Events;
 
+use App\Enums\CatalogEventType;
 use App\Models\Product;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -16,8 +17,8 @@ final class ProductDeleted
         public readonly Product $product,
     ) {}
 
-    public function topic(): string
+    public function topic(): CatalogEventType
     {
-        return 'product.deleted';
+        return CatalogEventType::ProductDeleted;
     }
 }

@@ -1,0 +1,18 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Contracts;
+
+use App\DTO\Catalog\SearchHit;
+
+interface ProductFreshnessChecker
+{
+    /**
+     * Keep only hits that are still valid in Catalog (or pass through on transport failure).
+     *
+     * @param  list<SearchHit>  $hits
+     * @return list<SearchHit>
+     */
+    public function keepFresh(array $hits): array;
+}

@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Payments\StripeCheckoutSession;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\ProductSnapshot;
-use App\Services\Payment\ConfirmOrderFromPayment;
+use App\Services\Payment\ConfirmOrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -32,14 +33,14 @@ final class ConfirmOrderFromPaymentTest extends TestCase
     {
         [$order, $payment] = $this->orderAndPayment('pending');
 
-        resolve(ConfirmOrderFromPayment::class)->fromCheckoutSession([
+        resolve(ConfirmOrderService::class)->handle(StripeCheckoutSession::fromArray([
             'id' => 'cs_pending',
             'payment_intent' => 'pi_1',
             'payment_status' => 'paid',
             'amount_total' => 5000,
             'currency' => 'rub',
             'metadata' => ['payment_id' => (string) $payment->id],
-        ]);
+        ]));
 
         $this->assertSame('pending', $order->fresh()->status->value);
         $this->assertSame(0, OutboxQueue::count('order.confirmed'));
@@ -49,14 +50,14 @@ final class ConfirmOrderFromPaymentTest extends TestCase
     {
         [$order, $payment] = $this->orderAndPayment('awaiting_payment');
 
-        resolve(ConfirmOrderFromPayment::class)->fromCheckoutSession([
+        resolve(ConfirmOrderService::class)->handle(StripeCheckoutSession::fromArray([
             'id' => 'cs_bad_amount',
             'payment_intent' => 'pi_1',
             'payment_status' => 'paid',
             'amount_total' => 1,
             'currency' => 'rub',
             'metadata' => ['payment_id' => (string) $payment->id],
-        ]);
+        ]));
 
         $this->assertSame('awaiting_payment', $order->fresh()->status->value);
         $this->assertSame('pending', $payment->fresh()->status);
@@ -152,14 +153,14 @@ final class ConfirmOrderFromPaymentTest extends TestCase
 
     private function deliverPaidSession(Payment $payment, string $sessionId, string $paymentIntentId): void
     {
-        resolve(ConfirmOrderFromPayment::class)->fromCheckoutSession([
+        resolve(ConfirmOrderService::class)->handle(StripeCheckoutSession::fromArray([
             'id' => $sessionId,
             'payment_intent' => $paymentIntentId,
             'payment_status' => 'paid',
             'amount_total' => 5000,
             'currency' => 'rub',
             'metadata' => ['payment_id' => (string) $payment->id],
-        ]);
+        ]));
     }
 
     private function inboxMessagesContaining(string $needle): int

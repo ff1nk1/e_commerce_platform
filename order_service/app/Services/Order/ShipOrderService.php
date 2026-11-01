@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Order;
 
+use App\DTO\Orders\OrderNotification;
 use App\Events\OrderShipped;
 use App\Models\Order;
 use Illuminate\Support\Facades\DB;
@@ -11,11 +12,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 final class ShipOrderService
 {
-    public function __construct(
-        private OrderPayloadFactory $payloads,
-    ) {}
-
-    public function forAdmin(int $orderId): Order
+    public function handle(int $orderId): Order
     {
         return DB::transaction(function () use ($orderId) {
             $order = Order::query()
@@ -30,7 +27,7 @@ final class ShipOrderService
             $order->ship();
             $order->save();
 
-            event(new OrderShipped($this->payloads->notificationPayload($order)));
+            event(new OrderShipped(OrderNotification::fromOrder($order)->toArray()));
 
             return $order->load(['items.productSnapshot', 'payments']);
         });

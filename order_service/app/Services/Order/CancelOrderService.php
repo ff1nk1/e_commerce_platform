@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Services\Order;
 
 use App\Contracts\PaymentGateway;
-use App\Domain\OrderStatus;
+use App\DTO\Orders\OrderNotification;
+use App\Enums\CancelReason;
+use App\Enums\OrderStatus;
+use App\Enums\PaymentStatus;
 use App\Events\OrderCancelled;
+use App\Infrastructure\Stripe\StripeIdempotencyKey;
 use App\Messaging\FulfillmentEvents;
 use App\Messaging\OrderCancelRequested;
 use App\Models\Order;
 use App\Models\Payment;
-use App\Services\Stripe\StripeIdempotencyKey;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -19,12 +22,11 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 final class CancelOrderService
 {
     public function __construct(
-        private OrderPayloadFactory $payloads,
         private FulfillmentEvents $fulfillment,
         private PaymentGateway $payments,
     ) {}
 
-    public function forUser(int $orderId, int $userId): Order
+    public function handle(int $orderId, int $userId): Order
     {
         $wroteRelease = false;
 
@@ -42,11 +44,11 @@ final class CancelOrderService
 
             $previousStatus = $order->statusEnum();
             $order->cancel();
-            $order->cancel_reason = 'user_cancelled';
+            $order->cancel_reason = CancelReason::UserCancelled->value;
             $order->save();
 
             event(new OrderCancelled(
-                $this->payloads->notificationPayload($order, ['reason' => 'user_cancelled'])
+                OrderNotification::fromOrder($order, ['reason' => CancelReason::UserCancelled->value])->toArray()
             ));
 
             if ($previousStatus === OrderStatus::AwaitingPayment) {
@@ -65,89 +67,12 @@ final class CancelOrderService
         return $order;
     }
 
-    public function expireUnpaid(): int
-    {
-        $timeoutMinutes = (int) config('orders.unpaid_timeout_minutes', 15);
-        $cutoff = now()->subMinutes($timeoutMinutes);
-        $expired = 0;
-        $lastId = 0;
-
-        do {
-            $ids = Order::query()
-                ->whereIn('status', [OrderStatus::Pending->value, OrderStatus::AwaitingPayment->value])
-                ->where('created_at', '<=', $cutoff)
-                ->where('id', '>', $lastId)
-                ->orderBy('id')
-                ->limit(100)
-                ->pluck('id');
-
-            if ($ids->isEmpty()) {
-                break;
-            }
-
-            foreach ($ids as $id) {
-                $lastId = (int) $id;
-                if ($this->expireOne($lastId)) {
-                    $expired++;
-                }
-            }
-        } while (true);
-
-        return $expired;
-    }
-
-    private function expireOne(int $orderId): bool
-    {
-        $expireSessions = false;
-
-        $order = DB::transaction(function () use ($orderId, &$expireSessions): ?Order {
-            $order = Order::query()->lockForUpdate()->find($orderId);
-            if (! $order instanceof Order) {
-                return null;
-            }
-
-            $previousStatus = $order->statusEnum();
-            if (! in_array($previousStatus, [OrderStatus::Pending, OrderStatus::AwaitingPayment], true)) {
-                return null;
-            }
-
-            $order->cancel();
-            $order->cancel_reason = 'payment_timeout';
-            $order->save();
-
-            event(new OrderCancelled(
-                $this->payloads->notificationPayload($order, ['reason' => 'payment_timeout'])
-            ));
-
-            $sagaId = is_string($order->saga_id) ? $order->saga_id : '';
-            if ($sagaId === '') {
-                Log::error('Unpaid order expired without saga_id; stock release was not requested', [
-                    'order_id' => $order->id,
-                ]);
-            }
-            $this->fulfillment->publish(new OrderCancelRequested($sagaId), $sagaId);
-            $expireSessions = $previousStatus === OrderStatus::AwaitingPayment;
-
-            return $order;
-        });
-
-        if (! $order instanceof Order) {
-            return false;
-        }
-
-        if ($expireSessions) {
-            $this->expireOpenCheckoutSessions($order);
-        }
-
-        return true;
-    }
-
     private function expireOpenCheckoutSessions(Order $order): void
     {
         $order->loadMissing('payments');
 
         $openCheckoutPayments = $order->payments
-            ->where('status', 'pending')
+            ->where('status', PaymentStatus::Pending->value)
             ->filter(static fn (Payment $payment): bool => filled($payment->stripe_checkout_session_id));
 
         foreach ($openCheckoutPayments as $payment) {

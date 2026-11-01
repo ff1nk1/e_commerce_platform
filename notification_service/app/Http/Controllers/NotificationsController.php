@@ -4,18 +4,21 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\DTO\NotificationFilters;
+use App\DTO\Notifications\NotificationFilters;
+use App\Enums\EmailStatus;
 use App\Http\Requests\NotificationsRequest;
 use App\Models\EmailLog;
-use App\Services\EmailLogQueryService;
-use App\Services\MailDeliveryService;
+use App\Services\Mail\MailSender;
+use App\Services\Mail\ResendNotificationMailService;
+use App\Services\Notifications\ListEmailLogsService;
 use Illuminate\Http\JsonResponse;
 
 final class NotificationsController extends Controller
 {
     public function __construct(
-        private EmailLogQueryService $queryService,
-        private MailDeliveryService $deliveryService,
+        private ListEmailLogsService $listEmailLogs,
+        private ResendNotificationMailService $resendMail,
+        private MailSender $mailSender,
     ) {}
 
     public function index(NotificationsRequest $request): JsonResponse
@@ -29,7 +32,7 @@ final class NotificationsController extends Controller
             perPage: (int) ($request->validated('per_page') ?? 20),
         );
 
-        return response()->json($this->queryService->getFiltered($filters));
+        return response()->json($this->listEmailLogs->handle($filters));
     }
 
     public function show(string $id): JsonResponse
@@ -43,19 +46,19 @@ final class NotificationsController extends Controller
     {
         $notification = EmailLog::query()->findOrFail($id);
 
-        if ($notification->status !== 'failed') {
+        if ($notification->status !== EmailStatus::Failed->value) {
             return response()->json([
                 'message' => 'Повторная отправка доступна только для записей со статусом failed.',
             ], 422);
         }
 
-        if ($this->deliveryService->resolveEventTypeForResend($notification) === null) {
+        if ($this->mailSender->resolveEventTypeForResend($notification) === null) {
             return response()->json([
                 'message' => 'У записи нет event_type, переотправка невозможна.',
             ], 422);
         }
 
-        $isSent = $this->deliveryService->resend($notification);
+        $isSent = $this->resendMail->handle($notification);
 
         if ($isSent) {
             return response()->json([

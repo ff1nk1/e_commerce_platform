@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\DTO\Notifications\NotificationMailData;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -14,12 +15,13 @@ final class OrderPaidMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    public function __construct(
-        public array $payload
-    ) {}
+    /** @var array<string, mixed> */
+    public array $payload;
+
+    public function __construct(NotificationMailData $mailData)
+    {
+        $this->payload = $mailData->toViewArray();
+    }
 
     public function envelope(): Envelope
     {

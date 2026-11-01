@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Services\Gateway\ProxyService;
+use App\DTO\Auth\GatewayIdentity;
+use App\DTO\Gateway\ProxyOptions;
+use App\Enums\ProxyMode;
+use App\Services\Gateway\ForwardRequestService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -32,16 +35,11 @@ final class ProxyHtmlMultipartTest extends TestCase
             ],
         );
 
-        $response = resolve(ProxyService::class)->forwardHtml(
+        $response = resolve(ForwardRequestService::class)->forward(
             $request,
             'http://catalog.test',
             '/admin-catalog/livewire/upload-file',
-            [
-                'id' => 7,
-                'role' => 'admin',
-                'name' => 'Yan',
-                'email' => 'yan@example.com',
-            ],
+            new ProxyOptions(mode: ProxyMode::Html, identity: new GatewayIdentity(id: 7, role: 'admin', name: 'Yan', email: 'yan@example.com')),
         );
 
         $this->assertSame(200, $response->getStatusCode());
@@ -85,14 +83,11 @@ final class ProxyHtmlMultipartTest extends TestCase
             $payload,
         );
 
-        $response = resolve(ProxyService::class)->forwardHtml(
+        $response = resolve(ForwardRequestService::class)->forward(
             $request,
             'http://catalog.test',
             '/admin-catalog/livewire/update',
-            [
-                'id' => 7,
-                'role' => 'admin',
-            ],
+            new ProxyOptions(mode: ProxyMode::Html, identity: new GatewayIdentity(id: 7, role: 'admin')),
         );
 
         $this->assertSame(200, $response->getStatusCode());
@@ -116,28 +111,28 @@ final class ProxyHtmlMultipartTest extends TestCase
             [
                 'access_token' => 'jwt-access',
                 'refresh_token' => 'jwt-refresh',
-                'catalogservice-session' => 'filament-session',
+                'catalog_service_session' => 'filament-session',
             ],
             [],
             [
                 'HTTP_HOST' => 'app.localhost',
                 'HTTP_ACCEPT' => 'text/html',
-                'HTTP_COOKIE' => 'access_token=jwt-access; refresh_token=jwt-refresh; catalogservice-session=filament-session',
+                'HTTP_COOKIE' => 'access_token=jwt-access; refresh_token=jwt-refresh; catalog_service_session=filament-session',
             ],
         );
 
-        resolve(ProxyService::class)->forwardHtml(
+        resolve(ForwardRequestService::class)->forward(
             $request,
             'http://catalog.test',
             '/admin-catalog',
-            ['id' => 1, 'role' => 'admin'],
+            new ProxyOptions(mode: ProxyMode::Html, identity: new GatewayIdentity(id: 1, role: 'admin')),
         );
 
         Http::assertSent(function ($httpRequest): bool {
             $cookie = $httpRequest->header('Cookie')[0] ?? '';
 
             return str_contains($httpRequest->url(), '/admin-catalog')
-                && str_contains($cookie, 'catalogservice-session=filament-session')
+                && str_contains($cookie, 'catalog_service_session=filament-session')
                 && ! str_contains($cookie, 'access_token=')
                 && ! str_contains($cookie, 'refresh_token=');
         });
