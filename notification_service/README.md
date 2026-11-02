@@ -27,12 +27,14 @@ Laravel-сервис **писем и журнала отправок**. Слуш
 
 ## HTTP
 
-Префикс Laravel `/api`. На самом сервисе auth middleware нет: доступ режет gateway.
+Префикс Laravel `/api`. Снаружи доступ режет gateway; на самом сервисе маршруты защищены middleware [`RequireGatewayRole`](app/Http/Middleware/RequireGatewayRole.php), который доверяет заголовку `X-User-Role` от gateway.
 
 | Метод | Путь | Назначение |
 |-------|------|------------|
 | GET | `/notifications` | список писем |
 | GET | `/notifications/{id}` | карточка |
 | POST | `/notifications/{id}/resend` | повторная отправка |
+
+Доступ: только `admin` и `analyst` (иначе 403). `analyst` — read-only: любой не-`GET` (например, resend) возвращает 403.
 
 Маршруты — [`routes/api.php`](routes/api.php).

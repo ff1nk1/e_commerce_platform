@@ -68,7 +68,9 @@ final class GatewayController extends Controller
 
     public function notifications(Request $request, string $path = ''): Response
     {
-        return $this->forwardService($request, 'notification', 'index', $path);
+        return $this->forwardService($request, 'notification', 'index', $path, new ProxyOptions(
+            identity: $this->gatewayIdentity($request),
+        ));
     }
 
     public function orders(Request $request, string $path = ''): Response
@@ -80,7 +82,9 @@ final class GatewayController extends Controller
 
     public function ordersAdmin(Request $request, string $path = ''): Response
     {
-        return $this->forwardService($request, 'order', 'admin', $path);
+        return $this->forwardService($request, 'order', 'admin', $path, new ProxyOptions(
+            identity: $this->gatewayIdentity($request),
+        ));
     }
 
     public function stripeWebhook(Request $request): Response

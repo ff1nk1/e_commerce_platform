@@ -28,6 +28,21 @@ Laravel-сервис **идентификации и API gateway**: регист
 
 Таймаут прокси по умолчанию 30 с, чат рекомендаций — 120 с.
 
+### Rate limits
+
+| Роут | Лимит | Ключ |
+|------|-------|------|
+| `POST /api/login` | 5/мин | Email + IP |
+| `POST /api/registration` | 5/мин | IP |
+| `POST /api/refresh` | 30/мин | IP |
+| `GET /api/search`, `/api/search/autocomplete` | 60/мин | IP |
+
+Лимитеры объявлены в [`AppServiceProvider`](app/Providers/AppServiceProvider.php) (`login`, `search`).
+
+## Роли
+
+`analyst` — строго read-only. Middleware [`RoleMiddleware`](app/Http/Middleware/RoleMiddleware.php) отклоняет любой не-`GET` запрос аналитика (403), а downstream-сервисы дополнительно проверяют заголовок `X-User-Role` (см. их README). Так закрыт баг, когда аналитик мог отгружать заказы.
+
 ## Kafka
 
 Консьюмеров нет. Регистрация синхронно публикует `user.registered` в `user.events` ([`PublishUserRegisteredToKafka`](app/Listeners/PublishUserRegisteredToKafka.php)). Дальше событие читают notification (приветственное письмо) и analytic.
@@ -38,4 +53,5 @@ Laravel-сервис **идентификации и API gateway**: регист
 
 - Единственная проверка JWT и ролей — этот сервис.
 - Catalog admin API, upload и Filament дополнительно требуют заголовки gateway (`X-User-Id` + `X-User-Role: admin`). Прямой вызов из Docker-сети без них получает 403.
+- notification и admin orders получают `X-User-Role`; `analyst` там read-only (только GET, resend/ship → 403).
 - Остальные сервисы считают периметром gateway: их порты не торчат на хост.

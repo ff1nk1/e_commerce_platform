@@ -20,6 +20,9 @@ final class NotificationsApiTest extends TestCase
     {
         parent::setUp();
         Notification::query()->truncate();
+
+        // Email log API now requires the gateway-injected role header.
+        $this->withHeader('X-User-Role', 'admin');
     }
 
     protected function tearDown(): void

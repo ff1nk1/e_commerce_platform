@@ -8,8 +8,9 @@ use App\Http\Controllers\Gateway\GatewayController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
+    // Login is throttled per Email + IP (see AppServiceProvider 'login' limiter).
     Route::post('/login', [AuthController::class, 'login'])
-        ->middleware('throttle:5,1');
+        ->middleware('throttle:login');
     Route::post('/registration', [AuthController::class, 'register'])
         ->middleware('throttle:5,1');
 });
@@ -20,9 +21,11 @@ Route::post('/refresh', [AuthController::class, 'refresh'])
 // Stripe webhook — no JWT (external callback)
 Route::post('/webhooks/stripe', [GatewayController::class, 'stripeWebhook']);
 
-// Search — public transparent proxy (no auth)
-Route::get('/search/autocomplete', [GatewayController::class, 'searchAutocomplete']);
-Route::get('/search', [GatewayController::class, 'search']);
+// Search — public transparent proxy (no auth), perimeter DDoS throttle
+Route::middleware('throttle:search')->group(function (): void {
+    Route::get('/search/autocomplete', [GatewayController::class, 'searchAutocomplete']);
+    Route::get('/search', [GatewayController::class, 'search']);
+});
 
 // Recommendations health — public probe
 Route::get('/recommendations/health', [GatewayController::class, 'recommendationsHealth']);
