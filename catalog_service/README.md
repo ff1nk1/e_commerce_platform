@@ -115,12 +115,12 @@ sequenceDiagram
   Note over Order,Kafka: stock.commit_requested → quantity -= and reserved -=
 ```
 
-1. Consumer `kafka:consume:order-events` → [`OrderEventsHandler`](app/Kafka/MainHandlers/OrderEventsHandler.php) → `OrderCreatedHandler` / `StockReleaseHandler` / `StockCommitHandler`.
-2. [`SagaStepRunner`](app/Services/Saga/SagaStepRunner.php) + [`SagaStepGuard`](app/Services/SagaStepGuard.php): `busy` бросает исключение (без auto-commit потери сообщения); шаг идемпотентен по `saga_id`.
-3. [`StockReservationService`](app/Services/StockReservationService.php):
-   - reserve: merge duplicate lines → lock rows → проверка `available` → `reserved +=` → events;
-   - release: `reserved = max(0, reserved - qty)`;
-   - commit: `quantity -= qty`, `reserved = max(0, reserved - qty)`;
+1. Consumer `kafka:consume:order-events` → [`OrderEventsHandler`](app/Kafka/Handlers/OrderEventsHandler.php) → `OrderCreatedHandler` / `StockReleaseHandler` / `StockCommitHandler`.
+2. Сага [`StockFulfillment`](app/Kafka/Saga/StockFulfillment.php) (Ecotone `#[Saga]`, документ в `ecotone_document_store`) хранит статусы шагов `stock.reserve` / `stock.commit` / `stock.release`; `busy` бросает [`SagaStepBusyException`](app/Exceptions/SagaStepBusyException.php) (без потери сообщения по auto-commit); каждый шаг идемпотентен по `saga_id`.
+3. Резервы стока персистентны в таблице `stock_reservations` (строка на `order_id` + `product_id` + `store_id`, с колонкой `saga_id`); settle идёт строго по строке резерва, а не вычитанием из общего счётчика:
+   - reserve: merge duplicate lines → lock rows → проверка `available` → создать `held`-строку → `reserved +=` → events;
+   - release: `reserved -= quantity` по строке (статус `released`);
+   - commit: `quantity -= quantity`, `reserved -= quantity` по строке (статус `committed`);
    - items: `product_id`/`store_id` ≥ 1, `quantity` ≥ 1, иначе fail/skip.
 4. В `stock.changed` в payload `quantity` уходит **available** (чтобы recommendation `in_stock = quantity > 0` оставался корректным).
 5. Воркер `ecotone:run kafka-outbox` публикует сообщения канала `kafka-outbox`.

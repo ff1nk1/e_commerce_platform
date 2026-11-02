@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * @property int $order_id
+ * @property string|null $saga_id
  * @property int $product_id
  * @property int $store_id
  * @property int $quantity
@@ -19,6 +20,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 #[Fillable([
     'order_id',
+    'saga_id',
     'product_id',
     'store_id',
     'quantity',

@@ -6,6 +6,7 @@ namespace Shop\Messaging\Tests;
 
 use PHPUnit\Framework\TestCase;
 use Shop\Messaging\EventCodec;
+use Shop\Messaging\Exception\PermanentMessageException;
 use Shop\Messaging\OutboundMessage;
 
 final class EventCodecTest extends TestCase
@@ -68,5 +69,19 @@ final class EventCodecTest extends TestCase
 
         $fromBody = $codec->decode('stock.events', [], ['saga_id' => 'saga-2']);
         $this->assertSame('saga-2', $fromBody->sagaId);
+    }
+
+    public function test_decode_throws_permanent_exception_on_malformed_json(): void
+    {
+        $this->expectException(PermanentMessageException::class);
+
+        (new EventCodec)->decode('product.events', ['event-type' => 'product.updated'], '{not json');
+    }
+
+    public function test_decode_hash_id_is_not_broken_by_invalid_utf8(): void
+    {
+        $envelope = (new EventCodec)->decode('product.events', [], ['name' => "\xB1\x31"]);
+
+        $this->assertSame(64, strlen($envelope->messageId));
     }
 }

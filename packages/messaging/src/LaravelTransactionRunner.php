@@ -10,6 +10,6 @@ final class LaravelTransactionRunner implements TransactionRunner
 {
     public function run(callable $callback): void
     {
-        DB::transaction($callback);
+        DB::transaction(static fn () => $callback());
     }
 }

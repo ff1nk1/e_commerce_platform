@@ -111,16 +111,15 @@ services:
   catalog_minio_init:
     image: cr.yandex/mirror/minio/mc@sha256:7cc5ec7a0547484742ae991ac8a735d48e469dfa395125db15e5cd7dce54912b
     container_name: catalog_service_minio_init
+    # catalog_minio has a healthcheck -> wait for service_healthy instead of a sleep loop.
     depends_on:
-      - catalog_minio
+      catalog_minio:
+        condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
-        until mc alias set local http://catalog-minio:9000 minioadmin minioadminpassword; do
-          echo "waiting for minio..."
-          sleep 1
-        done
+        mc alias set local http://catalog-minio:9000 minioadmin minioadminpassword
         mc mb -p local/media || true
         mc anonymous set download local/media
         echo "minio bucket media ready"

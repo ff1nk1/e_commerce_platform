@@ -12,6 +12,7 @@ use App\Models\Stock;
 use App\Models\StockReservation;
 use Closure;
 use Illuminate\Database\Connection;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
 final class StockReservationLedger
@@ -29,7 +30,7 @@ final class StockReservationLedger
         ];
     }
 
-    public function settleHeld(int|string $orderId, StockLine $item, StockReservationStatus $nextStatus, bool $decrementQuantity): Stock
+    public function settleHeld(int|string $orderId, StockLine $item, StockReservationStatus $nextStatus, bool $decrementQuantity, ?string $sagaId = null): Stock
     {
         $orderKey = $this->orderKey($orderId);
         $productId = $item->productId;
@@ -42,13 +43,19 @@ final class StockReservationLedger
             ->lockForUpdate()
             ->first();
 
-        $reservation = StockReservation::query()
+        $reservationQuery = StockReservation::query()
             ->where('order_id', $orderKey)
             ->where('product_id', $productId)
             ->where('store_id', $storeId)
-            ->where('status', StockReservationStatus::Held)
-            ->lockForUpdate()
-            ->first();
+            ->where('status', StockReservationStatus::Held);
+
+        if ($sagaId !== null && $sagaId !== '') {
+            $reservationQuery->where(function (Builder $query) use ($sagaId): void {
+                $query->where('saga_id', $sagaId)->orWhereNull('saga_id');
+            });
+        }
+
+        $reservation = $reservationQuery->lockForUpdate()->first();
 
         throw_if(
             ! $stock instanceof Stock || ! $reservation instanceof StockReservation,

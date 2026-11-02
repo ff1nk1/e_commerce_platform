@@ -285,12 +285,14 @@ final class OrderStockHandlersTest extends TestCase
         $this->assertEquals(3, $stockB->fresh()->reserved);
         $this->assertDatabaseHas('stock_reservations', [
             'order_id' => 2001,
+            'saga_id' => $sagaId,
             'product_id' => $productA->id,
             'quantity' => 2,
             'status' => StockReservationStatus::Held->value,
         ]);
         $this->assertDatabaseHas('stock_reservations', [
             'order_id' => 2001,
+            'saga_id' => $sagaId,
             'product_id' => $productB->id,
             'quantity' => 3,
             'status' => StockReservationStatus::Held->value,
@@ -804,10 +806,46 @@ final class OrderStockHandlersTest extends TestCase
         }
     }
 
-    private function holdForOrder(int $orderId, int $productId, int $storeId, int $quantity): void
+    public function test_commit_ignores_reservation_owned_by_another_saga(): void
+    {
+        $store = Store::factory()->create();
+        $product = Product::factory()->create(['store_id' => $store->id]);
+        $stock = Stock::factory()->create([
+            'product_id' => $product->id,
+            'store_id' => $store->id,
+            'quantity' => 10,
+            'reserved' => 2,
+        ]);
+        $this->holdForOrder(6001, $product->id, $store->id, 2, (string) Str::uuid());
+
+        try {
+            resolve(StockCommitHandler::class)->onInbound($this->consumerMessage('stock.commit_requested', [
+                'saga_id' => (string) Str::uuid(),
+                'order_id' => 6001,
+                'items' => [[
+                    'product_id' => $product->id,
+                    'store_id' => $store->id,
+                    'quantity' => 2,
+                ]],
+            ]));
+            $this->fail('Expected a foreign saga reservation not to be settled.');
+        } catch (MissingStockReservationException) {
+        }
+
+        $fresh = $stock->fresh();
+        $this->assertEquals(10, $fresh->quantity);
+        $this->assertEquals(2, $fresh->reserved);
+        $this->assertDatabaseHas('stock_reservations', [
+            'order_id' => 6001,
+            'status' => StockReservationStatus::Held->value,
+        ]);
+    }
+
+    private function holdForOrder(int $orderId, int $productId, int $storeId, int $quantity, ?string $sagaId = null): void
     {
         StockReservation::query()->create([
             'order_id' => $orderId,
+            'saga_id' => $sagaId,
             'product_id' => $productId,
             'store_id' => $storeId,
             'quantity' => $quantity,

@@ -8,11 +8,11 @@
 
 Межсервисный транспорт — Kafka (`kafka:29092`). Общий пакет `packages/messaging` кодирует конверт: заголовок `event-type`, в теле и `event_type`, и `event`, плюс `source`, `message-id` и `saga-id`, если он есть. Junges используется только в адаптере этого пакета.
 
-Запись в брокер идёт через DBAL-канал Ecotone `kafka-outbox` в той же транзакции, что и домен. Релей — `php artisan ecotone:run kafka-outbox`. Входной адаптер кладёт сообщение в канал `inbox` и только потом коммитит offset. Бизнес-обработчики — `#[EventHandler]`, их ретраи и dead letter делает Ecotone (`php artisan ecotone:run inbox`).
+Запись в брокер идёт через DBAL-канал Ecotone `kafka-outbox` в той же транзакции, что и домен. Релей — `php artisan ecotone:run kafka-outbox`. Входной адаптер кладёт сообщение в канал `inbox` и только потом коммитит offset. Бизнес-обработчики — `#[EventHandler]`, их запускает воркер Ecotone (`php artisan ecotone:run inbox`). Повторные попытки доставки и публикацию в `*.dlq` делает входной адаптер `packages/messaging` (`RetryPolicy`, `KafkaDeadLetterPublisher`): offset исходного топика коммитится только после ack брокера при записи в DLQ (`acks=all`).
 
 Жизненный цикл товара пишется в один топик `product.events`, категории — в `category.events`. Ключ — id сущности. `stock.events`, `catalog.events`, `order.events`, `user.events` и `search.events` остаются отдельными логами.
 
-Сага заказа `OrderFulfillment` хранится в Document Store Ecotone. Идемпотентность резерва, commit и release — таблица `saga_steps` в той же транзакции, что и остаток.
+Сага заказа `OrderFulfillment` хранится в Document Store Ecotone (таблица `ecotone_document_store`). Идемпотентность шагов reserve, commit и release держит сама сага в документе шага, а резервы стока пишутся строками в `stock_reservations` (с привязкой к `saga_id`) в той же транзакции, что и остаток.
 
 Единственный прямой HTTP между сервисами — recommendation проверяет свежесть карточки в catalog.
 

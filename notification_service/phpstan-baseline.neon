@@ -8,12 +8,6 @@ parameters:
 			path: config/filesystems.php
 
 		-
-			message: '#^Static property Database\\Factories\\UserFactory\:\:\$password \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
-			identifier: property.unusedType
-			count: 1
-			path: database/factories/UserFactory.php
-
-		-
 			message: '#^Cannot access property \$retries on App\\Models\\Notification\|null\.$#'
 			identifier: property.nonObject
 			count: 1

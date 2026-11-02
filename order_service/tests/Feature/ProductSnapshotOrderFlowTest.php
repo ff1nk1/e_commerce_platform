@@ -8,6 +8,7 @@ use App\Contracts\IdempotencyStore;
 use App\DTO\Orders\CreateOrderData;
 use App\DTO\Orders\OrderItemRequest;
 use App\Kafka\Handlers\ProductEventsHandler;
+use App\Messaging\ProductSnapshotDeleted;
 use App\Messaging\ProductSnapshotReceived;
 use App\Services\Orders\CreateOrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -128,6 +129,54 @@ final class ProductSnapshotOrderFlowTest extends TestCase
 
         $response->assertCreated()
             ->assertJsonPath('total_amount', '111.00');
+    }
+
+    public function test_order_create_rejects_soft_deleted_snapshot(): void
+    {
+        resolve(ProductEventsHandler::class)->onInbound(new ProductSnapshotReceived(new InboundEnvelope(
+            eventType: 'product.created',
+            messageId: 'test-product-created-205',
+            topic: 'product.events',
+            key: '205',
+            sagaId: null,
+            payload: [
+                'event' => 'product.created',
+                'data' => ['id' => 205, 'name' => 'Deleted soon', 'price' => '50.00', 'store_id' => 1],
+            ],
+            headers: ['event-type' => 'product.created'],
+        )));
+
+        resolve(ProductEventsHandler::class)->onDeleted(new ProductSnapshotDeleted(new InboundEnvelope(
+            eventType: 'product.deleted',
+            messageId: 'test-product-deleted-205',
+            topic: 'product.events',
+            key: '205',
+            sagaId: null,
+            payload: [
+                'event' => 'product.deleted',
+                'data' => ['id' => 205, 'name' => 'Deleted soon', 'price' => '50.00', 'store_id' => 1],
+            ],
+            headers: ['event-type' => 'product.deleted'],
+        )));
+
+        $this->bindScopedIdempotencyMock(expectPut: false);
+
+        try {
+            resolve(CreateOrderService::class)->handle(new CreateOrderData(
+                userId: 4,
+                email: 'd@example.com',
+                name: 'D',
+                items: OrderItemRequest::fromArray([
+                    ['product_id' => 205, 'quantity' => 1],
+                ]),
+                idempotencyKey: 'idem-deleted-snapshot',
+            ));
+            $this->fail('Expected ordering a deleted product to be rejected.');
+        } catch (ValidationException $e) {
+            $this->assertStringContainsString('no longer available', $e->getMessage());
+        }
+
+        $this->assertDatabaseCount('orders', 0);
     }
 
     private function bindScopedIdempotencyMock(bool $expectPut): void

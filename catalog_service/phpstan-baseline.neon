@@ -83,12 +83,12 @@ parameters:
 		-
 			message: '#^Cannot access property \$quantity on App\\Models\\Stock\|null\.$#'
 			identifier: property.nonObject
-			count: 18
+			count: 19
 			path: tests/Feature/OrderStockHandlersTest.php
 		-
 			message: '#^Cannot access property \$reserved on App\\Models\\Stock\|null\.$#'
 			identifier: property.nonObject
-			count: 21
+			count: 22
 			path: tests/Feature/OrderStockHandlersTest.php
 		-
 			message: '#^Cannot access property \$is_published on App\\Models\\Product\|null\.$#'

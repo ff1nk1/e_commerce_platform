@@ -453,6 +453,99 @@ final class GeminiLlmClientTest extends TestCase
         }
     }
 
+    public function test_chat_retries_429_then_returns_text(): void
+    {
+        Http::fake([
+            '*/models/gemini-3.8-flash:generateContent' => Http::sequence()
+                ->push(['error' => 'rate'], 429)
+                ->push([
+                    'candidates' => [[
+                        'content' => ['parts' => [['text' => 'ok after retry']]],
+                    ]],
+                ], 200),
+        ]);
+
+        $text = $this->chatClient()->chat([ChatMessage::user('hello')]);
+
+        $this->assertSame('ok after retry', $text);
+        Http::assertSentCount(2);
+    }
+
+    public function test_chat_does_not_retry_client_errors(): void
+    {
+        Http::fake([
+            '*/models/gemini-3.8-flash:generateContent' => Http::response(['error' => 'bad'], 400),
+        ]);
+
+        try {
+            $this->chatClient()->chat([ChatMessage::user('hello')]);
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertSame(400, $e->statusCode());
+        }
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_extract_filters_retries_server_errors_then_throws(): void
+    {
+        Http::fake([
+            '*/models/gemini-3.8-flash:generateContent' => Http::response(['error' => 'boom'], 503),
+        ]);
+
+        try {
+            $this->chatClient()->extractFilters('найди джинсы');
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertSame(503, $e->statusCode());
+        }
+
+        Http::assertSentCount(3);
+    }
+
+    public function test_chat_does_not_retry_when_budget_cannot_absorb_attempt(): void
+    {
+        Http::fake([
+            '*/models/gemini-3.8-flash:generateContent' => Http::response(['error' => 'boom'], 503),
+        ]);
+
+        $client = $this->chatClient();
+        $client->startBudget(12);
+
+        $ref = new \ReflectionClass($client);
+        $prop = $ref->getProperty('budgetRemaining');
+        // floor(0.1 / 2) === 0, so no retry can fit inside the remaining budget.
+        $prop->setValue($client, 0.1);
+
+        try {
+            $client->chat([ChatMessage::user('hello')]);
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertSame(503, $e->statusCode());
+        } finally {
+            $client->clearBudget();
+        }
+
+        Http::assertSentCount(1);
+    }
+
+    private function chatClient(): GeminiLlmClient
+    {
+        return new GeminiLlmClient(
+            apiKey: 'test-key',
+            baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+            chatModel: 'gemini-3.8-flash',
+            embeddingModel: 'text-embedding-004',
+            temperature: 0.3,
+            embeddingDimensions: 768,
+            timeout: 12,
+            embedRetryTimes: 3,
+            embedRetrySleepMs: 0,
+            chatRetryTimes: 3,
+            chatRetrySleepMs: 0,
+        );
+    }
+
     /**
      * Kept out of the fake closure so PHPStan does not treat the first call's
      * counter as the constant 1 and mark later attempts unreachable.

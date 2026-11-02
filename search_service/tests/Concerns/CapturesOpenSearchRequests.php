@@ -18,6 +18,9 @@ trait CapturesOpenSearchRequests
     /** @var list<array<string, mixed>> */
     protected array $capturedIndexRequests = [];
 
+    /** @var list<array<string, mixed>> */
+    protected array $capturedIndexCreateRequests = [];
+
     /**
      * @param  array<string, mixed>|null  $searchResponse
      */
@@ -25,10 +28,15 @@ trait CapturesOpenSearchRequests
     {
         $this->capturedSearchRequests = [];
         $this->capturedIndexRequests = [];
+        $this->capturedIndexCreateRequests = [];
 
         $indices = Mockery::mock(IndicesNamespace::class);
         $indices->shouldReceive('exists')->andReturn($indicesExist);
-        $indices->shouldReceive('create')->andReturn(['acknowledged' => true]);
+        $indices->shouldReceive('create')->andReturnUsing(function (array $params): array {
+            $this->capturedIndexCreateRequests[] = $params;
+
+            return ['acknowledged' => true];
+        });
         $indices->shouldReceive('delete')->andReturn(['acknowledged' => true]);
         $indices->shouldReceive('getAlias')->andThrow(new \RuntimeException('not an alias'));
 

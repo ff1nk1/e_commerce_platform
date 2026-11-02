@@ -15,6 +15,7 @@ enum OrderEventType: string
     case StockReleaseRequested = 'stock.release_requested';
     case ProductCreated = 'product.created';
     case ProductUpdated = 'product.updated';
+    case ProductDeleted = 'product.deleted';
     case StockReserved = 'stock.reserved';
     case StockReservationFailed = 'stock.reservation_failed';
 }

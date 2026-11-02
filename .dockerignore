@@ -1,0 +1,56 @@
+# Root build context for all services that use `context: ..`
+# (auth/catalog/notification/order/search/recommendation).
+# Docker only reads the .dockerignore located at the build-context root,
+# so this single file protects every service that builds from the repo root.
+
+# VCS
+.git
+.gitignore
+
+# IDE / local tooling
+.cursor/
+.codex/
+.idea/
+.vscode/
+.zed/
+.nova/
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+# A bare `.env` only matches the context root under Docker's filepath.Match,
+# so nested per-service secrets need the `**/` prefix.
+# Note: no `!**/.env.example` negation here on purpose — a BuildKit sender bug
+# (stat-walking negated excludes) re-introduces a "permission denied" failure on
+# the root-owned storage/framework/testing fixture below.
+**/.env
+**/.env.*
+
+# Per-service Composer vendor (packages/messaging/vendor too)
+**/vendor/
+
+# Frontend deps / build output
+**/node_modules/
+frontend/dist/
+
+# Laravel runtime dirs. storage/framework/testing holds a root-owned upload
+# fixture (uploads/) that the host context sender otherwise cannot read, which
+# would fail the whole build with "permission denied" — exclude the tree.
+**/storage/logs/
+**/storage/framework/testing/
+**/storage/framework/cache/data/
+**/storage/framework/sessions/
+**/storage/framework/views/
+**/bootstrap/cache/*.php
+**/*.sqlite
+**/*.sqlite-journal
+
+# Caches / tooling
+**/.phpunit.result.cache
+**/.phpunit.cache/
+.phpstan.cache/
+.tools/
+
+# Docs (not needed to build images)
+docs/
+*.md

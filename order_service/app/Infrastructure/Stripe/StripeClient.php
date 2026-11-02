@@ -9,47 +9,71 @@ use App\DTO\Payments\CheckoutSessionParams;
 use App\DTO\Payments\RefundResult;
 use App\DTO\Payments\StripeCheckoutSession;
 use App\DTO\Payments\WebhookEvent;
-use Illuminate\Http\Client\RequestException;
-use Illuminate\Support\Facades\Date;
-use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use Stripe\Checkout\Session;
+use Stripe\Exception\ApiErrorException;
+use Stripe\Exception\UnexpectedValueException;
+use Stripe\Refund;
+use Stripe\StripeClient as StripeSdkClient;
 use Stripe\Webhook;
-use UnexpectedValueException;
 
 // stripe listen --forward-to https://app.localhost/api/webhooks/stripe --skip-verify
 /**
- * Thin Stripe API client (secret-key auth). Prefer this over shipping JWT to Stripe.
- * Uses stripe/stripe-php for webhook verification when installed; falls back to HMAC.
+ * Stripe gateway backed by the official stripe/stripe-php SDK.
+ *
+ * Keeps the app-facing PaymentGateway contract and DTO shapes stable while the
+ * SDK owns request signing, the Idempotency-Key header and error decoding.
+ * Tests swap the transport through \Stripe\ApiRequestor::setHttpClient().
  */
 class StripeClient implements PaymentGateway
 {
-    private const SIGNATURE_TOLERANCE_SECONDS = 300;
+    private ?StripeSdkClient $client = null;
 
     public function createCheckoutSession(CheckoutSessionParams $params, string $idempotencyKey): StripeCheckoutSession
     {
-        return StripeCheckoutSession::fromArray($this->request('post', 'checkout/sessions', $params->toArray(), $idempotencyKey));
+        $options = $this->mutatingOptions($idempotencyKey);
+
+        $session = $this->run(
+            fn (StripeSdkClient $client): Session => $client->checkout->sessions->create($params->toArray(), $options),
+        );
+
+        return StripeCheckoutSession::fromArray($session->toArray());
     }
 
     public function retrieveCheckoutSession(string $sessionId): StripeCheckoutSession
     {
-        return StripeCheckoutSession::fromArray($this->request('get', 'checkout/sessions/'.$sessionId));
+        $session = $this->run(
+            fn (StripeSdkClient $client): Session => $client->checkout->sessions->retrieve($sessionId),
+        );
+
+        return StripeCheckoutSession::fromArray($session->toArray());
     }
 
     public function expireCheckoutSession(string $sessionId, string $idempotencyKey): StripeCheckoutSession
     {
-        return StripeCheckoutSession::fromArray(
-            $this->request('post', 'checkout/sessions/'.$sessionId.'/expire', [], $idempotencyKey)
+        $options = $this->mutatingOptions($idempotencyKey);
+
+        $session = $this->run(
+            fn (StripeSdkClient $client): Session => $client->checkout->sessions->expire($sessionId, [], $options),
         );
+
+        return StripeCheckoutSession::fromArray($session->toArray());
     }
 
     public function refundPaymentIntent(string $paymentIntentId, ?int $amountMinor, string $idempotencyKey): RefundResult
     {
+        $options = $this->mutatingOptions($idempotencyKey);
+
         $params = ['payment_intent' => $paymentIntentId];
         if ($amountMinor !== null) {
             $params['amount'] = $amountMinor;
         }
 
-        return RefundResult::fromArray($this->request('post', 'refunds', $params, $idempotencyKey));
+        $refund = $this->run(
+            fn (StripeSdkClient $client): Refund => $client->refunds->create($params, $options),
+        );
+
+        return RefundResult::fromArray($refund->toArray());
     }
 
     public function constructWebhookEvent(string $payload, string $signatureHeader): WebhookEvent
@@ -57,95 +81,53 @@ class StripeClient implements PaymentGateway
         $secret = (string) config('services.stripe.webhook_secret');
         throw_if($secret === '', RuntimeException::class, 'STRIPE_WEBHOOK_SECRET is not configured.');
 
-        if (class_exists(Webhook::class)) {
-            $event = Webhook::constructEvent($payload, $signatureHeader, $secret);
+        $event = Webhook::constructEvent($payload, $signatureHeader, $secret);
 
-            return WebhookEvent::fromArray($event->toArray());
-        }
-
-        $this->verifySignature($payload, $signatureHeader, $secret);
-
-        $decoded = json_decode($payload, true);
-        throw_if(! is_array($decoded) || ! isset($decoded['type'], $decoded['data']['object']), UnexpectedValueException::class, 'Invalid Stripe webhook payload.');
-
-        return WebhookEvent::fromArray($decoded);
+        return WebhookEvent::fromArray($event->toArray());
     }
 
     /**
-     * @param  array<string, mixed>  $params
-     * @return array<string, mixed>
+     * The SDK requires an Idempotency-Key for mutating requests; the gateway
+     * contract makes the caller supply one, so an empty key is a programming error.
+     *
+     * @return array{idempotency_key: string}
      */
-    private function request(string $method, string $path, array $params = [], ?string $idempotencyKey = null): array
+    private function mutatingOptions(string $idempotencyKey): array
     {
+        throw_if(
+            $idempotencyKey === '',
+            RuntimeException::class,
+            'Stripe mutating request requires an Idempotency-Key.',
+        );
+
+        return ['idempotency_key' => $idempotencyKey];
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(StripeSdkClient): T  $callback
+     * @return T
+     */
+    private function run(callable $callback): mixed
+    {
+        try {
+            return $callback($this->client());
+        } catch (ApiErrorException|UnexpectedValueException $e) {
+            // ApiErrorException::getMessage() already carries Stripe's error message.
+            throw new RuntimeException('Stripe API error: '.$e->getMessage(), $e->getCode(), previous: $e);
+        }
+    }
+
+    private function client(): StripeSdkClient
+    {
+        if ($this->client instanceof StripeSdkClient) {
+            return $this->client;
+        }
+
         $secret = (string) config('services.stripe.secret');
         throw_if($secret === '', RuntimeException::class, 'STRIPE_SECRET is not configured.');
 
-        $pending = Http::withToken($secret)
-            ->acceptJson()
-            ->asForm()
-            ->timeout(30);
-
-        if ($method !== 'get') {
-            throw_if(
-                $idempotencyKey === null || $idempotencyKey === '',
-                RuntimeException::class,
-                'Stripe mutating request requires an Idempotency-Key.',
-            );
-            $pending = $pending->withHeaders(['Idempotency-Key' => $idempotencyKey]);
-        }
-
-        try {
-            $response = $method === 'get'
-                ? $pending->get('https://api.stripe.com/v1/'.$path, $params)
-                : $pending->post('https://api.stripe.com/v1/'.$path, $params);
-
-            $response->throw();
-        } catch (RequestException $e) {
-            $body = $e->response->json();
-            $stripeErrorMessage = $body['error']['message'] ?? $e->getMessage();
-
-            throw new RuntimeException('Stripe API error: '.$stripeErrorMessage, $e->getCode(), previous: $e);
-        }
-
-        /** @var array<string, mixed> $json */
-        $json = $response->json();
-
-        return $json;
-    }
-
-    private function verifySignature(string $payload, string $header, string $secret): void
-    {
-        $timestamp = null;
-        $signatures = [];
-
-        foreach (explode(',', $header) as $part) {
-            $part = trim($part);
-            if (! str_contains($part, '=')) {
-                continue;
-            }
-            [$key, $value] = explode('=', $part, 2);
-            if ($key === 't') {
-                $timestamp = $value;
-            }
-            if ($key === 'v1') {
-                $signatures[] = $value;
-            }
-        }
-
-        throw_if($timestamp === null || $signatures === [], UnexpectedValueException::class, 'Unable to extract timestamp and signatures from header');
-
-        $eventTime = Date::createFromTimestamp((int) $timestamp);
-        throw_if($eventTime->diffInSeconds(now(), absolute: true) > self::SIGNATURE_TOLERANCE_SECONDS, UnexpectedValueException::class, 'Timestamp outside the tolerance zone');
-
-        $signedPayload = $timestamp.'.'.$payload;
-        $expected = hash_hmac('sha256', $signedPayload, $secret);
-
-        foreach ($signatures as $signature) {
-            if (hash_equals($expected, $signature)) {
-                return;
-            }
-        }
-
-        throw new UnexpectedValueException('No signatures found matching the expected signature for payload');
+        return $this->client = new StripeSdkClient($secret);
     }
 }

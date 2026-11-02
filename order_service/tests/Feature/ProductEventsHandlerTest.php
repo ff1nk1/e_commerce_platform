@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\ProductEventsHandler;
+use App\Messaging\ProductSnapshotDeleted;
 use App\Messaging\ProductSnapshotReceived;
 use App\Models\ProductSnapshot;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -54,7 +55,7 @@ final class ProductEventsHandlerTest extends TestCase
         $attrs = array_keys(ProductSnapshot::query()->find(42)->getAttributes());
         sort($attrs);
         $this->assertSame(
-            ['category_id', 'category_name', 'category_slug', 'created_at', 'id', 'name', 'price', 'store_id', 'store_name', 'updated_at'],
+            ['category_id', 'category_name', 'category_slug', 'created_at', 'deleted_at', 'id', 'name', 'price', 'store_id', 'store_name', 'updated_at'],
             $attrs
         );
     }
@@ -221,6 +222,64 @@ final class ProductEventsHandlerTest extends TestCase
         $this->assertSame(0, ProductSnapshot::query()->count());
     }
 
+    public function test_product_deleted_soft_deletes_existing_snapshot(): void
+    {
+        ProductSnapshot::query()->create([
+            'id' => 42,
+            'name' => 'Phone',
+            'price' => '199.99',
+            'store_id' => 7,
+        ]);
+
+        $message = $this->consumerDeletedMessage('product.deleted', [
+            'id' => 42,
+            'name' => 'Phone',
+            'price' => '199.99',
+            'store_id' => 7,
+        ]);
+
+        resolve(ProductEventsHandler::class)->onDeleted($message);
+
+        $snapshot = ProductSnapshot::query()->find(42);
+        $this->assertNotNull($snapshot);
+        $this->assertNotNull($snapshot->deleted_at);
+        $this->assertTrue($snapshot->isDeleted());
+    }
+
+    public function test_product_deleted_for_unknown_snapshot_is_noop(): void
+    {
+        $message = $this->consumerDeletedMessage('product.deleted', ['id' => 999]);
+
+        resolve(ProductEventsHandler::class)->onDeleted($message);
+
+        $this->assertSame(0, ProductSnapshot::query()->count());
+    }
+
+    public function test_product_created_clears_deleted_flag(): void
+    {
+        ProductSnapshot::query()->create([
+            'id' => 42,
+            'name' => 'Phone',
+            'price' => '199.99',
+            'store_id' => 7,
+            'deleted_at' => now(),
+        ]);
+
+        $message = $this->consumerMessage('product.created', [
+            'event' => 'product.created',
+            'data' => [
+                'id' => 42,
+                'name' => 'Phone Relisted',
+                'price' => '199.99',
+                'store_id' => 7,
+            ],
+        ]);
+
+        resolve(ProductEventsHandler::class)->onInbound($message);
+
+        $this->assertNull(ProductSnapshot::query()->find(42)?->deleted_at);
+    }
+
     public function test_command_is_registered(): void
     {
         $this->artisan('list', ['namespace' => 'kafka'])
@@ -265,6 +324,26 @@ final class ProductEventsHandlerTest extends TestCase
             sagaId: null,
             payload: $body,
             headers: $headers,
+        ));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function consumerDeletedMessage(string $eventType, array $data): ProductSnapshotDeleted
+    {
+        return new ProductSnapshotDeleted(new InboundEnvelope(
+            eventType: $eventType,
+            messageId: 'test-'.$eventType,
+            topic: 'product.events',
+            key: null,
+            sagaId: null,
+            payload: [
+                'event' => $eventType,
+                'event_type' => $eventType,
+                'data' => $data,
+            ],
+            headers: ['event-type' => $eventType],
         ));
     }
 }

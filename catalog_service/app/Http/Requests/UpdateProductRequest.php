@@ -27,7 +27,8 @@ final class UpdateProductRequest extends FormRequest
             'name' => ['sometimes', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'image_url' => ['nullable', 'string', 'max:255'],
-            'price' => ['sometimes', 'numeric', 'min:0'],
+            // decimal(10,2): at most 2 decimals and <= 99999999.99, otherwise the DB overflows.
+            'price' => ['sometimes', 'numeric', 'decimal:0,2', 'min:0', 'max:99999999.99'],
         ];
     }
 }

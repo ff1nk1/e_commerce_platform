@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -19,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $category_id
  * @property string|null $category_name
  * @property string|null $category_slug
+ * @property Carbon|null $deleted_at
  */
 #[Fillable([
     'id',
@@ -29,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'category_id',
     'category_name',
     'category_slug',
+    'deleted_at',
 ])]
 #[WithoutIncrementing]
 final class ProductSnapshot extends Model
@@ -43,10 +46,16 @@ final class ProductSnapshot extends Model
         return $this->hasMany(OrderItem::class, 'product_id');
     }
 
+    public function isDeleted(): bool
+    {
+        return $this->deleted_at !== null;
+    }
+
     protected function casts(): array
     {
         return [
             'price' => 'decimal:2',
+            'deleted_at' => 'datetime',
         ];
     }
 }

@@ -13,7 +13,25 @@ Laravel дополнительно пишет в `storage/logs` внутри к�
 
 Почта notification смотрится в Mailpit: [http://localhost:8025](http://localhost:8025).
 
-ClickHouse Play слушает порт `8123` (пароль пользователя из `CLICKHOUSE_PASSWORD`).
+ClickHouse Play слушает порт `8123` (пароль пользователя из `CLICKHOUSE_PASSWORD`) и доступен как [http://clickhouse.localhost](http://clickhouse.localhost) и `http://localhost:8123/play`.
+
+## Порты на хосте
+
+Наружу публикуется только инфраструктура и UI; сами сервисы сидят в сети `php_project_net` на внутренних портах `8001`…`8007` (`expose`, без `ports`).
+
+| Порт | Что | Откуда |
+|------|-----|--------|
+| `80` / `443` | Traefik (`app.localhost`) | `infra/compose.yml` |
+| `8081` | Traefik dashboard | `infra/compose.yml` |
+| `9092` | Kafka EXTERNAL-листенер | `infra/compose.yml` |
+| `8080` | kafbat-ui | `infra/compose.yml` |
+| `8123` | ClickHouse Play | `analytic_service/compose.yml` |
+| `5433`…`5438` | Postgres сервисов | `*/compose.yml` |
+| `6380`…`6382` | Redis сервисов | `*/compose.yml` |
+| `9000` / `8999` | MinIO | `catalog_service/compose.yml` |
+| `1025` / `8025` | Mailpit SMTP / UI | `notification_service/compose.yml` |
+| `27017` | MongoDB notification | `notification_service/compose.yml` |
+| `9200` / `5601` | OpenSearch / Dashboards | `search_service/compose.yml` |
 
 Нагрузочный сценарий поиска: [`search_service/k6`](../search_service/k6).
 

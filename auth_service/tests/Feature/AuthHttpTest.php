@@ -275,6 +275,60 @@ final class AuthHttpTest extends TestCase
         $this->assertNull($jwt->userFromRequest($request));
     }
 
+    public function test_change_password_rejects_wrong_current_password_without_leaking_system_errors(): void
+    {
+        $role = Role::query()->where('slug', 'customer')->firstOrFail();
+        User::factory()->create([
+            'email' => 'wrong-pwd@example.com',
+            'password' => Hash::make('old-password'),
+            'role_id' => $role->id,
+        ]);
+
+        $tokens = resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
+            'email' => 'wrong-pwd@example.com',
+            'password' => 'old-password',
+        ]));
+
+        $response = $this->withToken($tokens->accessToken)
+            ->patchJson('/api/profile/password', [
+                'current_password' => 'not-the-password',
+                'new_password' => 'new-password-123',
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonValidationErrors(['current_password'])
+            ->assertJsonMissingPath('exception')
+            ->assertJsonMissingPath('trace');
+
+        // Password must be untouched after a failed check.
+        $this->assertTrue(
+            Hash::check('old-password', User::query()->where('email', 'wrong-pwd@example.com')->firstOrFail()->password)
+        );
+    }
+
+    public function test_change_password_enforces_min_length_rule(): void
+    {
+        $role = Role::query()->where('slug', 'customer')->firstOrFail();
+        User::factory()->create([
+            'email' => 'short-pwd@example.com',
+            'password' => Hash::make('old-password'),
+            'role_id' => $role->id,
+        ]);
+
+        $tokens = resolve(LoginUserService::class)->handle(LoginCredentials::fromArray([
+            'email' => 'short-pwd@example.com',
+            'password' => 'old-password',
+        ]));
+
+        $this->withToken($tokens->accessToken)
+            ->patchJson('/api/profile/password', [
+                'current_password' => 'old-password',
+                'new_password' => 'short',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['new_password']);
+    }
+
     public function test_profile_update_normalizes_phone_with_spaces(): void
     {
         $role = Role::query()->where('slug', 'customer')->first();

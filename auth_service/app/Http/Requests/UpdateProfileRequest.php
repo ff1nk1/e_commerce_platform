@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
-use App\Rules\PhoneNumber;
+use App\Support\PhoneNormalizer;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -21,7 +21,7 @@ final class UpdateProfileRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         if ($this->has('number')) {
-            $this->merge(['number' => PhoneNumber::normalize($this->input('number'))]);
+            $this->merge(['number' => PhoneNormalizer::toE164($this->input('number'))]);
         }
     }
 
@@ -32,7 +32,17 @@ final class UpdateProfileRequest extends FormRequest
     {
         return [
             'name' => ['sometimes', 'string', 'max:255'],
-            'number' => ['sometimes', 'string', new PhoneNumber],
+            'number' => ['sometimes', 'string', 'phone:INTERNATIONAL'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'number.phone' => 'Номер телефона должен быть в формате E.164 (например +48123456789).',
         ];
     }
 }

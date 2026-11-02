@@ -16,6 +16,9 @@ return [
         // Indexing embeds only (chat turns keep a single attempt inside the budget).
         'embed_retry_times' => (int) env('GEMINI_EMBED_RETRY_TIMES', 3),
         'embed_retry_sleep_ms' => (int) env('GEMINI_EMBED_RETRY_SLEEP_MS', 200),
+        // Retries for 429/5xx on chat + filter extraction (budget-aware inside a chat turn).
+        'chat_retry_times' => (int) env('GEMINI_CHAT_RETRY_TIMES', 3),
+        'chat_retry_sleep_ms' => (int) env('GEMINI_CHAT_RETRY_SLEEP_MS', 200),
     ],
 
 ];

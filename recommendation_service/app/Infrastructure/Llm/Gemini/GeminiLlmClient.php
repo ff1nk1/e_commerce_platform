@@ -101,6 +101,8 @@ PROMPT;
         private readonly int $timeout = 12,
         private readonly int $embedRetryTimes = 3,
         private readonly int $embedRetrySleepMs = 200,
+        private readonly int $chatRetryTimes = 3,
+        private readonly int $chatRetrySleepMs = 200,
     ) {}
 
     /**
@@ -137,7 +139,7 @@ PROMPT;
             $this->post(
                 $this->endpoint($this->embeddingModel, 'embedContent'),
                 $payload,
-                retry: $this->budgetRemaining === null,
+                plan: 'embed',
             )
         );
     }
@@ -175,7 +177,7 @@ PROMPT;
             $this->post(
                 $this->endpoint($this->embeddingModel, 'batchEmbedContents'),
                 ['requests' => $requests],
-                retry: $this->budgetRemaining === null,
+                plan: 'embed',
             ),
             count($texts),
         );
@@ -205,7 +207,7 @@ PROMPT;
             ];
         }
 
-        $response = $this->post($this->endpoint($this->chatModel, 'generateContent'), $payload);
+        $response = $this->post($this->endpoint($this->chatModel, 'generateContent'), $payload, plan: 'chat');
 
         if (! $response->successful()) {
             throw LlmException::http(
@@ -255,7 +257,7 @@ PROMPT;
         ];
 
         return $this->parseExtractFiltersResponse(
-            $this->post($this->endpoint($this->chatModel, 'generateContent'), $payload)
+            $this->post($this->endpoint($this->chatModel, 'generateContent'), $payload, plan: 'chat')
         );
     }
 
@@ -281,13 +283,13 @@ PROMPT;
     /**
      * @param  array<string, mixed>  $payload
      */
-    private function post(string $endpoint, array $payload, bool $retry = false): Response
+    private function post(string $endpoint, array $payload, string $plan = 'none'): Response
     {
         $timeout = $this->effectiveTimeout();
         $started = microtime(true);
 
         try {
-            return $this->send($endpoint, $payload, $timeout, $retry);
+            return $this->send($endpoint, $payload, $timeout, $plan);
         } catch (ConnectionException $e) {
             $isTimeout = str_contains(strtolower($e->getMessage()), 'timed out')
                 || str_contains(strtolower($e->getMessage()), 'timeout');
@@ -307,25 +309,54 @@ PROMPT;
     }
 
     /**
+     * Retry plans: 'embed' (indexing embeds) and 'chat' (chat + filter extraction).
+     * A null budget means we are outside a chat turn, so the full plan applies;
+     * inside a chat turn chat/responses are retried only while the remaining
+     * budget can absorb another attempt, while embeds keep their intentional
+     * single-attempt behavior (a failed embed is repaired by the sweep command).
+     *
      * @param  array<string, mixed>  $payload
      */
-    private function send(string $endpoint, array $payload, int $timeout, bool $retry): Response
+    private function send(string $endpoint, array $payload, int $timeout, string $plan): Response
     {
         $pending = $this->http($timeout);
 
-        if ($retry && $this->embedRetryTimes > 1) {
-            $pending = $pending->retry(
-                $this->embedRetryTimes,
-                fn (int $attempt, mixed $exception): int => $this->embedRetrySleepMs * (2 ** ($attempt - 1)),
-                fn (Throwable $exception, PendingRequest $request, ?string $method = null): bool => $this->shouldRetryEmbed($exception),
-                false,
-            );
+        $attempts = match ($plan) {
+            'embed' => $this->budgetRemaining === null ? $this->embedRetryTimes : 1,
+            'chat' => $this->chatRetryAttempts(),
+            default => 1,
+        };
+
+        if ($attempts <= 1) {
+            return $pending->post($endpoint, $payload);
         }
+
+        $sleepMs = $plan === 'embed' ? $this->embedRetrySleepMs : $this->chatRetrySleepMs;
+
+        $pending = $pending->retry(
+            $attempts,
+            fn (int $attempt, mixed $exception): int => $sleepMs * (2 ** ($attempt - 1)),
+            fn (Throwable $exception, PendingRequest $request, ?string $method = null): bool => $this->shouldRetry($exception),
+            false,
+        );
 
         return $pending->post($endpoint, $payload);
     }
 
-    private function shouldRetryEmbed(Throwable $exception): bool
+    /**
+     * Inside a chat turn: no retry when the remaining budget is too small,
+     * otherwise at most half of it (each attempt can consume up to a full budget).
+     */
+    private function chatRetryAttempts(): int
+    {
+        if ($this->budgetRemaining === null) {
+            return $this->chatRetryTimes;
+        }
+
+        return min($this->chatRetryTimes, max(1, (int) floor($this->budgetRemaining / 2)));
+    }
+
+    private function shouldRetry(Throwable $exception): bool
     {
         if ($exception instanceof ConnectionException) {
             return true;

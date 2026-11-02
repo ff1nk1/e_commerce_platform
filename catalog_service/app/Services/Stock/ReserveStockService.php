@@ -79,6 +79,7 @@ final class ReserveStockService
 
                 StockReservation::query()->create([
                     'order_id' => $orderKey,
+                    'saga_id' => $sagaId !== '' ? $sagaId : null,
                     'product_id' => $stock->product_id,
                     'store_id' => $stock->store_id,
                     'quantity' => $quantity,

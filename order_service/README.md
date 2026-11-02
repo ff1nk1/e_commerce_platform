@@ -142,7 +142,7 @@ sequenceDiagram
 
 ---
 
-## Idempotency и SagaStepGuard
+## Idempotency
 
 **Redis IdempotencyStore** (scoped):
 
@@ -151,7 +151,18 @@ sequenceDiagram
 
 Паттерн: get cached → acquire lock → work → put response → release. Ключ клиента ограничен по длине; create/pay требуют заголовок `Idempotency-Key`.
 
-**SagaStepGuard** + **SagaStepRunner** (Redis): `tryBegin` / `put` / `release`; `busy` → exception (retry). Шаги: `order.created`, `stock.reserved`, `stock.reservation_failed`, `stock.release_requested`, `stock.commit_requested`.
+## Сага состояния (персистентная)
+
+Сага заказа `OrderFulfillment` — Ecotone `#[Saga]`, документ хранится в таблице
+`ecotone_document_store` (Postgres), а не в Redis с TTL. Шаги: `order.created`,
+`stock.reserved`, `stock.reservation_failed`, `stock.release_requested`,
+`stock.commit_requested`. Идемпотентность шага держит сама сага через
+`state` / `releaseRequested` ([`app/Messaging/OrderFulfillment.php`](app/Messaging/OrderFulfillment.php)),
+дедупликация входящих сообщений — таблица `messaging_inbox_dedup`.
+
+Сага каталога `StockFulfillment` (`catalog_service`) хранит статусы шагов
+`stock.reserve` / `stock.commit` / `stock.release` в том же документ-сторе.
+Резервы стока персистентны в `stock_reservations` с явной привязкой к `saga_id`.
 
 ---
 

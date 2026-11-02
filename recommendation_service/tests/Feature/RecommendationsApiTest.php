@@ -498,6 +498,107 @@ final class RecommendationsApiTest extends TestCase
             ->once();
     }
 
+    public function test_relevance_gate_runs_inside_relaxation_loop(): void
+    {
+        $this->seedProduct(1, 'Blue jeans', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+            ['name' => 'Материал', 'value' => 'Хлопок'],
+        ]);
+
+        $this->llm->filters = new SearchFilters(
+            query: 'джинсы',
+            attributes: [
+                ['name' => 'Цвет', 'value' => 'синий'],
+                ['name' => 'Материал', 'value' => 'хлопок'],
+            ],
+        );
+
+        // First gate pass rejects the (non-empty) result set; the search loop must
+        // then relax and re-run the gate, so the second pass can accept.
+        $gate = new class implements RelevanceGate
+        {
+            public int $calls = 0;
+
+            public function accept(array $hits): array
+            {
+                $this->calls++;
+
+                return $this->calls === 1 ? [] : $hits;
+            }
+        };
+        $this->app->instance(RelevanceGate::class, $gate);
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'только синие хлопковые джинсы',
+            'limit' => 5,
+        ])->assertOk();
+
+        $this->assertGreaterThanOrEqual(2, $gate->calls);
+        $this->assertNotEmpty($response->json('extracted_filters.relaxed'));
+        /** @var array<int, array<string, mixed>> $products */
+        $products = $response->json('products') ?? [];
+        $this->assertSame([1], collect($products)->pluck('product_id')->all());
+    }
+
+    public function test_repeated_gate_drops_log_once(): void
+    {
+        $log = Log::spy();
+        $this->seedProduct(1, 'Blue jeans', attributes: [
+            ['name' => 'Цвет', 'value' => 'Синий'],
+            ['name' => 'Материал', 'value' => 'Хлопок'],
+        ]);
+
+        $this->llm->filters = new SearchFilters(
+            query: 'джинсы',
+            attributes: [
+                ['name' => 'Цвет', 'value' => 'синий'],
+                ['name' => 'Материал', 'value' => 'хлопок'],
+            ],
+        );
+
+        $gate = new class implements RelevanceGate
+        {
+            public int $calls = 0;
+
+            public function accept(array $hits): array
+            {
+                $this->calls++;
+
+                return [];
+            }
+        };
+        $this->app->instance(RelevanceGate::class, $gate);
+
+        $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'только синие хлопковые джинсы',
+            'limit' => 5,
+        ])->assertOk()->assertJsonPath('products', []);
+
+        $this->assertGreaterThanOrEqual(2, $gate->calls);
+        $log->shouldHaveReceived('info')
+            ->withArgs(function (string $message, array $context): bool {
+                return str_contains($message, 'RelevanceGate dropped all search hits')
+                    && isset($context['hits'], $context['max_cosine_distance']);
+            })
+            ->once();
+    }
+
+    public function test_chat_response_never_contains_embedding_vector(): void
+    {
+        $this->seedProduct(1, 'Blue sneakers');
+
+        $response = $this->postJson('/api/recommendations/chat', [
+            'user_id' => '42',
+            'message' => 'Find blue sneakers',
+            'limit' => 5,
+        ])->assertOk();
+
+        $response->assertJsonMissingPath('products.0.embedding');
+        $this->assertStringNotContainsString('embedding', (string) $response->getContent());
+    }
+
     public function test_chat_with_store_id_still_extracts_filters(): void
     {
         $this->seedProduct(1, 'Blue sneakers');

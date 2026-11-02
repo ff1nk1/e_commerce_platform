@@ -43,6 +43,8 @@ final class AppServiceProvider extends ServiceProvider
                     timeout: max(1, (int) config('llm.gemini.timeout', 25)),
                     embedRetryTimes: max(1, (int) config('llm.gemini.embed_retry_times', 3)),
                     embedRetrySleepMs: max(0, (int) config('llm.gemini.embed_retry_sleep_ms', 200)),
+                    chatRetryTimes: max(1, (int) config('llm.gemini.chat_retry_times', 3)),
+                    chatRetrySleepMs: max(0, (int) config('llm.gemini.chat_retry_sleep_ms', 200)),
                 ),
                 default => throw new InvalidArgumentException("Unsupported LLM_DRIVER [{$driver}]"),
             };

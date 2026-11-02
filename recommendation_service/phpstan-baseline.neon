@@ -61,12 +61,6 @@ parameters:
 			path: app/Services/Catalog/SearchCatalogProductsDetailedService.php
 
 		-
-			message: '#^Static property Database\\Factories\\UserFactory\:\:\$password \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
-			identifier: property.unusedType
-			count: 1
-			path: database/factories/UserFactory.php
-
-		-
 			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertStringNotContainsString\(\) expects string, string\|false given\.$#'
 			identifier: argument.type
 			count: 2

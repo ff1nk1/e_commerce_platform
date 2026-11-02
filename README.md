@@ -67,11 +67,13 @@ JWT и роли проверяет только auth. [`ProxyService`](auth_serv
 | `catalog.events` (`stock.changed`) | catalog, outbox | search, recommendation |
 | `order.events` | order, outbox | catalog (`order.created`, `stock.release_requested`, `stock.commit_requested`), notification (`order.paid`, `order.confirmed`, `order.cancelled`), analytic (`order.created`, `order.paid`, `order.shipped`, `order.cancelled`) |
 | `search.events` (`search.performed`) | search, outbox | analytic |
-| `user.events.dlq`, `order.events.dlq` | notification | — |
+| `*.dlq` (`product.events.dlq`, `category.events.dlq`, `stock.events.dlq`, `catalog.events.dlq`, `order.events.dlq`, `user.events.dlq`) | консьюмеры (адаптер: permanent/transient) + notification (ошибка доставки письма) | — |
 
 `order.confirmed` читает только notification. `order.shipped` читает только analytic и пишет его как стадию `completed`. Catalog оба типа пропускает.
 
 Все исходящие события пишутся в DBAL-канал `kafka-outbox` в той же транзакции, что и домен, и уходят воркером `php artisan ecotone:run kafka-outbox`. Входящие сообщения сначала попадают в `inbox`, затем их разбирает `php artisan ecotone:run inbox`.
+
+Консьюмеры читают Kafka вручную (manual commit): offset коммитится только после успешной записи в `inbox` либо после подтверждения записи в `*.dlq` брокером (`acks=all`). Битый JSON, отсутствующий `event-type` и исчерпание bounded-ретраев (БД/Inbox недоступны) уводят сообщение в `*.dlq`. Ручки ретраев/суффикса: `KAFKA_CONSUMER_MAX_ATTEMPTS`, `KAFKA_CONSUMER_RETRY_BASE_MS`, `KAFKA_CONSUMER_RETRY_MAX_MS`, `KAFKA_CONSUMER_DLQ_PUBLISH_ATTEMPTS`, `KAFKA_DLQ_SUFFIX`.
 
 ### Вне стека
 

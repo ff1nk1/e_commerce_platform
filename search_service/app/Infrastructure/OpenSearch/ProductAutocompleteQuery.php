@@ -17,15 +17,22 @@ final class ProductAutocompleteQuery
             'size' => $limit,
             '_source' => ['id', 'name', 'price', 'image_url'],
             'query' => [
-                'multi_match' => [
-                    'query' => $q,
-                    'type' => 'bool_prefix',
-                    'fields' => [
-                        'name.autocomplete',
-                        'name.autocomplete._2gram',
-                        'name.autocomplete._3gram',
+                'bool' => [
+                    'must' => [
+                        'multi_match' => [
+                            'query' => $q,
+                            'type' => 'bool_prefix',
+                            'fields' => [
+                                'name.autocomplete',
+                                'name.autocomplete._2gram',
+                                'name.autocomplete._3gram',
+                            ],
+                            'fuzziness' => $fuzziness,
+                        ],
                     ],
-                    'fuzziness' => $fuzziness,
+                    'must_not' => [
+                        ['term' => ['is_published' => false]],
+                    ],
                 ],
             ],
         ];

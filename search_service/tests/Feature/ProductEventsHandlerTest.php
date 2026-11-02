@@ -117,6 +117,34 @@ final class ProductEventsHandlerTest extends TestCase
         $this->app->make(ProductEventsHandler::class)->onInbound($message);
     }
 
+    public function test_product_unpublished_indexes_is_published_false(): void
+    {
+        $client = $this->mockClientWithExistingIndices();
+        $client->shouldReceive('index')->once()->with(Mockery::on(function (array $params): bool {
+            $this->assertSame('products', $params['index']);
+            $this->assertSame('43', $params['id']);
+            $this->assertFalse($params['body']['is_published']);
+            $this->assertSame('Hidden Phone', $params['body']['name']);
+
+            return true;
+        }))->andReturn(['result' => 'created']);
+
+        $this->app->instance(Client::class, $client);
+
+        $message = $this->consumerMessage('product.unpublished', [
+            'event' => 'product.unpublished',
+            'data' => [
+                'id' => 43,
+                'name' => 'Hidden Phone',
+                'price' => '10.00',
+                'store_id' => 1,
+                'is_published' => false,
+            ],
+        ]);
+
+        $this->app->make(ProductEventsHandler::class)->onInbound($message);
+    }
+
     public function test_falls_back_to_body_event_when_header_missing(): void
     {
         $client = $this->mockClientWithExistingIndices();

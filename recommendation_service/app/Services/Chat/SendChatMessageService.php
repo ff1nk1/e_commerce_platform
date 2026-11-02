@@ -123,11 +123,15 @@ PROMPT;
                 ]);
             } else {
                 $searchResult = $this->search->handle($filters, $resultLimit, $queryVector);
-                $hits = $searchResult->hits;
                 $preferredSoftPath = $searchResult->preferredRelaxed;
                 $preferredForLabel = $filters->preferredAttributes;
 
-                // Progressive relaxation when still empty.
+                // Relevance gate runs inside the search loop: an irrelevant (below
+                // threshold) result set must count as empty before we decide to relax.
+                $preGateHits = $searchResult->hits;
+                $hits = $this->relevanceGate->accept($preGateHits);
+
+                // Progressive relaxation while the gated result is still empty.
                 $steps = 0;
                 while ($hits === [] && $steps < self::MAX_RELAXATION_STEPS) {
                     $step = $this->filtersRelaxer->relaxOnce($filters);
@@ -137,12 +141,12 @@ PROMPT;
                     $filters = $this->filtersNormalizer->normalize($step->filters);
                     $relaxedLabels[] = $step->relaxed;
                     $searchResult = $this->search->handle($filters, $resultLimit, $queryVector);
-                    $hits = $searchResult->hits;
+                    $preGateHits = $searchResult->hits;
+                    $hits = $this->relevanceGate->accept($preGateHits);
                     $steps++;
                 }
 
-                $preGateHits = $hits;
-                $hits = $this->relevanceGate->accept($hits);
+                // Log once if the final gate pass dropped the whole pre-gate set.
                 if ($preGateHits !== [] && $hits === []) {
                     $this->logGateDroppedAll($preGateHits);
                 }

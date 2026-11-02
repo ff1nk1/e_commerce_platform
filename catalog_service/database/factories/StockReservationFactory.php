@@ -19,6 +19,7 @@ final class StockReservationFactory extends Factory
     {
         return [
             'order_id' => fake()->unique()->numberBetween(1, 1_000_000),
+            'saga_id' => fake()->uuid(),
             'product_id' => Product::factory(),
             'store_id' => Store::factory(),
             'quantity' => 1,

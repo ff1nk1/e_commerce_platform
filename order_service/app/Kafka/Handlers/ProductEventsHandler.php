@@ -5,22 +5,29 @@ declare(strict_types=1);
 namespace App\Kafka\Handlers;
 
 use App\Enums\OrderEventType;
+use App\Messaging\ProductSnapshotDeleted;
 use App\Messaging\ProductSnapshotReceived;
 use App\Models\ProductSnapshot;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Shop\Messaging\EnvelopeMessage;
+use Shop\Messaging\InboundEnvelope;
 
 final class ProductEventsHandler
 {
     #[EventHandler(endpointId: 'order.productSnapshot')]
     public function onInbound(ProductSnapshotReceived $event): void
     {
-        $this(new EnvelopeMessage($event->envelope));
+        $this($event->envelope);
     }
 
-    public function __invoke(EnvelopeMessage $message): void
+    #[EventHandler(endpointId: 'order.productSnapshotDeleted')]
+    public function onDeleted(ProductSnapshotDeleted $event): void
+    {
+        $this($event->envelope);
+    }
+
+    public function __invoke(InboundEnvelope $envelope): void
     {
         if (! Schema::hasTable('product_snapshots')) {
             Log::warning('Kafka: product_snapshots table missing; skipping until migrations run');
@@ -28,11 +35,16 @@ final class ProductEventsHandler
             return;
         }
 
-        $headers = $message->getHeaders();
-        $body = $message->getBody();
-        $eventTypeFromHeader = $headers['event-type'] ?? null;
+        $body = $envelope->payload;
+        $eventTypeFromHeader = $envelope->headers['event-type'] ?? null;
         $eventTypeFromBody = $body['event_type'] ?? $body['event'] ?? null;
         $eventType = $eventTypeFromHeader ?? $eventTypeFromBody;
+
+        if ($eventType === OrderEventType::ProductDeleted->value) {
+            $this->markDeleted($body, $eventType);
+
+            return;
+        }
 
         if (! in_array($eventType, [OrderEventType::ProductCreated->value, OrderEventType::ProductUpdated->value], true)) {
             Log::debug("Игнорируем неизвестное событие продукта: {$eventType}");
@@ -82,6 +94,7 @@ final class ProductEventsHandler
             'category_id' => $categoryId !== null ? (int) $categoryId : null,
             'category_name' => $categoryName !== null ? (string) $categoryName : null,
             'category_slug' => $categorySlug !== null ? (string) $categorySlug : null,
+            'deleted_at' => null,
         ];
 
         $snapshot = ProductSnapshot::query()->updateOrCreate(
@@ -97,6 +110,31 @@ final class ProductEventsHandler
             'category_id' => $snapshot->category_id,
             'store_name' => $snapshot->store_name,
             'category_name' => $snapshot->category_name,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     */
+    private function markDeleted(array $body, string $eventType): void
+    {
+        $data = $body['data'] ?? null;
+        $id = is_array($data) ? ($data['id'] ?? null) : null;
+        if ($id === null) {
+            Log::warning('Kafka: product.deleted без id', ['body' => $body]);
+
+            return;
+        }
+
+        $affected = ProductSnapshot::query()
+            ->whereKey((int) $id)
+            ->whereNull('deleted_at')
+            ->update(['deleted_at' => now()]);
+
+        Log::info('Kafka: product snapshot soft-deleted', [
+            'event' => $eventType,
+            'product_id' => (int) $id,
+            'affected' => $affected,
         ]);
     }
 }

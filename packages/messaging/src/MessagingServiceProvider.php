@@ -17,6 +17,8 @@ final class MessagingServiceProvider extends ServiceProvider
         $this->app->singleton(MessagePublisher::class, JungesKafkaPublisher::class);
         $this->app->singleton(OutboxPublisher::class, EcotoneOutboxPublisher::class);
         $this->app->singleton(InboxWriter::class, EcotoneInboxWriter::class);
+        $this->app->singleton(RetryPolicy::class, static fn (): RetryPolicy => RetryPolicy::fromConfig());
+        $this->app->singleton(DeadLetterPublisher::class, KafkaDeadLetterPublisher::class);
         $this->app->singleton(KafkaInboundAdapter::class);
         $this->app->singleton(CatalogPayloadNormalizer::class);
         $this->app->singleton(InboundEventFactory::class, NullInboundEventFactory::class);

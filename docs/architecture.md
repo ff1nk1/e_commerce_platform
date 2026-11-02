@@ -33,6 +33,8 @@ JWT проверяет только auth. Для админского JSON ка�
 
 Прямой HTTP между сервисами один: recommendation → catalog `GET /api/catalog/products/{id}` для проверки, что карточка ещё опубликована. Поиск и индекс ассистента живут локально.
 
+Traefik (`infra/traefik/dynamic.yml`) держит не только корневой роутер. Отдельные роутеры: `admin-catalog` (`/admin-catalog` → auth, HTML-прокси Filament), `catalog-filament-assets` (`/css/filament`, `/js/filament`, `/fonts/filament`, `/livewire-*` → catalog напрямую, без JWT), `clickhouse-play` (`Host(clickhouse.localhost)` → ClickHouse Play) и `http-redirect` (HTTP → HTTPS).
+
 ## Данные и брокер
 
 ```mermaid
@@ -77,11 +79,13 @@ flowchart TB
 | `catalog.events` (`stock.changed`) | catalog, outbox | search, recommendation |
 | `order.events` | order, outbox | catalog (`order.created`, `stock.release_requested`, `stock.commit_requested`), notification (`order.paid`, `order.confirmed`, `order.cancelled`), analytic (`order.created`, `order.paid`, `order.shipped`, `order.cancelled`) |
 | `search.events` (`search.performed`) | search, outbox | analytic |
-| `user.events.dlq`, `order.events.dlq` | notification | — |
+| `*.dlq` (`product.events.dlq`, `category.events.dlq`, `stock.events.dlq`, `catalog.events.dlq`, `order.events.dlq`, `user.events.dlq`) | консьюмеры (адаптер, permanent/transient) + notification (ошибка доставки письма) | — |
 
 `order.confirmed` читает только notification. `order.shipped` читает только analytic и пишет его как стадию `completed`.
 
 Исходящие события пишутся в канал `kafka-outbox` (`php artisan ecotone:run kafka-outbox`). Входящие — в `inbox` (`php artisan ecotone:run inbox`).
+
+Консьюмеры читают Kafka вручную (manual commit) и кладут сообщение в inbox. Offset коммитится только после успешной записи в inbox. Битый JSON, отсутствующий `event-type` и исчерпание bounded-ретраев (БД/Inbox недоступны) перенаправляют сообщение в `*.dlq` — offset коммитится только после подтверждения записи в DLQ (`acks=all`). Параметры ретраев: `KAFKA_CONSUMER_MAX_ATTEMPTS`, `KAFKA_CONSUMER_RETRY_BASE_MS`, `KAFKA_CONSUMER_RETRY_MAX_MS`, `KAFKA_CONSUMER_DLQ_PUBLISH_ATTEMPTS`, `KAFKA_DLQ_SUFFIX` (дефолты в `config/kafka.php`).
 
 ## Вне стека
 

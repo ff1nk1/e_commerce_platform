@@ -14,6 +14,7 @@ final class OrderInboundEventFactory implements InboundEventFactory
     {
         return match (OrderEventType::tryFrom($envelope->eventType)) {
             OrderEventType::ProductCreated, OrderEventType::ProductUpdated => new ProductSnapshotReceived($envelope),
+            OrderEventType::ProductDeleted => new ProductSnapshotDeleted($envelope),
             default => null,
         };
     }

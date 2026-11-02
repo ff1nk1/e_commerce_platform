@@ -214,6 +214,40 @@ services:
     networks:
       - php_project_net
 
+  notification_kafka_outbox_worker:
+    image: notification_service:local
+    pull_policy: never
+    container_name: notification_kafka_outbox_worker
+    restart: unless-stopped
+    command: php artisan ecotone:run kafka-outbox
+    volumes:
+      - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
+    env_file:
+      - .env
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: notification_service_db
+      DB_PORT: 5432
+      DB_DATABASE: notification_db
+      DB_USERNAME: laravel
+      DB_PASSWORD: secret
+      MONGODB_HOST: notification_service_mongodb
+      MONGODB_PORT: 27017
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CACHE_DRIVER: array
+      MAIL_HOST: notification_service_mailpit
+      MAIL_PORT: 1025
+    depends_on:
+      notification_app:
+        condition: service_healthy
+      notification_db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - php_project_net
+
 volumes:
   notification_mongodata:
   notification_pgdata:

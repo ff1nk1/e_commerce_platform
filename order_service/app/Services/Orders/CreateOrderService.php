@@ -103,6 +103,12 @@ final class CreateOrderService
                     ]);
                 }
 
+                if ($snapshot->deleted_at !== null) {
+                    throw ValidationException::withMessages([
+                        'items' => ["Product {$productId} is no longer available"],
+                    ]);
+                }
+
                 $unitPrice = Money::of((string) $snapshot->price);
                 $lineTotal = $unitPrice->multiply((string) $quantity);
                 $total = $total->add($lineTotal);

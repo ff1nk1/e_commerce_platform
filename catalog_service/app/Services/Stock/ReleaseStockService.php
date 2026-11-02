@@ -34,11 +34,11 @@ final class ReleaseStockService
             return false;
         }
 
-        $this->ledger->withinTransaction(function () use ($orderId, $normalized): void {
+        $this->ledger->withinTransaction(function () use ($orderId, $normalized, $message): void {
             $stockChangedEvents = [];
 
             foreach ($normalized as $item) {
-                $stock = $this->ledger->settleHeld($orderId, $item, StockReservationStatus::Released, false);
+                $stock = $this->ledger->settleHeld($orderId, $item, StockReservationStatus::Released, false, $message->sagaId);
                 $stockChangedEvents[] = $this->ledger->stockChangedPayload($stock);
             }
 

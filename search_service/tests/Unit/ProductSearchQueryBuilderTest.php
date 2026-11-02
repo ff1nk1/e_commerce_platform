@@ -294,7 +294,7 @@ final class ProductSearchQueryBuilderTest extends TestCase
         $body = $this->lastSearchBody();
         $this->assertSame(20, $body['size']);
         $this->assertSame(['id', 'name', 'price', 'image_url'], $body['_source']);
-        $mm = $body['query']['multi_match'];
+        $mm = $body['query']['bool']['must']['multi_match'];
         $this->assertSame('ph', $mm['query']);
         $this->assertSame('bool_prefix', $mm['type']);
         $this->assertSame([
@@ -310,6 +310,31 @@ final class ProductSearchQueryBuilderTest extends TestCase
                 'image_url' => null,
             ],
         ], $result->suggestions);
+    }
+
+    public function test_autocomplete_excludes_unpublished_products(): void
+    {
+        $this->mockOpenSearchClient();
+
+        resolve(AutocompleteProductsService::class)->handle(new AutocompleteQuery(q: 'ph'));
+
+        $bool = $this->lastSearchBody()['query']['bool'];
+        $this->assertSame(
+            [['term' => ['is_published' => false]]],
+            $bool['must_not'],
+        );
+        $this->assertArrayHasKey('multi_match', $bool['must']);
+    }
+
+    public function test_read_path_does_not_create_indices(): void
+    {
+        $this->mockOpenSearchClient();
+        Kafka::fake();
+
+        resolve(SearchProductsService::class)->handle($this->searchParams(['q' => 'phone', 'sort' => 'relevance']));
+        resolve(AutocompleteProductsService::class)->handle(new AutocompleteQuery(q: 'ph'));
+
+        $this->assertSame([], $this->capturedIndexCreateRequests);
     }
 
     public function test_search_publishes_search_performed_event(): void

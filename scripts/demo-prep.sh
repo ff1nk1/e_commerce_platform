@@ -265,7 +265,9 @@ if should_run auth; then
   add_need auth_app
 fi
 if should_run notification; then
-  add_need notification_app
+  add_need notification_app \
+    notification_kafka_outbox_worker \
+    notification_kafka_consumer notification_kafka_order_consumer notification_kafka_inbox_worker
 fi
 if should_run search; then
   add_need search_app search_db search_opensearch
