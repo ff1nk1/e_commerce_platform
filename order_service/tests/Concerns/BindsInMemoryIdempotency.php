@@ -5,19 +5,19 @@ declare(strict_types=1);
 namespace Tests\Concerns;
 
 use App\Contracts\IdempotencyStore;
-use App\Infrastructure\Cache\CacheIdempotencyStore;
+use App\DTO\Orders\IdempotentResponse;
 use Mockery;
 
 trait BindsInMemoryIdempotency
 {
-    /** @var array<string, array{status: int, body: array<string, mixed>}> */
+    /** @var array<string, IdempotentResponse> */
     private array $idempotencyStore = [];
 
     protected function bindInMemoryIdempotency(): void
     {
         $store = &$this->idempotencyStore;
 
-        $idem = Mockery::mock(CacheIdempotencyStore::class);
+        $idem = Mockery::mock(IdempotencyStore::class);
         $idem->shouldReceive('scopeKey')->andReturnUsing(
             function (string $operation, int $userId, string $clientKey, ?int $resourceId = null): string {
                 $parts = ['order', 'idempotency', $operation, (string) $userId];
@@ -29,17 +29,15 @@ trait BindsInMemoryIdempotency
                 return implode(':', $parts);
             }
         );
-        $idem->shouldReceive('get')->andReturnUsing(function (string $key) use (&$store) {
+        $idem->shouldReceive('get')->andReturnUsing(function (string $key) use (&$store): ?IdempotentResponse {
             return $store[$key] ?? null;
         });
         $idem->shouldReceive('acquireLock')->andReturn(true);
         $idem->shouldReceive('releaseLock')->andReturnNull();
-        $idem->shouldReceive('put')->andReturnUsing(function (string $key, int $status, array $body) use (&$store): void {
-            /** @var array<string, mixed> $body */
-            $store[$key] = ['status' => $status, 'body' => $body];
+        $idem->shouldReceive('put')->andReturnUsing(function (string $key, IdempotentResponse $response) use (&$store): void {
+            $store[$key] = $response;
         });
 
-        $this->app->instance(CacheIdempotencyStore::class, $idem);
         $this->app->instance(IdempotencyStore::class, $idem);
     }
 }

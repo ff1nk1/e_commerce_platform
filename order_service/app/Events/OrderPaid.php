@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Events;
 
 use App\Contracts\Outboxable;
+use App\DTO\Orders\OrderNotification;
 use App\Enums\OrderEventType;
 use Illuminate\Foundation\Events\Dispatchable;
 
@@ -12,11 +13,8 @@ final class OrderPaid implements Outboxable
 {
     use Dispatchable;
 
-    /**
-     * @param  array<string, mixed>  $payload
-     */
     public function __construct(
-        public readonly array $payload,
+        public readonly OrderNotification $notification,
     ) {}
 
     public function outboxTopic(): string
@@ -29,8 +27,11 @@ final class OrderPaid implements Outboxable
         return OrderEventType::OrderPaid->value;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function outboxPayload(): array
     {
-        return $this->payload;
+        return $this->notification->toArray();
     }
 }

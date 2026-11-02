@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\Infrastructure\Cache\CacheIdempotencyStore;
+use App\DTO\Orders\IdempotentResponse;
+use App\Infrastructure\Idempotency\CacheIdempotencyStore;
 use Illuminate\Support\Str;
 use Tests\Concerns\UsesRedis;
 use Tests\TestCase;
@@ -29,11 +30,12 @@ final class IdempotencyServiceTest extends TestCase
 
         $this->assertNull($this->idempotency->get($key));
 
-        $this->idempotency->put($key, 201, $body);
+        $this->idempotency->put($key, new IdempotentResponse(201, $body));
 
         $cached = $this->idempotency->get($key);
-        $this->assertSame(201, $cached['status']);
-        $this->assertSame($body, $cached['body']);
+        $this->assertNotNull($cached);
+        $this->assertSame(201, $cached->status);
+        $this->assertSame($body, $cached->body);
     }
 
     public function test_acquire_lock_is_exclusive(): void

@@ -8,7 +8,7 @@ use App\DTO\Payments\StripeCheckoutSession;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\ProductSnapshot;
-use App\Services\Payment\ConfirmOrderService;
+use App\Services\Payments\ConfirmPaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -33,7 +33,7 @@ final class ConfirmOrderFromPaymentTest extends TestCase
     {
         [$order, $payment] = $this->orderAndPayment('pending');
 
-        resolve(ConfirmOrderService::class)->handle(StripeCheckoutSession::fromArray([
+        resolve(ConfirmPaymentService::class)->handle(StripeCheckoutSession::fromArray([
             'id' => 'cs_pending',
             'payment_intent' => 'pi_1',
             'payment_status' => 'paid',
@@ -50,7 +50,7 @@ final class ConfirmOrderFromPaymentTest extends TestCase
     {
         [$order, $payment] = $this->orderAndPayment('awaiting_payment');
 
-        resolve(ConfirmOrderService::class)->handle(StripeCheckoutSession::fromArray([
+        resolve(ConfirmPaymentService::class)->handle(StripeCheckoutSession::fromArray([
             'id' => 'cs_bad_amount',
             'payment_intent' => 'pi_1',
             'payment_status' => 'paid',
@@ -153,7 +153,7 @@ final class ConfirmOrderFromPaymentTest extends TestCase
 
     private function deliverPaidSession(Payment $payment, string $sessionId, string $paymentIntentId): void
     {
-        resolve(ConfirmOrderService::class)->handle(StripeCheckoutSession::fromArray([
+        resolve(ConfirmPaymentService::class)->handle(StripeCheckoutSession::fromArray([
             'id' => $sessionId,
             'payment_intent' => $paymentIntentId,
             'payment_status' => 'paid',

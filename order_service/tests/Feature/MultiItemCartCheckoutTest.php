@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\DTO\Payments\CheckoutSessionParams;
 use App\DTO\Payments\StripeCheckoutSession;
 use App\Models\Order;
 use App\Models\ProductSnapshot;
@@ -87,8 +88,8 @@ final class MultiItemCartCheckoutTest extends TestCase
         $stripe = $this->mockPaymentGateway();
         $stripe->shouldReceive('createCheckoutSession')
             ->once()
-            ->andReturnUsing(function (array $params) use (&$capturedLineItems): StripeCheckoutSession {
-                $capturedLineItems = $params['line_items'] ?? null;
+            ->andReturnUsing(function (CheckoutSessionParams $params) use (&$capturedLineItems): StripeCheckoutSession {
+                $capturedLineItems = $params->lineItems->toArray();
 
                 return StripeCheckoutSession::fromArray([
                     'id' => 'cs_cart_multi',

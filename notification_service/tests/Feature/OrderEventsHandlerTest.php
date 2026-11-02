@@ -5,18 +5,17 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\OrderEventsHandler;
-use App\Mail\MailableRegistry;
 use App\Mail\OrderCancelledMail;
 use App\Mail\OrderConfirmedMail;
 use App\Mail\OrderPaidMail;
 use App\Messaging\OrderNotification;
-use App\Models\EmailLog;
-use App\Services\Mail\MailSender;
+use App\Models\Notification;
+use App\Services\Notifications\RetryingMailSender;
 use Illuminate\Mail\PendingMail;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Sleep;
 use Junges\Kafka\Facades\Kafka;
 use Mockery;
-use Mockery\MockInterface;
 use Shop\Messaging\InboundEnvelope;
 use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
@@ -26,7 +25,7 @@ final class OrderEventsHandlerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        EmailLog::query()->truncate();
+        Notification::query()->truncate();
     }
 
     protected function tearDown(): void
@@ -47,7 +46,7 @@ final class OrderEventsHandlerTest extends TestCase
                 && ($mail->payload['order_id'] ?? null) === $body['order_id'];
         });
 
-        $log = EmailLog::query()->where('email', $body['email'])->first();
+        $log = Notification::query()->where('email', $body['email'])->first();
         $this->assertNotNull($log);
         $this->assertSame('sent', $log->status);
         $this->assertSame('order.paid', $log->event_type);
@@ -63,7 +62,7 @@ final class OrderEventsHandlerTest extends TestCase
         resolve(OrderEventsHandler::class)->onInbound($this->message('order.confirmed', $body));
 
         Mail::assertSent(OrderConfirmedMail::class);
-        $log = EmailLog::query()->where('status', 'sent')->first();
+        $log = Notification::query()->where('status', 'sent')->first();
         $this->assertNotNull($log);
         $this->assertSame('order.confirmed', $log->event_type);
         $this->assertSame('order.confirmed', $log->payload['event_type'] ?? null);
@@ -80,7 +79,7 @@ final class OrderEventsHandlerTest extends TestCase
             return ($mail->payload['reason'] ?? null) === 'insufficient_stock';
         });
 
-        $log = EmailLog::query()->where('email', $body['email'])->first();
+        $log = Notification::query()->where('email', $body['email'])->first();
         $this->assertNotNull($log);
         $this->assertSame('sent', $log->status);
     }
@@ -95,7 +94,7 @@ final class OrderEventsHandlerTest extends TestCase
         resolve(OrderEventsHandler::class)->onInbound($message);
 
         Mail::assertSent(OrderPaidMail::class);
-        $log = EmailLog::query()->where('email', $body['email'])->first();
+        $log = Notification::query()->where('email', $body['email'])->first();
         $this->assertNotNull($log);
         $this->assertSame('order.paid', $log->event_type);
     }
@@ -108,7 +107,7 @@ final class OrderEventsHandlerTest extends TestCase
         resolve(OrderEventsHandler::class)->onInbound($this->message('order.created', $this->orderBody()));
 
         Mail::assertNothingSent();
-        $this->assertSame(0, EmailLog::query()->count());
+        $this->assertSame(0, Notification::query()->count());
         Kafka::assertNothingPublished();
     }
 
@@ -125,7 +124,7 @@ final class OrderEventsHandlerTest extends TestCase
         resolve(OrderEventsHandler::class)->onInbound($message);
 
         Mail::assertNothingSent();
-        $this->assertSame(0, EmailLog::query()->count());
+        $this->assertSame(0, Notification::query()->count());
         Kafka::assertNothingPublished();
     }
 
@@ -143,14 +142,14 @@ final class OrderEventsHandlerTest extends TestCase
         resolve(OrderEventsHandler::class)->onInbound($message);
 
         Mail::assertSent(OrderPaidMail::class, 1);
-        $this->assertSame(1, EmailLog::query()->where('message_id', 'idempotent-order-1')->count());
+        $this->assertSame(1, Notification::query()->where('message_id', 'idempotent-order-1')->count());
     }
 
     public function test_handler_marks_failed_and_publishes_to_dlq_after_retries_exhausted(): void
     {
         Kafka::fake();
 
-        $maxRetries = MailSender::MAX_RETRIES;
+        $maxRetries = RetryingMailSender::MAX_RETRIES;
         $pendingMailMock = Mockery::mock(PendingMail::class);
         $pendingMailMock->shouldReceive('send')
             ->times($maxRetries)
@@ -161,18 +160,14 @@ final class OrderEventsHandlerTest extends TestCase
             ->with('dlq-order@example.com')
             ->andReturn($pendingMailMock);
 
-        /** @var MailSender&MockInterface $sender */
-        $sender = Mockery::mock(MailSender::class, [new MailableRegistry])->makePartial();
-        $sender->shouldAllowMockingProtectedMethods();
-        $sender->shouldReceive('sleepInTest')->times($maxRetries - 1);
-        $this->app->instance(MailSender::class, $sender);
+        Sleep::fake();
 
         $body = $this->orderBody(['email' => 'dlq-order@example.com']);
         $message = $this->message('order.paid', $body, '99');
 
         resolve(OrderEventsHandler::class)->onInbound($message);
 
-        $log = EmailLog::query()->where('email', 'dlq-order@example.com')->first();
+        $log = Notification::query()->where('email', 'dlq-order@example.com')->first();
         $this->assertNotNull($log);
         $this->assertSame('failed', $log->status);
         $this->assertTrue((bool) $log->moved_to_dlq);

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Rector\Config\RectorConfig;
+use Rector\Privatization\Rector\Property\PrivatizeFinalClassPropertyRector;
 use RectorLaravel\Rector\Class_\AddHasFactoryToModelsRector;
 use RectorLaravel\Set\LaravelSetList;
 use Tools\Rector\AddDeclareStrictTypesRector;
@@ -40,6 +41,11 @@ return RectorConfig::configure()
         // Stateless user in catalog_service (hydrated from gateway headers, no DB table/factory).
         AddHasFactoryToModelsRector::class => [
             __DIR__.'/catalog_service/app/Models/User.php',
+        ],
+        // $collection is read by the parent Eloquent model through reflection, so it must stay
+        // protected even though the class is final.
+        PrivatizeFinalClassPropertyRector::class => [
+            __DIR__.'/notification_service/app/Models/Notification.php',
         ],
     ])
     ->withComposerBased(laravel: true)

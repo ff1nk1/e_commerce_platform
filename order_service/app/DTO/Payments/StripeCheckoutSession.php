@@ -7,14 +7,14 @@ namespace App\DTO\Payments;
 final readonly class StripeCheckoutSession
 {
     public function __construct(
-        public mixed $id,
-        public mixed $url,
-        public mixed $status,
-        public mixed $paymentStatus,
-        public mixed $paymentIntent,
-        public mixed $amountTotal,
-        public mixed $currency,
-        public mixed $metadataPaymentId,
+        public ?string $id,
+        public ?string $url,
+        public ?string $status,
+        public ?string $paymentStatus,
+        public ?string $paymentIntent,
+        public ?int $amountTotal,
+        public ?string $currency,
+        public ?string $metadataPaymentId,
     ) {}
 
     /**
@@ -25,14 +25,19 @@ final readonly class StripeCheckoutSession
         $metadata = $session['metadata'] ?? null;
 
         return new self(
-            id: $session['id'] ?? null,
-            url: $session['url'] ?? null,
-            status: $session['status'] ?? null,
-            paymentStatus: $session['payment_status'] ?? null,
-            paymentIntent: $session['payment_intent'] ?? null,
-            amountTotal: $session['amount_total'] ?? null,
-            currency: $session['currency'] ?? null,
-            metadataPaymentId: is_array($metadata) ? ($metadata['payment_id'] ?? null) : null,
+            id: self::stringOrNull($session['id'] ?? null),
+            url: self::stringOrNull($session['url'] ?? null),
+            status: self::stringOrNull($session['status'] ?? null),
+            paymentStatus: self::stringOrNull($session['payment_status'] ?? null),
+            paymentIntent: self::stringOrNull($session['payment_intent'] ?? null),
+            amountTotal: is_numeric($session['amount_total'] ?? null) ? (int) $session['amount_total'] : null,
+            currency: self::stringOrNull($session['currency'] ?? null),
+            metadataPaymentId: is_array($metadata) ? self::stringOrNull($metadata['payment_id'] ?? null) : null,
         );
+    }
+
+    private static function stringOrNull(mixed $value): ?string
+    {
+        return is_scalar($value) ? (string) $value : null;
     }
 }

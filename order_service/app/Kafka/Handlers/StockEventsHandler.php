@@ -9,6 +9,7 @@ use App\Messaging\FulfillmentEvents;
 use App\Messaging\StockReservationFailed;
 use App\Messaging\StockReserved;
 use App\Support\KafkaPayload;
+use Ecotone\Modelling\Attribute\EventHandler;
 use Illuminate\Support\Facades\Log;
 use Shop\Messaging\EnvelopeMessage;
 use Shop\Messaging\InboundEnvelope;
@@ -18,6 +19,12 @@ final class StockEventsHandler
     public function __construct(
         private FulfillmentEvents $fulfillment,
     ) {}
+
+    #[EventHandler(endpointId: 'order.stock')]
+    public function onInbound(InboundEnvelope $envelope): void
+    {
+        $this(new EnvelopeMessage($envelope));
+    }
 
     public function __invoke(EnvelopeMessage $message): void
     {

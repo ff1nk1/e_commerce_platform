@@ -16,9 +16,9 @@ final class StripeSessionMoney
         string $currency = StripeLineItems::CURRENCY,
     ): bool {
         $expectedMinor = Money::of((string) $payment->amount)->toMinorUnits();
-        $actualMinor = $session->amountTotal !== null ? (int) $session->amountTotal : null;
+        $actualMinor = $session->amountTotal;
         $expectedCurrency = strtolower($currency);
-        $sessionCurrency = strtolower((string) ($session->currency ?? ''));
+        $sessionCurrency = strtolower($session->currency ?? '');
 
         return $actualMinor !== null
             && $actualMinor === $expectedMinor
@@ -30,11 +30,11 @@ final class StripeSessionMoney
      */
     public static function compareDetails(Payment $payment, StripeCheckoutSession $session): array
     {
-        $sessionCurrency = strtolower((string) ($session->currency ?? ''));
+        $sessionCurrency = strtolower($session->currency ?? '');
 
         return [
             'expected_minor' => Money::of((string) $payment->amount)->toMinorUnits(),
-            'actual_minor' => $session->amountTotal !== null ? (int) $session->amountTotal : null,
+            'actual_minor' => $session->amountTotal,
             'currency' => $sessionCurrency,
         ];
     }

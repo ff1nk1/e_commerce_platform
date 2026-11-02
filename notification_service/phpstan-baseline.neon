@@ -1,10 +1,5 @@
 parameters:
 	ignoreErrors:
-		-
-			message: '#^Property App\\Models\\EmailLog\:\:\$collection is never read, only written\.$#'
-			identifier: property.onlyWritten
-			count: 1
-			path: app/Models/EmailLog.php
 
 		-
 			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
@@ -19,7 +14,7 @@ parameters:
 			path: database/factories/UserFactory.php
 
 		-
-			message: '#^Cannot access property \$retries on App\\Models\\EmailLog\|null\.$#'
+			message: '#^Cannot access property \$retries on App\\Models\\Notification\|null\.$#'
 			identifier: property.nonObject
 			count: 1
 			path: tests/Feature/NotificationsApiTest.php

@@ -8,7 +8,7 @@ Laravel-сервис **писем и журнала отправок**. Слуш
 
 | Хранилище | Что лежит |
 |-----------|-----------|
-| MongoDB `email_logs` | статус, payload, retries, признак DLQ |
+| MongoDB `email_logs` | статус, payload, retries, признак DLQ (модель `Notification`) |
 | Postgres `notification_db` | Ecotone outbox/inbox |
 | Mailpit | локальный SMTP (`:1025`), UI `:8025` |
 
@@ -23,7 +23,7 @@ Laravel-сервис **писем и журнала отправок**. Слуш
 
 Остальные события `order.events` (`order.created`, `order.shipped`, stock saga) сервис не обрабатывает. DLQ: `user.events.dlq`, `order.events.dlq`.
 
-Пайплайн — [`KafkaMailPipeline`](app/Services/KafkaMailPipeline.php), соответствие тип → класс письма — [`MailableRegistry`](app/Mail/MailableRegistry.php).
+Маршрутизация события в письмо — [`NotificationEventsHandler`](app/Kafka/Handlers/NotificationEventsHandler.php) (тонкий адаптер) + [`SendNotificationService`](app/Services/Notifications/SendNotificationService.php) (создание/повтор записи, ретраи через [`RetryingMailSender`](app/Services/Notifications/RetryingMailSender.php)). Соответствие тип → Mailable задаёт [`NotificationEventType::mailable()`](app/Enums/NotificationEventType.php), набор разрешённых событий на консьюмер — VO [`AllowedEventTypes`](app/ValueObjects/AllowedEventTypes.php). Ручная переотправка — [`ResendNotificationService`](app/Services/Notifications/ResendNotificationService.php) (только `failed`, иначе `InvalidArgumentException` → 422).
 
 ## HTTP
 

@@ -51,30 +51,10 @@ parameters:
 			count: 1
 			path: app/Models/ProductSnapshot.php
 		-
-			message: '#^Method App\\Infrastructure\\Cache\\CacheIdempotencyStore\:\:get\(\) should return array\{status\: int, body\: array\<string, mixed\>\}\|null but returns array\<mixed, mixed\>\|null\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Infrastructure/Cache/CacheIdempotencyStore.php
-		-
-			message: '#^Cannot call method toIso8601String\(\) on Carbon\\Carbon\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: app/Services/Order/CreateOrderService.php
-		-
 			message: '#^Parameter \#1 \$sessionId of method App\\Contracts\\PaymentGateway\:\:retrieveCheckoutSession\(\) expects string, string\|null given\.$#'
 			identifier: argument.type
 			count: 1
-			path: app/Services/Payment/CreateCheckoutService.php
-		-
-			message: '#^Method App\\Infrastructure\\Stripe\\StripeClient\:\:constructWebhookEvent\(\) should return array\{id\: string, type\: string, data\: array\{object\: array\<string, mixed\>\}\} but returns array\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Infrastructure/Stripe/StripeClient.php
-		-
-			message: '#^Method App\\Infrastructure\\Stripe\\StripeClient\:\:constructWebhookEvent\(\) should return array\{id\: string, type\: string, data\: array\{object\: array\<string, mixed\>\}\} but returns non\-empty\-array\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Infrastructure/Stripe/StripeClient.php
+			path: app/Services/Payments/CreateCheckoutService.php
 		-
 			message: '#^Method Tests\\Feature\\PaymentCheckoutTest\:\:createAwaitingPaymentOrder\(\) should return App\\Models\\Order but returns App\\Models\\Order\|null\.$#'
 			identifier: return.type
@@ -94,12 +74,12 @@ parameters:
 			message: '#^Cannot access property \$cancel_reason on App\\Models\\Order\|null\.$#'
 			identifier: property.nonObject
 			count: 1
-			path: tests/Feature/StockEventsHandlerTest.php
+			path: tests/Feature/StockSagaFlowTest.php
 		-
 			message: '#^Cannot access property \$status on App\\Models\\Order\|null\.$#'
 			identifier: property.nonObject
 			count: 6
-			path: tests/Feature/StockEventsHandlerTest.php
+			path: tests/Feature/StockSagaFlowTest.php
 		-
 			message: '#^Method Tests\\Feature\\StripeWebhookTest\:\:createOrderWithItem\(\) should return App\\Models\\Order but returns App\\Models\\Order\|null\.$#'
 			identifier: return.type
@@ -126,22 +106,17 @@ parameters:
 			count: 2
 			path: tests/Unit/ConfirmOrderFromPaymentTest.php
 		-
-			message: '#^Offset ''status'' might not exist on array\{status\: int, body\: array\<string, mixed\>\}\|null\.$#'
-			identifier: offsetAccess.notFound
-			count: 1
-			path: tests/Unit/IdempotencyServiceTest.php
-		-
-			message: '#^Method Tests\\Unit\\PaymentServiceWebhookUnitTest\:\:createOrder\(\) should return App\\Models\\Order but returns App\\Models\\Order\|null\.$#'
+			message: '#^Method Tests\\Unit\\StripeWebhookPipelineUnitTest\:\:createOrder\(\) should return App\\Models\\Order but returns App\\Models\\Order\|null\.$#'
 			identifier: return.type
 			count: 1
-			path: tests/Unit/PaymentServiceWebhookUnitTest.php
+			path: tests/Unit/StripeWebhookPipelineUnitTest.php
 		-
 			message: '#^Cannot access property \$cancel_reason on App\\Models\\Order\|null\.$#'
 			identifier: property.nonObject
 			count: 1
-			path: tests/Unit/StockEventsHandlerUnitTest.php
+			path: tests/Unit/StockSagaFlowUnitTest.php
 		-
 			message: '#^Cannot access property \$status on App\\Models\\Order\|null\.$#'
 			identifier: property.nonObject
 			count: 5
-			path: tests/Unit/StockEventsHandlerUnitTest.php
+			path: tests/Unit/StockSagaFlowUnitTest.php

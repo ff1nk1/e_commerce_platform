@@ -23,9 +23,10 @@ flowchart LR
 
 Ключевые файлы:
 
-- Create/cancel/ship: [`app/Services/Order/`](app/Services/Order/)
-- Checkout/webhooks: [`app/Services/Payment/`](app/Services/Payment/)
-- Outbox: [`app/Services/OutboxWriter.php`](app/Services/OutboxWriter.php)
+- Create/cancel/ship: [`app/Services/Orders/`](app/Services/Orders/)
+- Checkout/webhooks: [`app/Services/Payments/`](app/Services/Payments/)
+- Stock saga steps: [`app/Services/Stock/`](app/Services/Stock/)
+- Outbox: [`app/Listeners/WriteOutboxableToOutbox.php`](app/Listeners/WriteOutboxableToOutbox.php)
 - Routes: [`routes/api.php`](routes/api.php)
 - Workers: `kafka:consume:product-events`, `kafka:consume:stock-events`, `ecotone:run kafka-outbox`, `ecotone:run inbox` ([`compose.yml`](compose.yml))
 
@@ -169,10 +170,12 @@ sequenceDiagram
 
 | Path | Role |
 |------|------|
-| `app/Domain/OrderStatus.php` | enum статусов |
-| `app/Domain/Money.php` | денежная арифметика (bcmath) |
-| `app/Services/Order/*` | create/query/cancel/ship/payloads/stock release |
-| `app/Services/Payment/*` | checkout + webhook confirm/fail |
+| `app/Enums/OrderStatus.php` | enum статусов |
+| `app/ValueObjects/Money.php` | денежная арифметика (bcmath) |
+| `app/DTO/Orders/*` | create/query/cancel/ship payloads, events DTO |
+| `app/Services/Orders/*` | create/query/cancel/ship |
+| `app/Services/Payments/*` | checkout + webhook confirm/fail |
+| `app/Services/Stock/*` | reserve/commit/release steps |
 | `app/Contracts/*` | IdempotencyStore, SagaStepStore, PaymentGateway, Outboxable |
 | `app/Kafka/Handlers/*` | product/stock consumers |
 | `app/Console/Commands/Kafka*.php` | workers |

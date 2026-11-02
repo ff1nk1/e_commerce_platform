@@ -5,16 +5,15 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Kafka\Handlers\UserEventsHandler;
-use App\Mail\MailableRegistry;
 use App\Mail\WelcomeMail;
 use App\Messaging\UserNotification;
-use App\Models\EmailLog;
-use App\Services\Mail\MailSender;
+use App\Models\Notification;
+use App\Services\Notifications\RetryingMailSender;
 use Illuminate\Mail\PendingMail;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Sleep;
 use Junges\Kafka\Facades\Kafka;
 use Mockery;
-use Mockery\MockInterface;
 use Shop\Messaging\InboundEnvelope;
 use Shop\Messaging\OutboxQueue;
 use Tests\TestCase;
@@ -24,7 +23,7 @@ final class UserEventsHandlerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        EmailLog::query()->truncate();
+        Notification::query()->truncate();
     }
 
     protected function tearDown(): void
@@ -49,7 +48,7 @@ final class UserEventsHandlerTest extends TestCase
             return $mail->hasTo('new@example.com');
         });
 
-        $log = EmailLog::query()->where('email', 'new@example.com')->first();
+        $log = Notification::query()->where('email', 'new@example.com')->first();
         $this->assertNotNull($log);
         $this->assertSame('sent', $log->status);
         $this->assertSame('user.registered', $log->event_type);
@@ -67,7 +66,7 @@ final class UserEventsHandlerTest extends TestCase
         ], 'user.updated'));
 
         Mail::assertNothingSent();
-        $this->assertSame(0, EmailLog::query()->count());
+        $this->assertSame(0, Notification::query()->count());
         Kafka::assertNothingPublished();
     }
 
@@ -84,7 +83,7 @@ final class UserEventsHandlerTest extends TestCase
         resolve(UserEventsHandler::class)->onInbound($message);
 
         Mail::assertNothingSent();
-        $this->assertSame(0, EmailLog::query()->count());
+        $this->assertSame(0, Notification::query()->count());
         Kafka::assertNothingPublished();
     }
 
@@ -104,14 +103,14 @@ final class UserEventsHandlerTest extends TestCase
         resolve(UserEventsHandler::class)->onInbound($message);
 
         Mail::assertSent(WelcomeMail::class, 1);
-        $this->assertSame(1, EmailLog::query()->where('message_id', 'idempotent-user-1')->count());
+        $this->assertSame(1, Notification::query()->where('message_id', 'idempotent-user-1')->count());
     }
 
     public function test_handler_marks_failed_and_publishes_to_dlq_after_retries_exhausted(): void
     {
         Kafka::fake();
 
-        $maxRetries = MailSender::MAX_RETRIES;
+        $maxRetries = RetryingMailSender::MAX_RETRIES;
         $pendingMailMock = Mockery::mock(PendingMail::class);
         $pendingMailMock->shouldReceive('send')
             ->times($maxRetries)
@@ -122,11 +121,7 @@ final class UserEventsHandlerTest extends TestCase
             ->with('dlq@example.com')
             ->andReturn($pendingMailMock);
 
-        /** @var MailSender&MockInterface $sender */
-        $sender = Mockery::mock(MailSender::class, [new MailableRegistry])->makePartial();
-        $sender->shouldAllowMockingProtectedMethods();
-        $sender->shouldReceive('sleepInTest')->times($maxRetries - 1);
-        $this->app->instance(MailSender::class, $sender);
+        Sleep::fake();
 
         $handler = resolve(UserEventsHandler::class);
         $handler->onInbound($this->message([
@@ -135,7 +130,7 @@ final class UserEventsHandlerTest extends TestCase
             'user_id' => 42,
         ], 'user.registered', '42'));
 
-        $log = EmailLog::query()->where('email', 'dlq@example.com')->first();
+        $log = Notification::query()->where('email', 'dlq@example.com')->first();
         $this->assertNotNull($log);
         $this->assertEquals('failed', $log->status);
         $this->assertTrue((bool) $log->moved_to_dlq);
@@ -159,7 +154,7 @@ final class UserEventsHandlerTest extends TestCase
 
         resolve(UserEventsHandler::class)->onInbound($message);
 
-        $this->assertSame(0, EmailLog::query()->count());
+        $this->assertSame(0, Notification::query()->count());
         Kafka::assertNothingPublished();
     }
 

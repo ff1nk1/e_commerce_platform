@@ -6,9 +6,10 @@ namespace App\Http\Controllers;
 
 use App\Contracts\PaymentGateway;
 use App\DTO\Payments\StripeCheckoutSession;
+use App\DTO\Payments\WebhookEvent;
 use App\Enums\StripeWebhookType;
-use App\Services\Payment\ConfirmOrderService;
-use App\Services\Payment\FailPaymentService;
+use App\Services\Payments\ConfirmPaymentService;
+use App\Services\Payments\FailPaymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -19,7 +20,7 @@ final class StripeWebhookController extends Controller
 {
     public function __construct(
         private PaymentGateway $stripe,
-        private ConfirmOrderService $confirm,
+        private ConfirmPaymentService $confirm,
         private FailPaymentService $fail,
     ) {}
 
@@ -53,22 +54,14 @@ final class StripeWebhookController extends Controller
         return response()->json(['received' => true]);
     }
 
-    /**
-     * @param  array<string, mixed>  $event
-     */
-    private function dispatchWebhook(array $event): void
+    private function dispatchWebhook(WebhookEvent $event): void
     {
-        $type = $event['type'] ?? null;
-        $data = $event['data'] ?? null;
-        $object = is_array($data) ? ($data['object'] ?? null) : null;
-
-        if (! is_array($object)) {
+        $session = $event->session;
+        if (! $session instanceof StripeCheckoutSession) {
             return;
         }
 
-        $session = StripeCheckoutSession::fromArray($object);
-
-        match (is_string($type) ? StripeWebhookType::tryFrom($type) : null) {
+        match ($event->type) {
             StripeWebhookType::CheckoutSessionCompleted => $this->confirm->handle($session),
             StripeWebhookType::CheckoutSessionExpired => $this->fail->handle($session),
             default => null,

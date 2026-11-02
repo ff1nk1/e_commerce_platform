@@ -1653,7 +1653,7 @@ paths:
                       data:
                         type: array
                         items:
-                          $ref: "#/components/schemas/EmailLog"
+                          $ref: "#/components/schemas/Notification"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1680,7 +1680,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/EmailLog"
+                $ref: "#/components/schemas/Notification"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1714,7 +1714,7 @@ paths:
                   message:
                     type: string
                   data:
-                    $ref: "#/components/schemas/EmailLog"
+                    $ref: "#/components/schemas/Notification"
         "400":
           description: SMTP не принял письмо
           content:
@@ -2639,7 +2639,7 @@ components:
                   $ref: "#/components/schemas/ProductCard"
               created_at:
                 type: [string, "null"]
-    EmailLog:
+    Notification:
       type: object
       properties:
         _id:

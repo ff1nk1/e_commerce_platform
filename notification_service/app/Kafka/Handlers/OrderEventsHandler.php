@@ -5,22 +5,24 @@ declare(strict_types=1);
 namespace App\Kafka\Handlers;
 
 use App\Enums\NotificationEventType;
-use App\Kafka\KafkaMailPipeline;
 use App\Messaging\OrderNotification;
+use App\ValueObjects\AllowedEventTypes;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Shop\Messaging\EnvelopeMessage;
 
 final class OrderEventsHandler
 {
-    /** @var list<NotificationEventType> */
-    public const ALLOWED_TYPES = [
-        NotificationEventType::OrderPaid,
-        NotificationEventType::OrderConfirmed,
-        NotificationEventType::OrderCancelled,
-    ];
+    private function allowedTypes(): AllowedEventTypes
+    {
+        return AllowedEventTypes::of(
+            NotificationEventType::OrderPaid,
+            NotificationEventType::OrderConfirmed,
+            NotificationEventType::OrderCancelled,
+        );
+    }
 
     public function __construct(
-        private KafkaMailPipeline $pipeline,
+        private NotificationEventsHandler $pipeline,
     ) {}
 
     #[EventHandler(endpointId: 'notification.order')]
@@ -33,7 +35,7 @@ final class OrderEventsHandler
     {
         $this->pipeline->handle(
             $message,
-            self::ALLOWED_TYPES,
+            $this->allowedTypes(),
             (string) config('kafka.topics.order_events', 'order.events'),
             (string) config('kafka.topics.order_events_dlq', 'order.events.dlq'),
         );

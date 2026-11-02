@@ -4,14 +4,13 @@ declare(strict_types=1);
 
 namespace App\Messaging;
 
-use App\DTO\Orders\OrderNotification;
-use App\Enums\CancelReason;
 use App\Enums\FulfillmentState;
 use App\Enums\OrderStatus;
-use App\Events\OrderCancelled;
 use App\Models\Order;
-use App\Services\Order\RequestStockCommitService;
-use App\Services\Order\RequestStockReleaseService;
+use App\Services\Stock\CancelUnreservedOrderService;
+use App\Services\Stock\MarkAwaitingPaymentService;
+use App\Services\Stock\RequestStockCommitService;
+use App\Services\Stock\RequestStockReleaseService;
 use App\Support\KafkaPayload;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Ecotone\Modelling\Attribute\Identifier;
@@ -39,8 +38,11 @@ final class OrderFulfillment
     }
 
     #[EventHandler]
-    public function onStockReserved(StockReserved $event, RequestStockReleaseService $release): void
-    {
+    public function onStockReserved(
+        StockReserved $event,
+        RequestStockReleaseService $release,
+        MarkAwaitingPaymentService $markAwaitingPayment,
+    ): void {
         $body = $event->envelope->payload;
         $orderId = $body['order_id'] ?? null;
         if (! is_numeric($orderId)) {
@@ -70,14 +72,13 @@ final class OrderFulfillment
         }
 
         if ($status === OrderStatus::Pending && $this->state === FulfillmentState::Placed) {
-            $order->markAwaitingPayment();
-            $order->save();
+            $markAwaitingPayment->handle($order);
             $this->state = FulfillmentState::StockReserved;
         }
     }
 
     #[EventHandler]
-    public function onStockReservationFailed(StockReservationFailed $event): void
+    public function onStockReservationFailed(StockReservationFailed $event, CancelUnreservedOrderService $cancelUnreserved): void
     {
         if ($this->state === FulfillmentState::ReservationFailed) {
             return;
@@ -95,17 +96,7 @@ final class OrderFulfillment
             return;
         }
 
-        if ($order->statusEnum() !== OrderStatus::Pending) {
-            return;
-        }
-
-        $order->cancel();
-        $order->cancel_reason = CancelReason::InsufficientStock->value;
-        $order->save();
-
-        event(new OrderCancelled(
-            OrderNotification::fromOrder($order, ['reason' => CancelReason::InsufficientStock->value])->toArray()
-        ));
+        $cancelUnreserved->handle($order);
 
         $this->state = FulfillmentState::ReservationFailed;
     }

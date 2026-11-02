@@ -5,20 +5,20 @@ declare(strict_types=1);
 namespace App\Kafka\Handlers;
 
 use App\Enums\NotificationEventType;
-use App\Kafka\KafkaMailPipeline;
 use App\Messaging\UserNotification;
+use App\ValueObjects\AllowedEventTypes;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Shop\Messaging\EnvelopeMessage;
 
 final class UserEventsHandler
 {
-    /** @var list<NotificationEventType> */
-    public const ALLOWED_TYPES = [
-        NotificationEventType::UserRegistered,
-    ];
+    private function allowedTypes(): AllowedEventTypes
+    {
+        return AllowedEventTypes::of(NotificationEventType::UserRegistered);
+    }
 
     public function __construct(
-        private KafkaMailPipeline $pipeline,
+        private NotificationEventsHandler $pipeline,
     ) {}
 
     #[EventHandler(endpointId: 'notification.user')]
@@ -31,7 +31,7 @@ final class UserEventsHandler
     {
         $this->pipeline->handle(
             $message,
-            self::ALLOWED_TYPES,
+            $this->allowedTypes(),
             (string) config('kafka.topics.user_events', 'user.events'),
             (string) config('kafka.topics.user_events_dlq', 'user.events.dlq'),
         );

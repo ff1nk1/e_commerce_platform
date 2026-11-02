@@ -4,17 +4,13 @@ declare(strict_types=1);
 
 namespace App\Contracts;
 
+use App\DTO\Orders\IdempotentResponse;
+
 interface IdempotencyStore
 {
-    /**
-     * @return array{status: int, body: array<string, mixed>}|null
-     */
-    public function get(string $scopeKey): ?array;
+    public function get(string $scopeKey): ?IdempotentResponse;
 
-    /**
-     * @param  array<string, mixed>  $body
-     */
-    public function put(string $scopeKey, int $status, array $body): void;
+    public function put(string $scopeKey, IdempotentResponse $response): void;
 
     public function acquireLock(string $scopeKey): bool;
 

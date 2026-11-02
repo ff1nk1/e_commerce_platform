@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\DTO\Orders;
 
+use App\Enums\CancelReason;
 use App\Models\Order;
 
 final readonly class OrderNotification
@@ -15,10 +16,7 @@ final readonly class OrderNotification
         private array $payload,
     ) {}
 
-    /**
-     * @param  array<string, mixed>  $extra
-     */
-    public static function fromOrder(Order $order, array $extra = []): self
+    public static function fromOrder(Order $order, ?CancelReason $reason = null): self
     {
         $order->loadMissing('items.productSnapshot');
 
@@ -37,7 +35,11 @@ final readonly class OrderNotification
             $payload['saga_id'] = $order->saga_id;
         }
 
-        return new self(array_merge($payload, $extra));
+        if ($reason instanceof CancelReason) {
+            $payload['reason'] = $reason->value;
+        }
+
+        return new self($payload);
     }
 
     /**

@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Infrastructure\Stripe;
 
 use App\Contracts\PaymentGateway;
+use App\DTO\Payments\CheckoutSessionParams;
+use App\DTO\Payments\RefundResult;
 use App\DTO\Payments\StripeCheckoutSession;
+use App\DTO\Payments\WebhookEvent;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
@@ -22,9 +25,9 @@ class StripeClient implements PaymentGateway
 {
     private const SIGNATURE_TOLERANCE_SECONDS = 300;
 
-    public function createCheckoutSession(array $params, string $idempotencyKey): StripeCheckoutSession
+    public function createCheckoutSession(CheckoutSessionParams $params, string $idempotencyKey): StripeCheckoutSession
     {
-        return StripeCheckoutSession::fromArray($this->request('post', 'checkout/sessions', $params, $idempotencyKey));
+        return StripeCheckoutSession::fromArray($this->request('post', 'checkout/sessions', $params->toArray(), $idempotencyKey));
     }
 
     public function retrieveCheckoutSession(string $sessionId): StripeCheckoutSession
@@ -39,20 +42,17 @@ class StripeClient implements PaymentGateway
         );
     }
 
-    public function refundPaymentIntent(string $paymentIntentId, ?int $amountMinor, string $idempotencyKey): array
+    public function refundPaymentIntent(string $paymentIntentId, ?int $amountMinor, string $idempotencyKey): RefundResult
     {
         $params = ['payment_intent' => $paymentIntentId];
         if ($amountMinor !== null) {
             $params['amount'] = $amountMinor;
         }
 
-        return $this->request('post', 'refunds', $params, $idempotencyKey);
+        return RefundResult::fromArray($this->request('post', 'refunds', $params, $idempotencyKey));
     }
 
-    /**
-     * @return array{id: string, type: string, data: array{object: array<string, mixed>}}
-     */
-    public function constructWebhookEvent(string $payload, string $signatureHeader): array
+    public function constructWebhookEvent(string $payload, string $signatureHeader): WebhookEvent
     {
         $secret = (string) config('services.stripe.webhook_secret');
         throw_if($secret === '', RuntimeException::class, 'STRIPE_WEBHOOK_SECRET is not configured.');
@@ -60,7 +60,7 @@ class StripeClient implements PaymentGateway
         if (class_exists(Webhook::class)) {
             $event = Webhook::constructEvent($payload, $signatureHeader, $secret);
 
-            return $event->toArray();
+            return WebhookEvent::fromArray($event->toArray());
         }
 
         $this->verifySignature($payload, $signatureHeader, $secret);
@@ -68,7 +68,7 @@ class StripeClient implements PaymentGateway
         $decoded = json_decode($payload, true);
         throw_if(! is_array($decoded) || ! isset($decoded['type'], $decoded['data']['object']), UnexpectedValueException::class, 'Invalid Stripe webhook payload.');
 
-        return $decoded;
+        return WebhookEvent::fromArray($decoded);
     }
 
     /**

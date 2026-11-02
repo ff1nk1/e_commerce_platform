@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Payments\RefundResult;
 use App\Infrastructure\Stripe\StripeIdempotencyKey;
 use App\Messaging\RefundOrphanPayment;
 use App\Messaging\RefundOrphanPaymentHandler;
@@ -51,7 +52,7 @@ final class RefundOrphanPaymentHandlerTest extends TestCase
                 null,
                 StripeIdempotencyKey::forOrder($order->id, 'refund', 'pi_orphan'),
             )
-            ->andReturn(['id' => 're_1']);
+            ->andReturn(RefundResult::fromArray(['id' => 're_1']));
 
         resolve(RefundOrphanPaymentHandler::class)->onRefund(new RefundOrphanPayment(
             (int) $payment->id,

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
-use App\DTO\Notifications\NotificationMailData;
+use App\DTO\Notifications\OrderMailData;
 use App\Mail\OrderCancelledMail;
 use App\Mail\OrderConfirmedMail;
 use App\Mail\OrderPaidMail;
@@ -14,7 +14,7 @@ final class OrderMailTest extends TestCase
 {
     public function test_order_paid_mail_subject_and_body(): void
     {
-        $mail = new OrderPaidMail(NotificationMailData::fromArray([
+        $mail = new OrderPaidMail(OrderMailData::fromArray([
             'order_id' => 10,
             'email' => 'a@example.com',
             'name' => 'Анна',
@@ -29,7 +29,7 @@ final class OrderMailTest extends TestCase
 
     public function test_order_confirmed_mail_subject_and_body(): void
     {
-        $mail = new OrderConfirmedMail(NotificationMailData::fromArray([
+        $mail = new OrderConfirmedMail(OrderMailData::fromArray([
             'order_id' => 11,
             'email' => 'b@example.com',
             'name' => 'Борис',
@@ -43,7 +43,7 @@ final class OrderMailTest extends TestCase
 
     public function test_order_cancelled_mail_shows_insufficient_stock_reason(): void
     {
-        $mail = new OrderCancelledMail(NotificationMailData::fromArray([
+        $mail = new OrderCancelledMail(OrderMailData::fromArray([
             'order_id' => 12,
             'email' => 'c@example.com',
             'name' => 'Виктор',
@@ -57,7 +57,7 @@ final class OrderMailTest extends TestCase
 
     public function test_order_cancelled_mail_shows_user_cancelled_reason(): void
     {
-        $mail = new OrderCancelledMail(NotificationMailData::fromArray([
+        $mail = new OrderCancelledMail(OrderMailData::fromArray([
             'order_id' => 13,
             'email' => 'd@example.com',
             'name' => 'Дима',

@@ -6,10 +6,11 @@ namespace Tests\Feature;
 
 use App\Mail\OrderConfirmedMail;
 use App\Mail\OrderPaidMail;
-use App\Models\EmailLog;
-use App\Services\Mail\MailSender;
+use App\Models\Notification;
+use App\Services\Notifications\RetryingMailSender;
 use Illuminate\Mail\PendingMail;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Sleep;
 use Mockery;
 use Tests\TestCase;
 
@@ -18,7 +19,7 @@ final class NotificationsApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        EmailLog::query()->truncate();
+        Notification::query()->truncate();
     }
 
     protected function tearDown(): void
@@ -29,7 +30,7 @@ final class NotificationsApiTest extends TestCase
 
     public function test_index_returns_paginated_notifications(): void
     {
-        EmailLog::factory()->count(3)->create(['status' => 'sent']);
+        Notification::factory()->count(3)->create(['status' => 'sent']);
 
         $response = $this->getJson('/api/notifications?per_page=2');
 
@@ -41,12 +42,12 @@ final class NotificationsApiTest extends TestCase
 
     public function test_index_filters_by_status_email_and_event_type(): void
     {
-        EmailLog::factory()->create([
+        Notification::factory()->create([
             'email' => 'keep@example.com',
             'status' => 'failed',
             'event_type' => 'order.paid',
         ]);
-        EmailLog::factory()->create([
+        Notification::factory()->create([
             'email' => 'other@example.com',
             'status' => 'sent',
             'event_type' => 'user.registered',
@@ -62,7 +63,7 @@ final class NotificationsApiTest extends TestCase
 
     public function test_show_returns_email_log_from_mongo(): void
     {
-        $log = EmailLog::factory()->failed('SMTP down')->create([
+        $log = Notification::factory()->failed('SMTP down')->create([
             'email' => 'a@example.com',
             'name' => 'A',
             'event_type' => 'order.paid',
@@ -82,7 +83,7 @@ final class NotificationsApiTest extends TestCase
     {
         Mail::fake();
 
-        $log = EmailLog::factory()->failed()->create([
+        $log = Notification::factory()->failed()->create([
             'event_type' => 'order.paid',
             'email' => 'buyer@example.com',
             'payload' => [
@@ -107,7 +108,7 @@ final class NotificationsApiTest extends TestCase
     {
         Mail::fake();
 
-        $log = EmailLog::factory()->sent()->create();
+        $log = Notification::factory()->sent()->create();
 
         $response = $this->postJson('/api/notifications/'.$log->id.'/resend');
 
@@ -126,13 +127,13 @@ final class NotificationsApiTest extends TestCase
             'items' => [],
         ];
 
-        $paid = EmailLog::factory()->failed()->create([
+        $paid = Notification::factory()->failed()->create([
             'event_type' => 'order.paid',
             'email' => 'buyer@example.com',
             'payload' => array_merge($sharedPayload, ['event_type' => 'order.paid']),
         ]);
 
-        $confirmed = EmailLog::factory()->failed()->create([
+        $confirmed = Notification::factory()->failed()->create([
             'event_type' => 'order.confirmed',
             'email' => 'buyer@example.com',
             'payload' => array_merge($sharedPayload, ['event_type' => 'order.confirmed']),
@@ -149,7 +150,7 @@ final class NotificationsApiTest extends TestCase
     {
         Mail::fake();
 
-        $log = EmailLog::factory()->failed()->create([
+        $log = Notification::factory()->failed()->create([
             'event_type' => null,
             'email' => 'buyer@example.com',
             'payload' => [
@@ -172,7 +173,7 @@ final class NotificationsApiTest extends TestCase
     {
         Mail::fake();
 
-        $log = EmailLog::factory()->failed()->create([
+        $log = Notification::factory()->failed()->create([
             'event_type' => null,
             'email' => 'buyer@example.com',
             'payload' => [
@@ -190,7 +191,9 @@ final class NotificationsApiTest extends TestCase
 
     public function test_resend_returns_400_when_smtp_fails(): void
     {
-        $maxRetries = MailSender::MAX_RETRIES;
+        Sleep::fake();
+
+        $maxRetries = RetryingMailSender::MAX_RETRIES;
 
         $pendingMailMock = Mockery::mock(PendingMail::class);
         $pendingMailMock->shouldReceive('send')
@@ -201,7 +204,7 @@ final class NotificationsApiTest extends TestCase
             ->times($maxRetries)
             ->andReturn($pendingMailMock);
 
-        $log = EmailLog::factory()->failed()->create([
+        $log = Notification::factory()->failed()->create([
             'email' => 'fail@example.com',
             'event_type' => 'user.registered',
             'payload' => [

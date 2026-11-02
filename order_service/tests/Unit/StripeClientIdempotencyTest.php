@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\DTO\Payments\CheckoutLineItems;
+use App\DTO\Payments\CheckoutSessionParams;
+use App\DTO\Payments\CheckoutUrls;
 use App\Infrastructure\Stripe\StripeClient;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -32,6 +35,17 @@ final class StripeClientIdempotencyTest extends TestCase
         $client = new StripeClient;
 
         $this->expectException(RuntimeException::class);
-        $client->createCheckoutSession(['mode' => 'payment'], '');
+        $client->createCheckoutSession(
+            new CheckoutSessionParams(
+                urls: new CheckoutUrls('https://shop.test/ok', 'https://shop.test/cancel'),
+                mode: 'payment',
+                clientReferenceId: '1',
+                orderId: 1,
+                paymentId: 1,
+                expiresAt: 0,
+                lineItems: new CheckoutLineItems([]),
+            ),
+            ''
+        );
     }
 }

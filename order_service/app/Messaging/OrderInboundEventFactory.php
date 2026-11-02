@@ -14,8 +14,6 @@ final class OrderInboundEventFactory implements InboundEventFactory
     {
         return match (OrderEventType::tryFrom($envelope->eventType)) {
             OrderEventType::ProductCreated, OrderEventType::ProductUpdated => new ProductSnapshotReceived($envelope),
-            OrderEventType::StockReserved => new StockReserved($envelope),
-            OrderEventType::StockReservationFailed => new StockReservationFailed($envelope),
             default => null,
         };
     }

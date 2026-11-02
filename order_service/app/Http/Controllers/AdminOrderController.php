@@ -6,9 +6,9 @@ namespace App\Http\Controllers;
 
 use App\DTO\Orders\OrderView;
 use App\Http\Requests\AdminListOrdersRequest;
-use App\Services\Order\FindOrderService;
-use App\Services\Order\ListAllOrdersService;
-use App\Services\Order\ShipOrderService;
+use App\Services\Orders\FindOrderService;
+use App\Services\Orders\ListAllOrdersService;
+use App\Services\Orders\ShipOrderService;
 use Illuminate\Http\JsonResponse;
 
 final class AdminOrderController extends Controller

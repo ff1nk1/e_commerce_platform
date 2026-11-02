@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Models\EmailLog;
-use App\Services\Mail\SendNotificationMailService;
+use App\DTO\Notifications\OrderMailData;
+use App\Enums\NotificationEventType;
+use App\Models\Notification;
+use App\Services\Notifications\SendNotificationService;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -41,7 +43,7 @@ final class WelcomeMailMailhogTest extends TestCase
             'mail.mailers.smtp.password' => null,
         ]);
 
-        EmailLog::query()->truncate();
+        Notification::query()->truncate();
 
         if (! $this->mailpitIsReachable()) {
             $this->markTestSkipped('Mailpit is not running at '.$this->mailpitApiBase.'.');
@@ -58,11 +60,11 @@ final class WelcomeMailMailhogTest extends TestCase
             'name' => 'Mailhog User',
         ];
 
-        $result = resolve(SendNotificationMailService::class)->handle($payload, 'user.registered');
+        $result = resolve(SendNotificationService::class)->handle(OrderMailData::fromArray($payload), NotificationEventType::UserRegistered);
 
         $this->assertTrue($result->isSent);
-        $result->emailLog->refresh();
-        $this->assertEquals('sent', $result->emailLog->status);
+        $result->notification->refresh();
+        $this->assertEquals('sent', $result->notification->status);
 
         $this->assertDatabaseHas('email_logs', [
             'email' => $email,
