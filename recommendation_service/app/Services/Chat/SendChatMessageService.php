@@ -8,14 +8,18 @@ use App\Contracts\LlmClient;
 use App\Contracts\ProductFreshnessChecker;
 use App\Contracts\RelevanceGate;
 use App\DTO\Catalog\AttributeConstraint;
+use App\DTO\Catalog\AttributeConstraintBuckets;
+use App\DTO\Catalog\ProductCard;
+use App\DTO\Catalog\RelaxationStep;
 use App\DTO\Catalog\SearchHit;
+use App\DTO\Chat\ChatExtractionResult;
 use App\DTO\Chat\ChatMessage;
 use App\DTO\Chat\ChatReply;
 use App\DTO\Chat\ChatTurn;
+use App\DTO\Chat\ExtractedFilters;
 use App\DTO\Chat\SearchFilters;
 use App\Enums\EmbedTask;
 use App\Enums\MessageRole;
-use App\Infrastructure\Llm\Gemini\GeminiLlmClient;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Services\Catalog\AttributeConstraintDetector;
@@ -82,9 +86,7 @@ PROMPT;
             ->reverse()
             ->values();
 
-        if ($this->llm instanceof GeminiLlmClient) {
-            $this->llm->startBudget((int) config('llm.gemini.timeout', 25));
-        }
+        $this->llm->startBudget((int) config('llm.gemini.timeout', 25));
 
         $relaxedLabels = [];
         $productCards = [];
@@ -96,14 +98,15 @@ PROMPT;
             $typeHint = $this->productTypeHint->resolve($messageText, $previousFilters, $clientCategory);
             $catalogAttrNames = $this->attributeVocabulary->namesForScope($typeHint);
 
-            [$extracted, $queryVector] = $this->resolveFiltersAndVector(
+            $extraction = $this->resolveFiltersAndVector(
                 $messageText,
                 $history,
                 $previousFilters,
                 $catalogAttrNames,
             );
-            $merged = $this->mergeFilters($extracted, $turn, $history, $catalogAttrNames);
+            $merged = $this->mergeFilters($extraction->filters, $turn, $history, $catalogAttrNames);
             $filters = $this->filtersNormalizer->normalize($merged);
+            $queryVector = $extraction->embedding;
             $resultLimit = max(1, min($turn->limit ?? 5, 20));
 
             if (! $filters->hasSearchIntent()) {
@@ -128,11 +131,11 @@ PROMPT;
                 $steps = 0;
                 while ($hits === [] && $steps < self::MAX_RELAXATION_STEPS) {
                     $step = $this->filtersRelaxer->relaxOnce($filters);
-                    if ($step === null) {
+                    if (! $step instanceof RelaxationStep) {
                         break;
                     }
-                    $filters = $this->filtersNormalizer->normalize($step['filters']);
-                    $relaxedLabels[] = $step['relaxed'];
+                    $filters = $this->filtersNormalizer->normalize($step->filters);
+                    $relaxedLabels[] = $step->relaxed;
                     $searchResult = $this->search->handle($filters, $resultLimit, $queryVector);
                     $hits = $searchResult->hits;
                     $steps++;
@@ -160,7 +163,7 @@ PROMPT;
                 }
 
                 $productCards = array_map(
-                    static fn (SearchHit $hit): array => $hit->product->toCardArray(),
+                    static fn (SearchHit $hit): ProductCard => ProductCard::fromModel($hit->product),
                     $hits,
                 );
 
@@ -178,15 +181,11 @@ PROMPT;
                 );
             }
         } finally {
-            if ($this->llm instanceof GeminiLlmClient) {
-                $this->llm->clearBudget();
-            }
+            $this->llm->clearBudget();
         }
 
-        $filtersPayload = $filters->toArray();
-        if ($relaxedLabels !== []) {
-            $filtersPayload['relaxed'] = $relaxedLabels;
-        }
+        $extractedFilters = new ExtractedFilters($filters, $relaxedLabels);
+        $filtersPayload = $extractedFilters->toArray();
 
         DB::transaction(function () use ($conversation, $messageText, $answer, $productCards, $filtersPayload): void {
             Message::query()->create([
@@ -199,7 +198,7 @@ PROMPT;
                 'conversation_id' => $conversation->id,
                 'role' => MessageRole::Assistant->value,
                 'content' => $answer,
-                'products' => $productCards,
+                'products' => array_map(static fn (ProductCard $card): array => $card->toArray(), $productCards),
             ]);
 
             $conversation->active_filters = $filtersPayload;
@@ -209,7 +208,7 @@ PROMPT;
         return new ChatReply(
             conversationId: (string) $conversation->id,
             answer: $answer,
-            extractedFilters: $filtersPayload,
+            extractedFilters: $extractedFilters,
             products: $productCards,
         );
     }
@@ -218,14 +217,13 @@ PROMPT;
      * @param  Collection<int, object{role: string, content: string}>|\Illuminate\Database\Eloquent\Collection<int, Message>  $history
      * @param  array<string, mixed>|null  $previousFilters
      * @param  list<string>  $catalogAttributeNames
-     * @return array{0: SearchFilters, 1: list<float>}
      */
     private function resolveFiltersAndVector(
         string $messageText,
         $history,
         ?array $previousFilters,
         array $catalogAttributeNames = [],
-    ): array {
+    ): ChatExtractionResult {
         $extractInput = FilterExtractPrompt::build($messageText, $history, $previousFilters);
 
         return $this->llm->extractFiltersAndEmbed(
@@ -255,7 +253,6 @@ PROMPT;
         );
 
         $resolved = $this->resolveAttributeBuckets($split, $catalogAttributeNames);
-
         // Client store_id wins; drop conflicting extracted store_name (and vice versa).
         $storeId = $turn->storeId ?? $extracted->storeId;
         $storeName = $turn->storeName ?? $extracted->storeName;
@@ -279,32 +276,29 @@ PROMPT;
             priceMax: $turn->priceMax !== null ? $turn->priceMax : $extracted->priceMax,
             // Keep extracted query as-is (null for chitchat); do not force raw message into query.
             query: $extracted->query,
-            attributes: $resolved['soft'],
-            requiredAttributes: $resolved['required'],
-            preferredAttributes: $resolved['preferred'],
+            attributes: $resolved->soft,
+            requiredAttributes: $resolved->required,
+            preferredAttributes: $resolved->preferred,
         );
     }
 
     /**
-     * @param  array{
-     *     required: list<AttributeConstraint>,
-     *     preferred: list<AttributeConstraint>,
-     *     soft: list<AttributeConstraint>
-     * }  $split
      * @param  list<string>  $vocabulary
-     * @return array{
-     *     required: list<AttributeConstraint>,
-     *     preferred: list<AttributeConstraint>,
-     *     soft: list<AttributeConstraint>
-     * }
      */
-    private function resolveAttributeBuckets(array $split, array $vocabulary): array
+    private function resolveAttributeBuckets(AttributeConstraintBuckets $split, array $vocabulary): AttributeConstraintBuckets
     {
         $required = [];
         $preferred = [];
         $soft = [];
 
-        foreach (['required' => $split['required'], 'preferred' => $split['preferred'], 'soft' => $split['soft']] as $bucket => $attrs) {
+        /** @var array<string, list<AttributeConstraint>> $buckets */
+        $buckets = [
+            'required' => $split->required,
+            'preferred' => $split->preferred,
+            'soft' => $split->soft,
+        ];
+
+        foreach ($buckets as $bucket => $attrs) {
             foreach ($this->attributeResolver->resolveList($attrs, $vocabulary) as $attr) {
                 // Unresolved names stay soft so bare numbers do not hard-filter wrongly.
                 if ($attr->valueOnly && $bucket !== 'soft') {
@@ -322,11 +316,11 @@ PROMPT;
             }
         }
 
-        return [
-            'required' => $required,
-            'preferred' => $preferred,
-            'soft' => $soft,
-        ];
+        return new AttributeConstraintBuckets(
+            required: $required,
+            preferred: $preferred,
+            soft: $soft,
+        );
     }
 
     /**

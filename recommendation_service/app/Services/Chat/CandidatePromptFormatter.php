@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services\Chat;
 
+use App\DTO\Catalog\ProductCard;
+
 final class CandidatePromptFormatter
 {
     /**
-     * @param  list<array<string, mixed>>  $products
+     * @param  list<ProductCard>  $products
      */
     public static function lines(array $products): string
     {
@@ -18,22 +20,17 @@ final class CandidatePromptFormatter
         $lines = [];
         foreach ($products as $i => $product) {
             $n = $i + 1;
-            $scalarPrice = isset($product['price']) && is_scalar($product['price'])
-                ? $product['price']
-                : null;
-            $priceLabel = RubDisplay::format($scalarPrice);
-            $storeDisplayName = trim((string) ($product['store_name'] ?? ''));
+            $priceLabel = RubDisplay::format($product->price);
+            $storeDisplayName = trim((string) $product->storeName);
             if ($storeDisplayName === '') {
-                $storeDisplayName = isset($product['store_id']) ? 'id '.$product['store_id'] : 'не указан';
+                $storeDisplayName = 'id '.$product->storeId;
             }
-            $attrs = self::formatAttributes(
-                is_array($product['attributes'] ?? null) ? $product['attributes'] : []
-            );
+            $attrs = self::formatAttributes($product->attributes);
             $line = sprintf(
                 '%d. id:%s | %s | %s | магазин: %s',
                 $n,
-                (string) ($product['product_id'] ?? ''),
-                $product['name'] ?? '',
+                (string) $product->productId,
+                $product->name,
                 $priceLabel,
                 $storeDisplayName,
             );
@@ -47,7 +44,7 @@ final class CandidatePromptFormatter
     }
 
     /**
-     * @param  list<array{name?: string, value?: string}|mixed>  $attributes
+     * @param  array<int, mixed>  $attributes
      */
     private static function formatAttributes(array $attributes): string
     {

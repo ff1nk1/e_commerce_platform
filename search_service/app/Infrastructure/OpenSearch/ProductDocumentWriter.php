@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Infrastructure\OpenSearch;
 
 use App\DTO\Search\ProductDocument;
-use App\Infrastructure\OpenSearch\Concerns\DeletesOpenSearchDocuments;
 use Illuminate\Support\Facades\Log;
 use OpenSearch\Client;
 use Shop\Messaging\CatalogPayloadNormalizer;
@@ -13,8 +12,6 @@ use Throwable;
 
 final class ProductDocumentWriter
 {
-    use DeletesOpenSearchDocuments;
-
     private const MAX_NAME_LENGTH = 500;
 
     private const MAX_DESCRIPTION_LENGTH = 5000;
@@ -28,6 +25,7 @@ final class ProductDocumentWriter
     public function __construct(
         private readonly Client $client,
         private readonly OpenSearchIndexManager $indices,
+        private readonly DocumentStore $documents,
         private readonly CatalogPayloadNormalizer $payloads = new CatalogPayloadNormalizer,
     ) {}
 
@@ -71,7 +69,7 @@ final class ProductDocumentWriter
     public function deleteProduct(int $id): void
     {
         $this->indices->ensureIndices();
-        $this->deleteDocument($this->indices->productsIndex(), (string) $id);
+        $this->documents->delete($this->indices->productsIndex(), (string) $id, $this->refreshOnWrite());
     }
 
     public function updateProductStock(int $productId, int $quantity): void
@@ -187,12 +185,7 @@ final class ProductDocumentWriter
         }
     }
 
-    protected function openSearchClient(): Client
-    {
-        return $this->client;
-    }
-
-    protected function refreshOnWrite(): bool
+    private function refreshOnWrite(): bool
     {
         return $this->indices->refreshOnWrite();
     }

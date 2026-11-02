@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace App\Infrastructure\OpenSearch\Concerns;
+namespace App\Infrastructure\OpenSearch;
 
 use OpenSearch\Client;
 use OpenSearch\Common\Exceptions\Missing404Exception;
 use Throwable;
 
-trait DeletesOpenSearchDocuments
+final class DocumentStore
 {
-    abstract protected function openSearchClient(): Client;
+    public function __construct(
+        private readonly Client $client,
+    ) {}
 
-    abstract protected function refreshOnWrite(): bool;
-
-    protected function deleteDocument(string $index, string $id): void
+    public function delete(string $index, string $id, bool $refresh): void
     {
         try {
-            $this->openSearchClient()->delete([
+            $this->client->delete([
                 'index' => $index,
                 'id' => $id,
-                'refresh' => $this->refreshOnWrite(),
+                'refresh' => $refresh,
             ]);
         } catch (Missing404Exception) {
             // already gone
@@ -33,7 +33,7 @@ trait DeletesOpenSearchDocuments
         }
     }
 
-    protected function isNotFound(Throwable $e): bool
+    private function isNotFound(Throwable $e): bool
     {
         $message = strtolower($e->getMessage());
 

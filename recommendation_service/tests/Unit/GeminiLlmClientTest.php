@@ -245,12 +245,12 @@ final class GeminiLlmClientTest extends TestCase
             ]),
         ]);
 
-        [$filters, $embedding] = $this->client()->extractFiltersAndEmbed('blue shoes');
+        $extraction = $this->client()->extractFiltersAndEmbed('blue shoes');
 
-        $this->assertSame('Main', $filters->storeName);
-        $this->assertSame('shoes', $filters->query);
-        $this->assertCount(768, $embedding);
-        $this->assertSame(0.2, $embedding[0]);
+        $this->assertSame('Main', $extraction->filters->storeName);
+        $this->assertSame('shoes', $extraction->filters->query);
+        $this->assertCount(768, $extraction->embedding);
+        $this->assertSame(0.2, $extraction->embedding[0]);
 
         Http::assertSentCount(2);
         Http::assertSent(function (Request $request): bool {

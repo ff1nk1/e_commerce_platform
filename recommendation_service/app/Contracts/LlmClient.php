@@ -4,12 +4,21 @@ declare(strict_types=1);
 
 namespace App\Contracts;
 
+use App\DTO\Chat\ChatExtractionResult;
 use App\DTO\Chat\ChatMessage;
 use App\DTO\Chat\SearchFilters;
 use App\Enums\EmbedTask;
 
 interface LlmClient
 {
+    /**
+     * Cap total HTTP wait for one chat turn (extract + embed + chat).
+     * Implementations without a shared budget may treat this as a no-op.
+     */
+    public function startBudget(?int $seconds = null): void;
+
+    public function clearBudget(): void;
+
     /**
      * @return list<float>
      */
@@ -30,12 +39,11 @@ interface LlmClient
      * When $embedText is null, embeds filters.query or $userMessage.
      *
      * @param  list<string>  $catalogAttributeNames
-     * @return array{0: SearchFilters, 1: list<float>}
      */
     public function extractFiltersAndEmbed(
         string $userMessage,
         EmbedTask $embedTaskType = EmbedTask::RetrievalQuery,
         ?string $embedText = null,
         array $catalogAttributeNames = [],
-    ): array;
+    ): ChatExtractionResult;
 }

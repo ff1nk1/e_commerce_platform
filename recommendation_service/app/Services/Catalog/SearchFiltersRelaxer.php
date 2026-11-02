@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Catalog;
 
 use App\DTO\Catalog\AttributeConstraint;
+use App\DTO\Catalog\RelaxationStep;
 use App\DTO\Chat\SearchFilters;
 use App\Support\RuText;
 
@@ -17,42 +18,40 @@ final class SearchFiltersRelaxer
 
     /**
      * Drop one constraint. Returns null when nothing left to relax.
-     *
-     * @return array{filters: SearchFilters, relaxed: string}|null
      */
-    public function relaxOnce(SearchFilters $filters): ?array
+    public function relaxOnce(SearchFilters $filters): ?RelaxationStep
     {
         foreach (self::PREFERRED_DROP_ORDER as $canonical) {
             $fromPreferred = $this->dropNamedAttribute($filters->preferredAttributes, $canonical);
             if ($fromPreferred !== null) {
-                return [
-                    'filters' => $filters->withAttributeBuckets(
+                return new RelaxationStep(
+                    filters: $filters->withAttributeBuckets(
                         attributes: $filters->attributes,
                         requiredAttributes: $filters->requiredAttributes,
                         preferredAttributes: $fromPreferred['kept'],
                     ),
-                    'relaxed' => $fromPreferred['label'],
-                ];
+                    relaxed: $fromPreferred['label'],
+                );
             }
 
             $fromRequired = $this->dropNamedAttribute($filters->requiredAttributes, $canonical);
             if ($fromRequired !== null) {
-                return [
-                    'filters' => $filters->withAttributeBuckets(
+                return new RelaxationStep(
+                    filters: $filters->withAttributeBuckets(
                         attributes: $filters->attributes,
                         requiredAttributes: $fromRequired['kept'],
                         preferredAttributes: $filters->preferredAttributes,
                     ),
-                    'relaxed' => $fromRequired['label'],
-                ];
+                    relaxed: $fromRequired['label'],
+                );
             }
         }
 
         if ($filters->storeName !== null) {
-            return [
-                'filters' => $filters->withoutStoreName(),
-                'relaxed' => 'store_name='.$filters->storeName,
-            ];
+            return new RelaxationStep(
+                filters: $filters->withoutStoreName(),
+                relaxed: 'store_name='.$filters->storeName,
+            );
         }
 
         if ($filters->priceMin !== null || $filters->priceMax !== null) {
@@ -64,10 +63,10 @@ final class SearchFiltersRelaxer
                 $relaxedPriceLabel .= ' max='.$filters->priceMax;
             }
 
-            return [
-                'filters' => $filters->withoutPriceRange(),
-                'relaxed' => trim($relaxedPriceLabel),
-            ];
+            return new RelaxationStep(
+                filters: $filters->withoutPriceRange(),
+                relaxed: trim($relaxedPriceLabel),
+            );
         }
 
         return null;

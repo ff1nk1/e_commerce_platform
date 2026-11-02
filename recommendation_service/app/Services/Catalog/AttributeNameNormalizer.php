@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Catalog;
 
+use App\DTO\Catalog\AttributeCollection;
+use App\DTO\Catalog\AttributeConstraint;
 use App\Support\RuText;
 
 /**
@@ -49,22 +51,21 @@ final class AttributeNameNormalizer
     }
 
     /**
-     * @param  list<array{name: string, value: string}>  $attributes
-     * @return list<array{name: string, value: string}>
+     * @param  list<AttributeConstraint>  $attributes
      */
-    public function normalizeList(array $attributes): array
+    public function normalizeList(array $attributes): AttributeCollection
     {
         $out = [];
         foreach ($attributes as $row) {
-            $name = $this->canonicalize((string) $row['name']);
-            $value = trim((string) $row['value']);
+            $name = $this->canonicalize($row->name);
+            $value = trim($row->value);
             if ($name === '' || $value === '') {
                 continue;
             }
-            $out[] = ['name' => $name, 'value' => $value];
+            $out[] = new AttributeConstraint(name: $name, value: $value, valueOnly: $row->valueOnly);
         }
 
-        return $out;
+        return AttributeCollection::fromConstraints($out);
     }
 
     private function normalizeKey(string $value): string

@@ -5,13 +5,10 @@ declare(strict_types=1);
 namespace App\Infrastructure\OpenSearch;
 
 use App\DTO\Search\CategoryDocument;
-use App\Infrastructure\OpenSearch\Concerns\DeletesOpenSearchDocuments;
 use OpenSearch\Client;
 
 final class CategoryDocumentWriter
 {
-    use DeletesOpenSearchDocuments;
-
     private const MAX_NAME_LENGTH = 255;
 
     private const MAX_SLUG_LENGTH = 255;
@@ -19,6 +16,7 @@ final class CategoryDocumentWriter
     public function __construct(
         private readonly Client $client,
         private readonly OpenSearchIndexManager $indices,
+        private readonly DocumentStore $documents,
     ) {}
 
     public function indexCategory(CategoryDocument $document): void
@@ -49,7 +47,7 @@ final class CategoryDocumentWriter
     public function deleteCategory(int $id): void
     {
         $this->indices->ensureIndices();
-        $this->deleteDocument($this->indices->categoriesIndex(), (string) $id);
+        $this->documents->delete($this->indices->categoriesIndex(), (string) $id, $this->refreshOnWrite());
     }
 
     public function syncCategoryNameOnProducts(int $categoryId, string $categoryName): void
@@ -77,12 +75,7 @@ final class CategoryDocumentWriter
         ]);
     }
 
-    protected function openSearchClient(): Client
-    {
-        return $this->client;
-    }
-
-    protected function refreshOnWrite(): bool
+    private function refreshOnWrite(): bool
     {
         return $this->indices->refreshOnWrite();
     }

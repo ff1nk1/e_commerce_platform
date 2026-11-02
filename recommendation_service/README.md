@@ -10,9 +10,9 @@ Laravel-микросервис **shopping recommendation assistant**: RAG пов
 flowchart LR
   Browser["Frontend /assistant"] --> Gateway["auth_service Gateway"]
   Gateway -->|"inject user_id, 120s"| ChatAPI["POST /api/recommendations/chat"]
-  ChatAPI --> ChatSvc["RecommendationChatService"]
+  ChatAPI --> ChatSvc["SendChatMessageService"]
   ChatSvc --> GeminiFilters["Gemini: extract filters + embed"]
-  ChatSvc --> Search["ProductSearchService pgvector"]
+  ChatSvc --> Search["SearchCatalogProductsDetailedService pgvector"]
   Search --> CatalogDB["product_catalog"]
   ChatSvc --> GeminiAnswer["Gemini: chat with candidates"]
   CatalogDB -.->|"Kafka sync"| CatalogSvc["catalog_service"]
@@ -20,10 +20,10 @@ flowchart LR
 
 Ключевые файлы:
 
-- Оркестрация: [`app/Services/Chat/RecommendationChatService.php`](app/Services/Chat/RecommendationChatService.php)
-- Поиск: [`app/Services/Catalog/ProductSearchService.php`](app/Services/Catalog/ProductSearchService.php)
-- LLM: [`app/Services/Llm/Gemini/GeminiLlmClient.php`](app/Services/Llm/Gemini/GeminiLlmClient.php)
-- Карточки/path: [`app/Models/ProductCatalog.php`](app/Models/ProductCatalog.php) → `toCardArray()`
+- Оркестрация: [`app/Services/Chat/SendChatMessageService.php`](app/Services/Chat/SendChatMessageService.php)
+- Поиск: [`app/Services/Catalog/SearchCatalogProductsDetailedService.php`](app/Services/Catalog/SearchCatalogProductsDetailedService.php)
+- LLM: [`app/Infrastructure/Llm/Gemini/GeminiLlmClient.php`](app/Infrastructure/Llm/Gemini/GeminiLlmClient.php)
+- Карточки/path: [`app/DTO/Catalog/ProductCard.php`](app/DTO/Catalog/ProductCard.php) → [`app/Http/Resources/ProductCardResource.php`](app/Http/Resources/ProductCardResource.php)
 - UI: [`../frontend/src/Pages/Assistant.jsx`](../frontend/src/Pages/Assistant.jsx)
 
 ---
@@ -58,7 +58,7 @@ flowchart LR
 | POST | `/recommendations/reindex` | `ReindexController` (admin через gateway) |
 | GET | `/recommendations/health` | `HealthController` |
 
-`ChatController` валидирует через `ChatRequest` и вызывает `RecommendationChatService::chat()`.
+`ChatController` валидирует через `ChatRequest` и вызывает `SendChatMessageService::handle()`.
 
 ### Ответ клиенту
 
@@ -77,7 +77,7 @@ flowchart LR
 
 Модель **не ищет** товары сама. PHP ищет в локальном `product_catalog`; Gemini только (1) извлекает фильтры + embedding и (2) пишет текст по готовому списку Candidates.
 
-Оркестрация: [`RecommendationChatService::chat()`](app/Services/Chat/RecommendationChatService.php). Общий budget Gemini на turn: `GEMINI_TIMEOUT` (~25s) на extract + embed + answer.
+Оркестрация: [`SendChatMessageService::handle()`](app/Services/Chat/SendChatMessageService.php). Общий budget Gemini на turn: `GEMINI_TIMEOUT` (~25s) на extract + embed + answer.
 
 ```mermaid
 flowchart TB
@@ -87,7 +87,7 @@ flowchart TB
   gemini1 --> merge[merge + buckets + AttributeResolver + normalize]
   merge --> intent{hasSearchIntent?}
   intent -->|нет| chitchat[Gemini chitchat + история]
-  intent -->|да| search[ProductSearchService]
+  intent -->|да| search[SearchCatalogProductsDetailedService]
   search --> relax[Progressive relaxation если пусто]
   relax --> gate[RelevanceGate cosine]
   gate --> fresh[FreshnessChecker]
@@ -196,7 +196,7 @@ exclusive?  ИЛИ  это размер?  ──да──► required
 
 Локальный индекс (Kafka), не live catalog на каждый hit (кроме freshness в конце).
 
-**Preferred soft-fallback** ([`ProductSearchService`](app/Services/Catalog/ProductSearchService.php)):
+**Preferred soft-fallback** ([`SearchCatalogProductsDetailedService`](app/Services/Catalog/SearchCatalogProductsDetailedService.php)):
 
 1. Hard attempt: required ∪ preferred как hard.
 2. Хиты есть → `preferredRelaxed = false`.
@@ -248,7 +248,7 @@ User + assistant messages, `active_filters` (+ `relaxed`), `touchActivity()`. JS
 
 Не live-запрос в catalog_service. Своя таблица с денормализованными полями + `embedding vector(768)`.
 
-Фильтры в SQL ([`ProductSearchService`](app/Services/Catalog/ProductSearchService.php)):
+Фильтры в SQL ([`SearchCatalogProductsDetailedService`](app/Services/Catalog/SearchCatalogProductsDetailedService.php)):
 
 - всегда: `is_published = true`, `embedding IS NOT NULL`
 - опционально: `store_id` и/или `store_name` / `category_name` (ILIKE, case-insensitive, ё→е), `in_stock`, `price` min/max
@@ -287,11 +287,13 @@ flowchart TB
 
 ### A. Структурированные карточки (основной UX перехода)
 
-`ProductCatalog::toCardArray()` жёстко ставит:
+`ProductCard` (см. [`app/DTO/Catalog/ProductCard.php`](app/DTO/Catalog/ProductCard.php), отдаётся через [`ProductCardResource`](app/Http/Resources/ProductCardResource.php)) жёстко ставит:
 
 ```php
-'path' => '/products/'.$this->product_id,
+'path' => '/products/'.$productId,
 ```
+
+Поле `embedding` в карточку не попадает никогда (у модели дополнительно `#[Hidden(['embedding'])]`).
 
 Массив `products` уходит в JSON ответа.
 
@@ -313,7 +315,7 @@ flowchart TB
 
 ## 5. LLM-слой (три режима Gemini)
 
-Контракт [`LlmClient`](app/Services/Llm/Contracts/LlmClient.php), биндинг в `AppServiceProvider` при `LLM_DRIVER=gemini`.
+Контракт [`LlmClient`](app/Contracts/LlmClient.php), биндинг в `AppServiceProvider` при `LLM_DRIVER=gemini`.
 
 | Метод | API | Назначение |
 |-------|-----|------------|

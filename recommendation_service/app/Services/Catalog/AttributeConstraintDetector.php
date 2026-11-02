@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Catalog;
 
 use App\DTO\Catalog\AttributeConstraint;
+use App\DTO\Catalog\AttributeConstraintBuckets;
 use App\Enums\MessageRole;
 use App\Support\RuText;
 
@@ -20,13 +21,8 @@ final class AttributeConstraintDetector
 
     /**
      * @param  list<AttributeConstraint>  $attributes
-     * @return array{
-     *     required: list<AttributeConstraint>,
-     *     preferred: list<AttributeConstraint>,
-     *     soft: list<AttributeConstraint>
-     * }
      */
-    public function split(string $userMessage, array $attributes, bool $exclusiveFromHistory = false): array
+    public function split(string $userMessage, array $attributes, bool $exclusiveFromHistory = false): AttributeConstraintBuckets
     {
         $exclusive = $exclusiveFromHistory || $this->messageImpliesExclusive($userMessage);
         $required = [];
@@ -54,11 +50,11 @@ final class AttributeConstraintDetector
             }
         }
 
-        return [
-            'required' => $required,
-            'preferred' => $preferred,
-            'soft' => $soft,
-        ];
+        return new AttributeConstraintBuckets(
+            required: $required,
+            preferred: $preferred,
+            soft: $soft,
+        );
     }
 
     public function messageImpliesExclusive(string $message): bool

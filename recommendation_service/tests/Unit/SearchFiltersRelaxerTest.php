@@ -24,10 +24,10 @@ final class SearchFiltersRelaxerTest extends TestCase
 
         $step = $relaxer->relaxOnce($filters);
         $this->assertNotNull($step);
-        $this->assertSame('Материал=шёлк', $step['relaxed']);
+        $this->assertSame('Материал=шёлк', $step->relaxed);
         $this->assertEquals([
             new AttributeConstraint('Цвет', 'синий'),
-        ], $step['filters']->requiredAttributes);
+        ], $step->filters->requiredAttributes);
     }
 
     public function test_drops_store_name_then_price(): void
@@ -41,11 +41,11 @@ final class SearchFiltersRelaxerTest extends TestCase
 
         $step1 = $relaxer->relaxOnce($filters);
         $this->assertNotNull($step1);
-        $this->assertSame('store_name=Галерея', $step1['relaxed']);
+        $this->assertSame('store_name=Галерея', $step1->relaxed);
 
-        $step2 = $relaxer->relaxOnce($step1['filters']);
+        $step2 = $relaxer->relaxOnce($step1->filters);
         $this->assertNotNull($step2);
-        $this->assertStringContainsString('price', $step2['relaxed']);
-        $this->assertNull($step2['filters']->priceMax);
+        $this->assertStringContainsString('price', $step2->relaxed);
+        $this->assertNull($step2->filters->priceMax);
     }
 }

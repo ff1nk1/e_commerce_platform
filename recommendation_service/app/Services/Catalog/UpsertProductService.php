@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Catalog;
 
+use App\DTO\Catalog\AttributeConstraint;
 use App\Models\ProductCatalog;
 use Shop\Messaging\CatalogPayloadNormalizer;
 
@@ -46,7 +47,7 @@ final class UpsertProductService
             if ($name === '' || $value === '') {
                 continue;
             }
-            $normalizedAttributes[] = ['name' => $name, 'value' => $value];
+            $normalizedAttributes[] = new AttributeConstraint(name: $name, value: $value);
         }
 
         $isPublished = array_key_exists('is_published', $data)
@@ -74,7 +75,10 @@ final class UpsertProductService
                 'category_name' => $resolvedCategoryName,
                 'image_url' => $normalizedImageUrl,
                 'price' => $normalizedPrice,
-                'attributes' => $normalizedAttributes,
+                'attributes' => array_map(
+                    static fn (AttributeConstraint $attribute): array => $attribute->toArray(),
+                    $normalizedAttributes,
+                ),
                 'is_published' => $isPublished,
                 'in_stock' => $inStock,
             ],

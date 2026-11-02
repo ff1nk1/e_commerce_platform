@@ -16,7 +16,7 @@ use OpenSearch\Namespaces\IndicesNamespace;
 use Tests\Concerns\CapturesOpenSearchRequests;
 use Tests\TestCase;
 
-final class SearchIndexServiceTest extends TestCase
+final class IndexingTest extends TestCase
 {
     use CapturesOpenSearchRequests;
 

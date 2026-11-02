@@ -27,11 +27,11 @@ final class AttributeConstraintDetectorTest extends TestCase
 
         $this->assertEquals([
             new AttributeConstraint('Размер', '28'),
-        ], $split['required']);
+        ], $split->required);
         $this->assertEquals([
             new AttributeConstraint('Цвет', 'синий'),
-        ], $split['preferred']);
-        $this->assertSame([], $split['soft']);
+        ], $split->preferred);
+        $this->assertSame([], $split->soft);
     }
 
     public function test_exclusive_language_makes_all_attributes_required(): void
@@ -44,9 +44,9 @@ final class AttributeConstraintDetectorTest extends TestCase
         $this->assertEquals([
             new AttributeConstraint('Цвет', 'синий'),
             new AttributeConstraint('Размер', '28'),
-        ], $split['required']);
-        $this->assertSame([], $split['preferred']);
-        $this->assertSame([], $split['soft']);
+        ], $split->required);
+        $this->assertSame([], $split->preferred);
+        $this->assertSame([], $split->soft);
     }
 
     public function test_exclusive_from_history_hardens_follow_up(): void
@@ -63,7 +63,7 @@ final class AttributeConstraintDetectorTest extends TestCase
         $this->assertEquals([
             new AttributeConstraint('Цвет', 'синий'),
             new AttributeConstraint('Размер', '28'),
-        ], $split['required']);
+        ], $split->required);
     }
 
     public function test_history_implies_exclusive_scans_user_turns(): void
@@ -92,6 +92,6 @@ final class AttributeConstraintDetectorTest extends TestCase
 
         $this->assertEquals([
             new AttributeConstraint('Цвет', 'black'),
-        ], $split['preferred']);
+        ], $split->preferred);
     }
 }

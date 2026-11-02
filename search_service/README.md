@@ -15,15 +15,15 @@ flowchart LR
   Ev --> KafkaOut["search.events"]
   Catalog["product.* / category.*"] --> Handlers["Kafka handlers"]
   Stock["catalog.events stock.changed"] --> Handlers
-  Handlers --> Idx["SearchIndexService"]
+  Handlers --> Idx["ProductIndexer / CategoryIndexer"]
   Idx --> OS
 ```
 
 Ключевые файлы:
 
-- Search DSL / mapping: [`app/Search/`](app/Search/)
-- Index lifecycle + writers: [`app/Indexing/`](app/Indexing/)
-- Facades: [`ProductSearchService`](app/Services/ProductSearchService.php), [`SearchIndexService`](app/Services/SearchIndexService.php)
+- Search DSL / mapping: [`app/Infrastructure/OpenSearch/`](app/Infrastructure/OpenSearch/)
+- Index lifecycle + writers: [`app/Infrastructure/OpenSearch/`](app/Infrastructure/OpenSearch/)
+- Indexers (write path): [`ProductIndexer`](app/Services/Indexing/ProductIndexer.php), [`CategoryIndexer`](app/Services/Indexing/CategoryIndexer.php)
 - Routes: [`routes/api.php`](routes/api.php)
 - Workers: `kafka:consume:product-events`, `kafka:consume:category-events`, `kafka:consume:stock-events`, `opensearch:setup` ([`compose.yml`](compose.yml))
 
@@ -148,13 +148,14 @@ docker compose exec search_app php artisan test -c phpunit.integration.xml
 
 | Path | Role |
 |------|------|
-| `app/Search/ProductSearchQueryBuilder.php` | text / filters / sort / facet aggs |
-| `app/Search/ProductSearchResponseMapper.php` | hits + facets → API shape |
-| `app/Search/ProductAutocompleteQuery.php` | autocomplete body + suggestions |
-| `app/Indexing/OpenSearchIndexManager.php` | ensure / recreate / mappings |
-| `app/Indexing/ProductDocumentWriter.php` | product index/update/delete/stock |
-| `app/Indexing/CategoryDocumentWriter.php` | category CRUD + name sync |
-| `app/Services/ProductSearchService.php` | HTTP search orchestration |
-| `app/Services/SearchIndexService.php` | facade for handlers/tests |
+| `app/Infrastructure/OpenSearch/ProductSearchQueryBuilder.php` | text / filters / sort / facet aggs |
+| `app/Infrastructure/OpenSearch/ProductSearchResponseMapper.php` | hits + facets → API shape |
+| `app/Infrastructure/OpenSearch/ProductAutocompleteQuery.php` | autocomplete body + suggestions |
+| `app/Infrastructure/OpenSearch/OpenSearchIndexManager.php` | ensure / recreate / mappings |
+| `app/Infrastructure/OpenSearch/ProductDocumentWriter.php` | product index/update/delete/stock |
+| `app/Infrastructure/OpenSearch/CategoryDocumentWriter.php` | category CRUD + name sync |
+| `app/Services/Search/SearchProductsService.php` | HTTP search orchestration |
+| `app/Services/Indexing/ProductIndexer.php` | product upsert / delete / stock |
+| `app/Services/Indexing/CategoryIndexer.php` | category upsert / delete / name sync |
 | `app/Kafka/Handlers/*` | Kafka → index |
 | `app/Console/Commands/KafkaConsume*.php` | long-running consumers |

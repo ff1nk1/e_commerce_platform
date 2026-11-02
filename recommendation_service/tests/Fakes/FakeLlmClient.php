@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Fakes;
 
 use App\Contracts\LlmClient;
+use App\DTO\Chat\ChatExtractionResult;
 use App\DTO\Chat\ChatMessage;
 use App\DTO\Chat\SearchFilters;
 use App\Enums\EmbedTask;
@@ -43,6 +44,10 @@ final class FakeLlmClient implements LlmClient
         $this->filters = new SearchFilters(query: 'sneakers');
     }
 
+    public function startBudget(?int $seconds = null): void {}
+
+    public function clearBudget(): void {}
+
     public function embed(string $text, EmbedTask $taskType = EmbedTask::RetrievalDocument): array
     {
         $this->embedCalls++;
@@ -76,11 +81,14 @@ final class FakeLlmClient implements LlmClient
         EmbedTask $embedTaskType = EmbedTask::RetrievalQuery,
         ?string $embedText = null,
         array $catalogAttributeNames = [],
-    ): array {
+    ): ChatExtractionResult {
         $this->extractAndEmbedCalls++;
         $this->lastExtractInput = $userMessage;
         $this->lastCatalogAttributeNames = $catalogAttributeNames;
 
-        return [$this->filters, array_fill(0, 768, 0.01)];
+        return new ChatExtractionResult(
+            filters: $this->filters,
+            embedding: array_fill(0, 768, 0.01),
+        );
     }
 }

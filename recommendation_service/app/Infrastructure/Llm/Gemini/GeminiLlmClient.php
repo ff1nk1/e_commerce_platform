@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Llm\Gemini;
 
 use App\Contracts\LlmClient;
+use App\DTO\Chat\ChatExtractionResult;
 use App\DTO\Chat\ChatMessage;
 use App\DTO\Chat\SearchFilters;
 use App\Enums\EmbedTask;
@@ -227,12 +228,15 @@ PROMPT;
         EmbedTask $embedTaskType = EmbedTask::RetrievalQuery,
         ?string $embedText = null,
         array $catalogAttributeNames = [],
-    ): array {
+    ): ChatExtractionResult {
         // Embed after extract so the vector uses cleaned query text, not the raw utterance.
         $filters = $this->extractFilters($userMessage, $catalogAttributeNames);
         $embeddingInputText = $filters->query ?: ($embedText ?? $userMessage);
 
-        return [$filters, $this->embed($embeddingInputText, $embedTaskType)];
+        return new ChatExtractionResult(
+            filters: $filters,
+            embedding: $this->embed($embeddingInputText, $embedTaskType),
+        );
     }
 
     /**

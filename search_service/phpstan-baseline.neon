@@ -34,4 +34,4 @@ parameters:
 			message: '#^Possibly invalid array key type int\<0, max\>\|null\.$#'
 			identifier: offsetAccess.invalidOffset
 			count: 1
-			path: tests/Unit/SearchIndexServiceTest.php
+			path: tests/Unit/IndexingTest.php

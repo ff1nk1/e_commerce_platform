@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Contracts\LlmClient;
 use App\Contracts\RelevanceGate;
+use App\DTO\Chat\ChatExtractionResult;
 use App\DTO\Chat\SearchFilters;
 use App\Enums\EmbedTask;
 use App\Enums\MessageRole;
@@ -729,6 +730,10 @@ final class RecommendationsApiTest extends TestCase
     {
         $this->app->instance(LlmClient::class, new class implements LlmClient
         {
+            public function startBudget(?int $seconds = null): void {}
+
+            public function clearBudget(): void {}
+
             public function embed(string $text, EmbedTask $taskType = EmbedTask::RetrievalDocument): array
             {
                 return [];
@@ -752,8 +757,8 @@ final class RecommendationsApiTest extends TestCase
                 EmbedTask $embedTaskType = EmbedTask::RetrievalQuery,
                 ?string $embedText = null,
                 array $catalogAttributeNames = [],
-            ): array {
-                return [$this->extractFilters($userMessage, $catalogAttributeNames), []];
+            ): ChatExtractionResult {
+                return new ChatExtractionResult($this->extractFilters($userMessage, $catalogAttributeNames), []);
             }
         });
 

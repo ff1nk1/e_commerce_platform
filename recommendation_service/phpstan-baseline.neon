@@ -61,18 +61,6 @@ parameters:
 			path: app/Services/Catalog/SearchCatalogProductsDetailedService.php
 
 		-
-			message: '#^Parameter \#1 \$attributes of static method App\\Services\\Chat\\CandidatePromptFormatter\:\:formatAttributes\(\) expects list\<mixed\>, array\<mixed\> given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Services/Chat/CandidatePromptFormatter.php
-
-		-
-			message: '#^Parameter \#1 \$price of static method App\\Services\\Chat\\RubDisplay\:\:format\(\) expects float\|string\|null, bool\|float\|int\|string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: app/Services/Chat/CandidatePromptFormatter.php
-
-		-
 			message: '#^Static property Database\\Factories\\UserFactory\:\:\$password \(string\|null\) is never assigned null so it can be removed from the property type\.$#'
 			identifier: property.unusedType
 			count: 1
