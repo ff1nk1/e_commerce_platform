@@ -1,19 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Link,
+  useActionData,
   useLoaderData,
   useNavigate,
+  useNavigation,
   useRevalidator,
   useSearchParams,
+  useSubmit,
 } from "react-router-dom";
-import { cancelOrder, getOrder, payOrder } from "../api/orders";
+import { formatMoney } from "../utils/money";
+import { useReservePolling } from "../orders/useReservePolling";
 import "../styles/orders.css";
 
-const RESERVE_POLL_MS = 2000;
-const RESERVE_MAX_ATTEMPTS = 15; // ~30s
+const AUTO_CHECKOUT_DELAY_MS = 0;
 
-function noticeForOrder(order) {
-  if (order?.status === "cancelled") {
+/** Human-readable notice derived from the order status. */
+export function noticeForOrder(order) {
+  if (!order) return null;
+  if (order.status === "cancelled") {
     if (order.cancel_reason === "user_cancelled") {
       return { message: "Этот заказ был отменён вами", error: "" };
     }
@@ -25,72 +30,70 @@ function noticeForOrder(order) {
     }
     return { message: "Заказ отменён.", error: "" };
   }
-  if (order?.status === "payment_failed") {
+  if (order.status === "payment_failed") {
     return { message: "", error: "Оплата не прошла. Резерв будет снят." };
   }
   return null;
 }
 
-export default function OrderDetail() {
-  const { order: initialOrder } = useLoaderData();
-  const [order, setOrder] = useState(initialOrder);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [reserveTimedOut, setReserveTimedOut] = useState(false);
-  const [pollNonce, setPollNonce] = useState(0);
-  const navigate = useNavigate();
-  const revalidator = useRevalidator();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const autoPayStarted = useRef(false);
-  const skipAutoPay = useRef(searchParams.get("canceled") === "1");
-  const prevStatus = useRef(initialOrder?.status);
-  const orderIdRef = useRef(initialOrder?.id);
-  const pollAttempts = useRef(0);
-  const payIdempotencyKey = useRef(null);
+/** Redirect the browser to Stripe Checkout. */
+function goToCheckout(url) {
+  if (typeof window !== "undefined") window.location.href = url;
+}
 
-  const canPay = order?.status === "awaiting_payment";
-  const canCancel =
-    order?.status === "pending" || order?.status === "awaiting_payment";
-  const isReserving = order?.status === "pending" && !reserveTimedOut;
+export default function OrderDetail() {
+  const { order: loaderOrder, error: loaderError } = useLoaderData();
+  const actionData = useActionData();
+  const submit = useSubmit();
+  const navigation = useNavigation();
+  const revalidator = useRevalidator();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const paidFlag = searchParams.get("paid") === "1";
   const canceledFlag = searchParams.get("canceled") === "1";
-  const urlFlag = paidFlag ? "paid" : canceledFlag ? "canceled" : "";
-  const [handledUrlFlag, setHandledUrlFlag] = useState("");
-  if (urlFlag && urlFlag !== handledUrlFlag) {
-    setHandledUrlFlag(urlFlag);
-    setMessage(
-      urlFlag === "paid"
-        ? "Оплата прошла успешно. Статус обновится после подтверждения Stripe."
-        : "Оплата отменена. Можно попробовать снова.",
-    );
-    setError("");
-  }
 
-  const [seenInitial, setSeenInitial] = useState(initialOrder);
-  if (initialOrder !== seenInitial) {
-    setSeenInitial(initialOrder);
-    setOrder(initialOrder);
-    if (initialOrder?.id !== seenInitial?.id) {
-      setBusy(false);
-      setMessage("");
-      setError("");
-      setReserveTimedOut(false);
-    } else if (initialOrder?.status !== "pending") {
-      setReserveTimedOut(false);
-    }
-  }
+  const busy = navigation.state !== "idle";
+  const orderId = loaderOrder?.id ?? null;
 
+  const [localMessage, setLocalMessage] = useState("");
+  const [localError, setLocalError] = useState("");
+
+  // Preserve exact auto-checkout behavior (once per order, skipped after cancel).
+  const autoPayStarted = useRef(false);
+  const skipAutoPay = useRef(canceledFlag);
+  const prevStatus = useRef(loaderOrder?.status ?? null);
+  const prevOrderId = useRef(orderId);
+  const payIdempotencyKey = useRef(null);
+
+  // Polling yields the freshest order; the loader remains the fallback.
+  const {
+    order: polledOrder,
+    timedOut,
+    retry,
+  } = useReservePolling({
+    order: loaderOrder,
+    active: loaderOrder?.status === "pending",
+    onReserved: () => revalidator.revalidate(),
+  });
+
+  const order = polledOrder ?? loaderOrder;
+  const status = order?.status ?? null;
+  const reserving = status === "pending" && !timedOut;
+
+  // Reset transient state when the order identity changes.
   useEffect(() => {
-    const orderChanged = initialOrder?.id !== orderIdRef.current;
-    orderIdRef.current = initialOrder?.id;
-    if (orderChanged) {
-      prevStatus.current = initialOrder?.status;
+    if (orderId !== prevOrderId.current) {
+      prevOrderId.current = orderId;
       autoPayStarted.current = false;
-      skipAutoPay.current = searchParams.get("canceled") === "1";
+      skipAutoPay.current = canceledFlag;
+      payIdempotencyKey.current = null;
+      setLocalMessage("");
+      setLocalError("");
     }
-  }, [initialOrder, searchParams]);
+  }, [orderId, canceledFlag]);
 
+  // URL flags: success / cancellation notices and one-shot param cleanup.
   useEffect(() => {
     if (!paidFlag && !canceledFlag) return;
     if (canceledFlag) {
@@ -98,138 +101,101 @@ export default function OrderDetail() {
       autoPayStarted.current = false;
       payIdempotencyKey.current = null;
     }
-    if (paidFlag) {
-      revalidator.revalidate();
-    }
+    setLocalMessage(
+      paidFlag
+        ? "Оплата прошла успешно. Статус обновится после подтверждения Stripe."
+        : "Оплата отменена. Можно попробовать снова.",
+    );
+    setLocalError("");
     const next = new URLSearchParams(searchParams);
     next.delete("paid");
     next.delete("canceled");
     setSearchParams(next, { replace: true });
-  }, [paidFlag, canceledFlag, searchParams, setSearchParams, revalidator]);
+  }, [paidFlag, canceledFlag, searchParams, setSearchParams]);
 
-  useEffect(() => {
-    if (!isReserving || !order?.id) return undefined;
-
-    pollAttempts.current = 0;
-
-    const timer = setInterval(async () => {
-      pollAttempts.current += 1;
-      try {
-        const { data } = await getOrder(order.id);
-        setOrder(data);
-        if (data.status !== "pending") {
-          setReserveTimedOut(false);
-          revalidator.revalidate();
-          return;
-        }
-      } catch {
-        // count attempt anyway
-      }
-
-      if (pollAttempts.current >= RESERVE_MAX_ATTEMPTS) {
-        clearInterval(timer);
-        setReserveTimedOut(true);
-        setMessage("");
-        setError(
-          "Резерв не подтвердился. Проверьте, что работают Kafka outbox/consumers (order + catalog), или отмените заказ.",
-        );
-      }
-    }, RESERVE_POLL_MS);
-
-    return () => clearInterval(timer);
-  }, [isReserving, order?.id, pollNonce, revalidator]);
-
-  const startCheckout = useCallback(async () => {
-    if (!order?.id || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      if (!payIdempotencyKey.current) {
-        payIdempotencyKey.current = crypto.randomUUID();
-      }
-      const { data } = await payOrder(order.id, payIdempotencyKey.current);
-      if (data?.checkout_url) {
-        window.location.href = data.checkout_url;
-        return;
-      }
-      setError("Не удалось получить ссылку на оплату.");
-      autoPayStarted.current = false;
-    } catch (err) {
-      setError(err.response?.data?.message || "Не удалось начать оплату.");
-      autoPayStarted.current = false;
-    } finally {
-      setBusy(false);
+  const startCheckout = () => {
+    if (!payIdempotencyKey.current) {
+      payIdempotencyKey.current = crypto.randomUUID();
     }
-  }, [busy, order]);
+    setLocalError("");
+    setLocalMessage("Товар зарезервирован. Переходим к оплате…");
+    submit(
+      { intent: "pay", idempotency_key: payIdempotencyKey.current },
+      { method: "post", replace: true },
+    );
+  };
 
+  // React to action results: redirect to Stripe or show the error.
+  useEffect(() => {
+    if (!actionData) return;
+    if (actionData.checkoutUrl) {
+      goToCheckout(actionData.checkoutUrl);
+    } else if (actionData.error) {
+      setLocalError(actionData.error);
+      autoPayStarted.current = false;
+    }
+  }, [actionData]);
+
+  // Auto-checkout: once the reserve lands (status flips to awaiting_payment),
+  // start the Stripe flow exactly once.
   useEffect(() => {
     const previous = prevStatus.current;
-    const next = order?.status;
-    prevStatus.current = next;
-
-    const justReserved = previous === "pending" && next === "awaiting_payment";
-    const shouldSkipAutoCheckout =
-      skipAutoPay.current || busy || autoPayStarted.current;
-    const canStartAutoCheckout = justReserved && !shouldSkipAutoCheckout;
-    if (!canStartAutoCheckout) return undefined;
-
+    prevStatus.current = status;
+    const justReserved =
+      previous === "pending" && status === "awaiting_payment";
+    if (
+      !justReserved ||
+      skipAutoPay.current ||
+      busy ||
+      autoPayStarted.current
+    ) {
+      return undefined;
+    }
     autoPayStarted.current = true;
-    const timer = setTimeout(() => {
-      setReserveTimedOut(false);
-      setMessage("Товар зарезервирован. Переходим к оплате…");
-      void startCheckout();
-    }, 0);
-
+    const timer = setTimeout(startCheckout, AUTO_CHECKOUT_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [order?.status, busy, startCheckout]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, busy]);
 
-  const handlePay = async () => {
-    if (!canPay || busy) return;
+  const handlePay = () => {
     skipAutoPay.current = false;
     autoPayStarted.current = true;
-    await startCheckout();
+    startCheckout();
   };
 
-  const handleRetryReservePoll = () => {
-    setReserveTimedOut(false);
-    setError("");
-    setPollNonce((n) => n + 1);
+  const handleCancel = () => {
+    setLocalMessage("");
+    setLocalError("");
+    submit({ intent: "cancel" }, { method: "post", replace: true });
   };
 
-  const handleCancel = async () => {
-    if (!canCancel || busy) return;
-    setBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      const { data } = await cancelOrder(order.id);
-      setOrder(data);
-      setReserveTimedOut(false);
-      revalidator.revalidate();
-    } catch (err) {
-      setError(err.response?.data?.message || "Не удалось отменить заказ.");
-    } finally {
-      setBusy(false);
+  const canPay = status === "awaiting_payment";
+  const canCancel = status === "pending" || status === "awaiting_payment";
+
+  const shownMessage = useMemo(() => {
+    const notice = noticeForOrder(order);
+    if (notice) return notice.message;
+    if (reserving) return "Ожидаем резерв склада…";
+    return localMessage;
+  }, [order, reserving, localMessage]);
+
+  const shownError = useMemo(() => {
+    const notice = noticeForOrder(order);
+    if (notice) return notice.error;
+    if (reserving) return "";
+    if (timedOut) {
+      return "Резерв не подтвердился. Проверьте, что работают Kafka outbox/consumers (order + catalog), или отмените заказ.";
     }
-  };
+    return localError;
+  }, [order, reserving, timedOut, localError]);
 
-  const statusNotice = noticeForOrder(order);
-  const shownMessage = statusNotice
-    ? statusNotice.message
-    : isReserving
-      ? "Ожидаем резерв склада…"
-      : message;
-  const shownError = statusNotice
-    ? statusNotice.error
-    : isReserving
-      ? ""
-      : error;
-
-  if (!order) {
+  if (loaderError || !order) {
     return (
       <div className="orders-page">
         <div className="orders-container">
-          <div className="status-message error">Заказ не найден</div>
+          <div className="status-message error">
+            {loaderError || "Заказ не найден"}
+          </div>
           <button className="order-btn" onClick={() => navigate("/orders")}>
             К списку
           </button>
@@ -248,11 +214,9 @@ export default function OrderDetail() {
           <div className="orders-header">
             <h1>Заказ #{order.id}</h1>
             <p>
-              <span className={`order-status ${order.status}`}>
-                {order.status}
-              </span>
+              <span className={`order-status ${status}`}>{status}</span>
               {" · "}
-              {order.total_amount} ₽
+              {formatMoney(order.total_amount)}
             </p>
           </div>
 
@@ -272,14 +236,14 @@ export default function OrderDetail() {
                     {item.product_snapshot?.name || `Товар #${item.product_id}`}
                   </strong>
                   <span>
-                    {item.quantity} × {item.unit_price} ₽
+                    {item.quantity} × {formatMoney(item.unit_price)}
                   </span>
                 </div>
               </li>
             ))}
           </ul>
 
-          {(canPay || canCancel || reserveTimedOut) && (
+          {(canPay || canCancel || timedOut) && (
             <div className="order-actions">
               {canPay && (
                 <button
@@ -290,10 +254,13 @@ export default function OrderDetail() {
                   {busy ? "Переход к оплате..." : "Оплатить"}
                 </button>
               )}
-              {reserveTimedOut && order.status === "pending" && (
+              {timedOut && status === "pending" && (
                 <button
                   className="order-btn"
-                  onClick={handleRetryReservePoll}
+                  onClick={() => {
+                    setLocalError("");
+                    retry();
+                  }}
                   disabled={busy}
                 >
                   Проверить снова

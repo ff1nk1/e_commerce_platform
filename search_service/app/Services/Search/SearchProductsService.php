@@ -7,7 +7,6 @@ namespace App\Services\Search;
 use App\DTO\Search\ProductSearchQuery;
 use App\DTO\Search\ProductSearchResult;
 use App\Events\SearchPerformed;
-use App\Infrastructure\OpenSearch\OpenSearchIndexManager;
 use App\Infrastructure\OpenSearch\ProductSearchQueryBuilder;
 use App\Infrastructure\OpenSearch\ProductSearchResponseMapper;
 use OpenSearch\Client;
@@ -16,7 +15,6 @@ final class SearchProductsService
 {
     public function __construct(
         private readonly Client $client,
-        private readonly OpenSearchIndexManager $indices,
         private readonly ProductSearchQueryBuilder $queryBuilder,
         private readonly ProductSearchResponseMapper $responseMapper,
     ) {}
@@ -26,8 +24,6 @@ final class SearchProductsService
      */
     public function handle(ProductSearchQuery $query, bool $skipAnalytics = false): ProductSearchResult
     {
-        $this->indices->ensureIndices();
-
         $page = $query->page;
         $perPage = $query->perPage;
 

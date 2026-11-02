@@ -64,6 +64,11 @@ services:
       CLICKHOUSE_DATABASE: analytics
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-analytic_local_secret}
+      CLICKHOUSE_WAIT_FOR_ASYNC_INSERT: "1"
+      CLICKHOUSE_BATCH_MAX_ROWS: "500"
+      CLICKHOUSE_BATCH_FLUSH_INTERVAL_MS: "1000"
+      KAFKA_DLQ_SUFFIX: ".dlq"
+      KAFKA_RETRY_BACKOFF_MS: "1000"
       MIGRATIONS_DIR: /app/migrations
     depends_on:
       analytic_clickhouse:

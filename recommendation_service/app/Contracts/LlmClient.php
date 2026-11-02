@@ -25,6 +25,16 @@ interface LlmClient
     public function embed(string $text, EmbedTask $taskType = EmbedTask::RetrievalDocument): array;
 
     /**
+     * Embed many texts in as few round-trips as possible.
+     *
+     * Returned vectors are positional: result[$i] corresponds to $texts[$i].
+     *
+     * @param  list<string>  $texts
+     * @return list<list<float>>
+     */
+    public function embedBatch(array $texts, EmbedTask $taskType = EmbedTask::RetrievalDocument): array;
+
+    /**
      * @param  list<ChatMessage>  $messages
      */
     public function chat(array $messages, ?string $systemPrompt = null): string;

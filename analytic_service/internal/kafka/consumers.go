@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"analytic_service/internal/store"
@@ -14,91 +13,133 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type UserRegistrar interface {
-	InsertUserRegistration(ctx context.Context, row store.UserRegistration) error
-}
-
-type OrderIngester interface {
-	InsertOrderFunnelEvent(ctx context.Context, row store.OrderFunnelEvent) error
+// EventStore is the single ingest port the consumers write through.
+type EventStore interface {
+	InsertUserRegistrations(ctx context.Context, rows []store.UserRegistration) error
+	InsertOrderFunnelEvents(ctx context.Context, rows []store.OrderFunnelEvent) error
 	InsertOrderLineItems(ctx context.Context, rows []store.OrderLineItem) error
+	InsertProductDims(ctx context.Context, rows []store.ProductDim) error
+	InsertSearchQueries(ctx context.Context, rows []store.SearchQuery) error
 	LookupProductDim(ctx context.Context, productID uint64) (store.ProductDim, bool, error)
 }
 
-type ProductDimStore interface {
-	InsertProductDim(ctx context.Context, row store.ProductDim) error
+// Config tunes the consumer runtime.
+type Config struct {
+	Brokers       []string
+	BatchMaxRows  int
+	FlushInterval time.Duration
+	RetryBackoff  time.Duration
+	DLQSuffix     string
 }
 
-type SearchRecorder interface {
-	InsertSearchQuery(ctx context.Context, row store.SearchQuery) error
+func (c Config) withDefaults() Config {
+	if c.BatchMaxRows < 1 {
+		c.BatchMaxRows = 500
+	}
+	if c.FlushInterval <= 0 {
+		c.FlushInterval = time.Second
+	}
+	if c.RetryBackoff <= 0 {
+		c.RetryBackoff = time.Second
+	}
+	if c.DLQSuffix == "" {
+		c.DLQSuffix = ".dlq"
+	}
+	return c
 }
 
-// EventStore composes all ingest ports (convenient wiring for *store.Store).
-type EventStore interface {
-	UserRegistrar
-	OrderIngester
-	ProductDimStore
-	SearchRecorder
+// messageReader is the subset of *kafka.Reader the consumer loop needs. It is
+// an interface so tests can drive the commit/DLQ ordering without a broker.
+type messageReader interface {
+	FetchMessage(ctx context.Context) (kafka.Message, error)
+	CommitMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
 }
 
+// readerFactory builds a messageReader; tests swap it for a fake.
+type readerFactory func(cfg kafka.ReaderConfig) messageReader
+
+func defaultReaderFactory(cfg kafka.ReaderConfig) messageReader { return kafka.NewReader(cfg) }
+
+// Consumers runs the four analytic consumer groups, buffering rows into
+// microbatches and committing Kafka offsets only after the batched write to
+// ClickHouse succeeded. Poison-pill messages are diverted to a DLQ so a single
+// bad payload cannot stall a partition.
 type Consumers struct {
-	brokers  []string
-	users    UserRegistrar
-	orders   OrderIngester
-	products ProductDimStore
-	search   SearchRecorder
-	log      *slog.Logger
+	cfg     Config
+	store   EventStore
+	dlq     DLQPublisher
+	log     *slog.Logger
+	newRead readerFactory
 }
 
-func NewConsumers(brokers []string, st EventStore, log *slog.Logger) *Consumers {
+// NewConsumers wires the consumers. A nil DLQ publisher uses a kafka-go writer
+// against the same brokers.
+func NewConsumers(cfg Config, st EventStore, dlq DLQPublisher, log *slog.Logger) *Consumers {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Consumers{
-		brokers:  brokers,
-		users:    st,
-		orders:   st,
-		products: st,
-		search:   st,
-		log:      log,
+	cfg = cfg.withDefaults()
+	if dlq == nil {
+		dlq = NewKafkaDLQ(cfg.Brokers)
 	}
+	return &Consumers{cfg: cfg, store: st, dlq: dlq, log: log, newRead: defaultReaderFactory}
+}
+
+// Close releases the DLQ producer.
+func (c *Consumers) Close() error {
+	if c.dlq == nil {
+		return nil
+	}
+	return c.dlq.Close()
+}
+
+// consumerSink buffers a topic's rows and knows whether the buffer is full.
+type consumerSink interface {
+	handle(ctx context.Context, msg kafka.Message) error
+	full() bool
+	flush(ctx context.Context) error
 }
 
 type subscription struct {
-	GroupID string
-	Topics  []string
-	Handle  handlerFunc
+	group  string
+	topics []string
+	sink   consumerSink
 }
 
 func (c *Consumers) Run(ctx context.Context) error {
 	subs := []subscription{
-		{GroupID: "analytic-service-users-v3", Topics: []string{"user.events"}, Handle: c.handleUser},
-		{GroupID: "analytic-service-orders-v5", Topics: []string{"order.events"}, Handle: c.handleOrder},
-		{GroupID: "analytic-service-search-v3", Topics: []string{"search.events"}, Handle: c.handleSearch},
-		{GroupID: "analytic-service-products-v1", Topics: []string{"product.events"}, Handle: c.handleProduct},
+		{group: "analytic-service-users-v3", topics: []string{"user.events"}, sink: newUserSink(c.store, c.cfg.BatchMaxRows)},
+		{group: "analytic-service-orders-v5", topics: []string{"order.events"}, sink: newOrderSink(c.store, c.cfg.BatchMaxRows, c.log)},
+		{group: "analytic-service-search-v3", topics: []string{"search.events"}, sink: newSearchSink(c.store, c.cfg.BatchMaxRows)},
+		{group: "analytic-service-products-v1", topics: []string{"product.events"}, sink: newProductSink(c.store, c.cfg.BatchMaxRows)},
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
 	for _, sub := range subs {
 		g.Go(func() error {
-			return c.runReader(ctx, sub.GroupID, sub.Topics, sub.Handle)
+			return c.runReader(ctx, sub.group, sub.topics, sub.sink)
 		})
 	}
 	return g.Wait()
 }
 
-type handlerFunc func(ctx context.Context, msg kafka.Message) error
-
 const maxKafkaMessageBytes = 10e6 // 10 MiB
 
-func (c *Consumers) runReader(ctx context.Context, groupID string, topics []string, handle handlerFunc) error {
+type fetchResult struct {
+	msg kafka.Message
+	err error
+}
+
+func (c *Consumers) runReader(ctx context.Context, groupID string, topics []string, sink consumerSink) error {
 	cfg := kafka.ReaderConfig{
-		Brokers:        c.brokers,
+		Brokers:        c.cfg.Brokers,
 		GroupID:        groupID,
 		MinBytes:       1,
 		MaxBytes:       maxKafkaMessageBytes,
 		MaxWait:        time.Second,
 		StartOffset:    kafka.FirstOffset,
-		CommitInterval: 0, // manual commit after successful insert
+		CommitInterval: 0, // committed manually, only after a successful batch flush
 	}
 	if len(topics) == 1 {
 		cfg.Topic = topics[0]
@@ -106,313 +147,157 @@ func (c *Consumers) runReader(ctx context.Context, groupID string, topics []stri
 		cfg.GroupTopics = topics
 	}
 
-	r := kafka.NewReader(cfg)
+	r := c.newRead(cfg)
 	defer func() { _ = r.Close() }()
 
 	c.log.Info("kafka consumer started", "group", groupID, "topics", topics)
 
+	// Fetch on a separate goroutine so the flush ticker can fire while the
+	// broker has nothing to deliver. The unbuffered channel bounds prefetch to
+	// one message, keeping checkpointing in order.
+	fetchCh := make(chan fetchResult)
+	go func() {
+		for {
+			msg, err := r.FetchMessage(ctx)
+			select {
+			case fetchCh <- fetchResult{msg: msg, err: err}:
+			case <-ctx.Done():
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
+	ticker := time.NewTicker(c.cfg.FlushInterval)
+	defer ticker.Stop()
+
+	var committable []kafka.Message
+
+	// flushAndCommit writes buffered rows, then commits every message accounted
+	// for since the last commit. Offsets only advance after the write succeeded.
+	flushAndCommit := func() error {
+		if len(committable) == 0 && !sink.full() {
+			return nil
+		}
+		if err := sink.flush(ctx); err != nil {
+			return err
+		}
+		if len(committable) > 0 {
+			if err := r.CommitMessages(ctx, committable...); err != nil {
+				return fmt.Errorf("%s commit: %w", groupID, err)
+			}
+			committable = committable[:0]
+		}
+		return nil
+	}
+
+	// retry runs fn until it succeeds or the context is cancelled, backing off
+	// between attempts. Returns false when the context ended.
+	retry := func(what string, fn func() error) bool {
+		for {
+			err := fn()
+			if err == nil {
+				return true
+			}
+			c.log.Error("retrying", "group", groupID, "stage", what, "err", err)
+			select {
+			case <-ctx.Done():
+				return false
+			case <-time.After(c.cfg.RetryBackoff):
+			}
+		}
+	}
+
+	// finalFlush drains the buffer on shutdown using a fresh context, since ctx
+	// is already cancelled.
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := sink.flush(flushCtx); err != nil {
+			c.log.Error("final flush failed", "group", groupID, "err", err)
+			return
+		}
+		if len(committable) > 0 {
+			if err := r.CommitMessages(flushCtx, committable...); err != nil {
+				c.log.Error("final commit failed", "group", groupID, "err", err)
+			}
+		}
+	}()
+
 	for {
-		msg, err := r.FetchMessage(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
+		if sink.full() {
+			if !retry("flush", flushAndCommit) {
 				return nil
 			}
-			return fmt.Errorf("%s fetch: %w", groupID, err)
+			continue
 		}
 
-		// Retry the same message until success — do not FetchMessage again on error
-		// (that would skip offsets and let later commits mark failed rows as done).
-		for {
-			if err := handle(ctx, msg); err != nil {
-				c.log.Error("handle message failed",
-					"group", groupID,
-					"topic", msg.Topic,
-					"partition", msg.Partition,
-					"offset", msg.Offset,
-					"err", err,
-				)
-				select {
-				case <-ctx.Done():
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if !retry("flush", flushAndCommit) {
+				return nil
+			}
+		case fr := <-fetchCh:
+			if fr.err != nil {
+				if ctx.Err() != nil {
 					return nil
-				case <-time.After(time.Second):
 				}
-				continue
+				return fmt.Errorf("%s fetch: %w", groupID, fr.err)
 			}
-			break
-		}
 
-		if err := r.CommitMessages(ctx, msg); err != nil {
-			return fmt.Errorf("%s commit: %w", groupID, err)
-		}
-	}
-}
-
-func (c *Consumers) handleUser(ctx context.Context, msg kafka.Message) error {
-	body, err := parseJSONBody(msg)
-	if err != nil {
-		c.log.Warn("skip invalid user json", "err", err)
-		return nil
-	}
-	et := resolveEventType(msg, body)
-	if et != "user.registered" {
-		return nil
-	}
-
-	registeredAt := parseTime(asString(body["registered_at"]), messageTime(msg))
-	row := store.UserRegistration{
-		UserID:       asUint64(body["user_id"]),
-		Email:        asString(body["email"]),
-		Name:         asString(body["name"]),
-		RegisteredAt: registeredAt,
-		KafkaProvenance: store.KafkaProvenance{
-			KafkaTopic:     msg.Topic,
-			KafkaPartition: kafkaPartition(msg.Partition),
-			KafkaOffset:    msg.Offset,
-		},
-	}
-	if row.UserID == 0 {
-		c.log.Warn("skip user.registered without user_id")
-		return nil
-	}
-	return c.users.InsertUserRegistration(ctx, row)
-}
-
-func (c *Consumers) handleProduct(ctx context.Context, msg kafka.Message) error {
-	body, err := parseJSONBody(msg)
-	if err != nil {
-		c.log.Warn("skip invalid product json", "err", err)
-		return nil
-	}
-	et := resolveEventType(msg, body)
-	if et != "product.created" && et != "product.updated" {
-		return nil
-	}
-
-	data, _ := body["data"].(map[string]any)
-	if data == nil {
-		c.log.Warn("skip product event without data")
-		return nil
-	}
-
-	productID := asUint64(data["id"])
-	if productID == 0 {
-		c.log.Warn("skip product event without id", "event_type", et)
-		return nil
-	}
-
-	categoryID := asUint64(data["category_id"])
-	categoryName := ""
-	categorySlug := ""
-	if cat, ok := data["category"].(map[string]any); ok {
-		if categoryID == 0 {
-			categoryID = asUint64(cat["id"])
-		}
-		categoryName = asString(cat["name"])
-		categorySlug = asString(cat["slug"])
-	}
-
-	storeID := asUint64(data["store_id"])
-	storeName := ""
-	if st, ok := data["store"].(map[string]any); ok {
-		if storeID == 0 {
-			storeID = asUint64(st["id"])
-		}
-		storeName = asString(st["name"])
-	}
-
-	return c.products.InsertProductDim(ctx, store.ProductDim{
-		ProductID:    productID,
-		StoreID:      storeID,
-		StoreName:    storeName,
-		CategoryID:   categoryID,
-		CategoryName: categoryName,
-		CategorySlug: categorySlug,
-		KafkaProvenance: store.KafkaProvenance{
-			KafkaTopic:     msg.Topic,
-			KafkaPartition: kafkaPartition(msg.Partition),
-			KafkaOffset:    msg.Offset,
-		},
-	})
-}
-
-func (c *Consumers) handleOrder(ctx context.Context, msg kafka.Message) error {
-	body, err := parseJSONBody(msg)
-	if err != nil {
-		c.log.Warn("skip invalid order json", "err", err)
-		return nil
-	}
-	et := resolveEventType(msg, body)
-
-	var short string
-	switch et {
-	case "order.created":
-		short = "created"
-	case "order.paid":
-		short = "paid"
-	case "order.shipped":
-		// Domain "shipped" is stored as funnel stage "completed".
-		short = "completed"
-	case "order.cancelled":
-		short = "cancelled"
-	default:
-		return nil
-	}
-
-	occurredAtRaw := asString(body["occurred_at"])
-	if occurredAtRaw == "" {
-		occurredAtRaw = asString(body["created_at"])
-	}
-	occurredAt := parseTime(occurredAtRaw, messageTime(msg))
-
-	row := store.OrderFunnelEvent{
-		OrderID:     asUint64(body["order_id"]),
-		UserID:      asUint64(body["user_id"]),
-		EventType:   short,
-		TotalAmount: asString(body["total_amount"]),
-		Reason:      asString(body["reason"]),
-		OccurredAt:  occurredAt,
-		KafkaProvenance: store.KafkaProvenance{
-			KafkaTopic:     msg.Topic,
-			KafkaPartition: kafkaPartition(msg.Partition),
-			KafkaOffset:    msg.Offset,
-		},
-	}
-	if row.OrderID == 0 {
-		c.log.Warn("skip order event without order_id", "event_type", et)
-		return nil
-	}
-	if row.TotalAmount == "" {
-		row.TotalAmount = "0.00"
-	}
-	if err := c.orders.InsertOrderFunnelEvent(ctx, row); err != nil {
-		return err
-	}
-	if short != "created" {
-		return nil
-	}
-	return c.insertOrderLineItems(ctx, msg, body, row.OrderID, occurredAt)
-}
-
-func (c *Consumers) insertOrderLineItems(ctx context.Context, msg kafka.Message, body map[string]any, orderID uint64, ts time.Time) error {
-	rawItems, ok := body["items"].([]any)
-	if !ok || len(rawItems) == 0 {
-		return nil
-	}
-	lines := make([]store.OrderLineItem, 0, len(rawItems))
-	for _, raw := range rawItems {
-		item, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		productID := asUint64(item["product_id"])
-		if productID == 0 {
-			continue
-		}
-		unitPrice := asString(item["unit_price"])
-		if unitPrice == "" {
-			unitPrice = "0.00"
-		}
-
-		storeID := asUint64(item["store_id"])
-		storeName := asString(item["store_name"])
-		categoryID := asUint64(item["category_id"])
-		categoryName := asString(item["category_name"])
-		categorySlug := asString(item["category_slug"])
-
-		missingCategoryID := categoryID == 0
-		missingStoreName := storeName == ""
-		missingCategoryLabels := categoryID != 0 && (categoryName == "" || categorySlug == "")
-		needDim := missingCategoryID || missingStoreName || missingCategoryLabels
-		if needDim {
-			dim, found, err := c.orders.LookupProductDim(ctx, productID)
-			if err != nil {
-				return err
-			}
-			if found {
-				if storeID == 0 {
-					storeID = dim.StoreID
+			err := sink.handle(ctx, fr.msg)
+			switch {
+			case err == nil:
+				committable = append(committable, fr.msg)
+			case isPermanent(err):
+				c.log.Warn("poison message, moving to dlq",
+					"group", groupID, "topic", fr.msg.Topic,
+					"partition", fr.msg.Partition, "offset", fr.msg.Offset, "err", err)
+				if !retry("dlq", func() error {
+					return c.dlq.Publish(ctx, fr.msg.Topic+c.cfg.DLQSuffix, fr.msg, err)
+				}) {
+					return nil
 				}
-				if storeName == "" {
-					storeName = dim.StoreName
+				// Persist previously buffered rows before advancing the offset
+				// past this message, then commit past the poisoned message.
+				if !retry("flush", func() error { return sink.flush(ctx) }) {
+					return nil
 				}
-				if categoryID == 0 {
-					categoryID = dim.CategoryID
+				committable = append(committable, fr.msg)
+				if !retry("commit", func() error {
+					if err := r.CommitMessages(ctx, committable...); err != nil {
+						return fmt.Errorf("%s commit: %w", groupID, err)
+					}
+					committable = committable[:0]
+					return nil
+				}) {
+					return nil
 				}
-				if categoryName == "" {
-					categoryName = dim.CategoryName
+			default:
+				// Transient (network / ClickHouse) failure: retry the same
+				// message rather than fetching the next one.
+				if !retry("handle", func() error { return sink.handle(ctx, fr.msg) }) {
+					return nil
 				}
-				if categorySlug == "" {
-					categorySlug = dim.CategorySlug
-				}
+				committable = append(committable, fr.msg)
 			}
 		}
-
-		lines = append(lines, store.OrderLineItem{
-			OrderID:      orderID,
-			ProductID:    productID,
-			StoreID:      storeID,
-			StoreName:    storeName,
-			CategoryID:   categoryID,
-			CategoryName: categoryName,
-			CategorySlug: categorySlug,
-			Quantity:     asUint32(item["quantity"]),
-			UnitPrice:    unitPrice,
-			OccurredAt:   ts,
-			KafkaProvenance: store.KafkaProvenance{
-				KafkaTopic:     msg.Topic,
-				KafkaPartition: kafkaPartition(msg.Partition),
-				KafkaOffset:    msg.Offset,
-			},
-		})
 	}
-	return c.orders.InsertOrderLineItems(ctx, lines)
 }
 
-func (c *Consumers) handleSearch(ctx context.Context, msg kafka.Message) error {
-	body, err := parseJSONBody(msg)
-	if err != nil {
-		c.log.Warn("skip invalid search json", "err", err)
-		return nil
+// decodeEvent unmarshals a payload into a typed event. ok=false means the
+// payload was empty (nothing to record); a non-nil error is permanent (the
+// message is unparseable and belongs in the DLQ).
+func decodeEvent(msg kafka.Message, v any) (ok bool, err error) {
+	if len(msg.Value) == 0 {
+		return false, nil
 	}
-	et := resolveEventType(msg, body)
-	if et != "search.performed" {
-		return nil
+	if err := json.Unmarshal(msg.Value, v); err != nil {
+		return false, Permanentf("invalid json: %w", err)
 	}
-	if isSkipAnalytics(msg, body) {
-		return nil
-	}
-
-	data, _ := body["data"].(map[string]any)
-	if data == nil {
-		data = map[string]any{}
-	}
-
-	filtersRaw := "{}"
-	if f, ok := data["filters"]; ok && f != nil {
-		b, err := json.Marshal(f)
-		if err == nil {
-			filtersRaw = string(b)
-		}
-	}
-
-	query := asString(data["query"])
-	if query == "" {
-		query = strings.TrimSpace(asString(body["query"]))
-	}
-
-	searchOccurredAt := parseTime(asString(body["timestamp"]), messageTime(msg))
-
-	row := store.SearchQuery{
-		Query:        query,
-		ResultsCount: asUint32(data["results_count"]),
-		Filters:      filtersRaw,
-		Sort:         asString(data["sort"]),
-		OccurredAt:   searchOccurredAt,
-		KafkaProvenance: store.KafkaProvenance{
-			KafkaTopic:     msg.Topic,
-			KafkaPartition: kafkaPartition(msg.Partition),
-			KafkaOffset:    msg.Offset,
-		},
-	}
-	return c.search.InsertSearchQuery(ctx, row)
+	return true, nil
 }

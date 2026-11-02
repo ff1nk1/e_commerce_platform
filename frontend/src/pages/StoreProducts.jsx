@@ -1,22 +1,18 @@
-import { useState, useEffect } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { getStoreProducts } from "../api/catalog";
-import { formatImageUrl, PLACEHOLDER_IMAGE } from "../utils/formatImageUrl";
+import { useState } from "react";
+import {
+  Link,
+  useLoaderData,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import ProductCard from "../components/ProductCard";
+import Pagination from "../components/Pagination";
 import "../styles/catalog.css";
 
 export default function StoreProducts() {
   const { storeId } = useParams();
+  const { store, products, pagination, error } = useLoaderData();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const [store, setStore] = useState(null);
-  const [products, setProducts] = useState([]);
-  const [pagination, setPagination] = useState({
-    current_page: 1,
-    last_page: 1,
-  });
-  const requestKey = `${storeId}?${searchParams.toString()}`;
-  const [loadedKey, setLoadedKey] = useState("");
-  const loading = loadedKey !== requestKey;
 
   const [statusFilter, setStatusFilter] = useState(
     searchParams.get("status") || "all",
@@ -24,50 +20,21 @@ export default function StoreProducts() {
 
   const applyFilters = (e) => {
     e.preventDefault();
-    const next = { page: 1 };
-    if (statusFilter && statusFilter !== "all") {
-      next.status = statusFilter;
-    }
+    const next = new URLSearchParams();
+    if (statusFilter && statusFilter !== "all")
+      next.set("status", statusFilter);
+    next.set("page", "1");
     setSearchParams(next);
   };
 
   const handlePageChange = (newPage) => {
-    setSearchParams((prevParams) => {
-      const next = new URLSearchParams(prevParams);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
       next.set("page", String(newPage));
       return next;
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  useEffect(() => {
-    let cancelled = false;
-    const params = Object.fromEntries(searchParams.entries());
-    if (params.status === "all") {
-      delete params.status;
-    }
-
-    getStoreProducts(storeId, params)
-      .then((response) => {
-        if (cancelled) return;
-        setStore(response.data.store || null);
-        setProducts(response.data.products?.data || []);
-        setPagination({
-          current_page: response.data.products?.current_page || 1,
-          last_page: response.data.products?.last_page || 1,
-        });
-      })
-      .catch((error) =>
-        console.error("Ошибка загрузки товаров магазина:", error),
-      )
-      .finally(() => {
-        if (!cancelled) setLoadedKey(requestKey);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [storeId, searchParams, requestKey]);
 
   const storeName = store?.name || `Магазин #${storeId}`;
 
@@ -100,8 +67,8 @@ export default function StoreProducts() {
           </div>
         </form>
 
-        {loading ? (
-          <div className="status-message">Загрузка...</div>
+        {error ? (
+          <div className="status-message error">{error}</div>
         ) : (
           <>
             <div className="products-grid">
@@ -115,54 +82,15 @@ export default function StoreProducts() {
               ) : null}
 
               {products.map((product) => (
-                <Link
-                  key={product.id}
-                  to={`/products/${product.id}`}
-                  className="product-card"
-                  style={{ textDecoration: "none", color: "inherit" }}
-                >
-                  <div className="product-image-container">
-                    <img
-                      src={formatImageUrl(product.image_url)}
-                      alt={product.name}
-                      className="product-image"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = PLACEHOLDER_IMAGE;
-                      }}
-                    />
-                  </div>
-                  <div className="product-info">
-                    <h3 className="product-title">{product.name}</h3>
-                    <div className="product-price">{product.price} ₽</div>
-                  </div>
-                </Link>
+                <ProductCard key={product.id} product={product} />
               ))}
             </div>
 
-            {pagination.last_page > 1 && (
-              <div className="pagination">
-                <button
-                  className="pagination-button"
-                  disabled={pagination.current_page === 1}
-                  onClick={() => handlePageChange(pagination.current_page - 1)}
-                >
-                  ← Назад
-                </button>
-
-                <span className="pagination-info">
-                  Страница {pagination.current_page} из {pagination.last_page}
-                </span>
-
-                <button
-                  className="pagination-button"
-                  disabled={pagination.current_page === pagination.last_page}
-                  onClick={() => handlePageChange(pagination.current_page + 1)}
-                >
-                  Вперед →
-                </button>
-              </div>
-            )}
+            <Pagination
+              currentPage={pagination.current_page}
+              lastPage={pagination.last_page}
+              onPageChange={handlePageChange}
+            />
           </>
         )}
       </div>

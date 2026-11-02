@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { getStores } from "../api/catalog";
+import { useLoaderData } from "react-router-dom";
 import {
   deleteConversation,
   getConversation,
   sendChatMessage,
 } from "../api/recommendations";
-import { formatImageUrl, PLACEHOLDER_IMAGE } from "../utils/formatImageUrl";
+import ProductCard from "../components/ProductCard";
 import "../styles/assistant.css";
 
 const STORAGE_KEY = "assistant_conversation_id";
@@ -22,11 +21,8 @@ function loadStoredConversationId() {
 
 function persistConversationId(id) {
   try {
-    if (id) {
-      sessionStorage.setItem(STORAGE_KEY, id);
-    } else {
-      sessionStorage.removeItem(STORAGE_KEY);
-    }
+    if (id) sessionStorage.setItem(STORAGE_KEY, id);
+    else sessionStorage.removeItem(STORAGE_KEY);
   } catch {
     // ignore storage errors
   }
@@ -42,24 +38,21 @@ function loadStoredStoreId() {
 
 function persistStoreId(id) {
   try {
-    if (id) {
-      sessionStorage.setItem(STORE_STORAGE_KEY, String(id));
-    } else {
-      sessionStorage.removeItem(STORE_STORAGE_KEY);
-    }
+    if (id) sessionStorage.setItem(STORE_STORAGE_KEY, String(id));
+    else sessionStorage.removeItem(STORE_STORAGE_KEY);
   } catch {
     // ignore storage errors
   }
 }
 
 export default function Assistant() {
+  const { stores } = useLoaderData();
   const [messages, setMessages] = useState([]);
   const [conversationId, setConversationId] = useState(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState("");
-  const [stores, setStores] = useState([]);
   const [storeId, setStoreId] = useState(() => loadStoredStoreId());
   const listRef = useRef(null);
   const inputRef = useRef(null);
@@ -75,30 +68,6 @@ export default function Assistant() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading, scrollToBottom]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    getStores()
-      .then((response) => {
-        if (cancelled) return;
-        const nestedList = response.data?.data;
-        const bareList = response.data;
-        const list = Array.isArray(nestedList)
-          ? nestedList
-          : Array.isArray(bareList)
-            ? bareList
-            : [];
-        setStores(list);
-      })
-      .catch((err) => {
-        console.error(err);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,7 +99,6 @@ export default function Assistant() {
           setConversationId(null);
           setMessages([]);
         } else {
-          console.error(err);
           setError("Не удалось загрузить историю диалога.");
         }
       } finally {
@@ -168,12 +136,8 @@ export default function Assistant() {
     try {
       const buildPayload = (id) => {
         const payload = { message: text };
-        if (id) {
-          payload.conversation_id = id;
-        }
-        if (storeId) {
-          payload.store_id = Number(storeId);
-        }
+        if (id) payload.conversation_id = id;
+        if (storeId) payload.store_id = Number(storeId);
         return payload;
       };
 
@@ -208,7 +172,6 @@ export default function Assistant() {
         },
       ]);
     } catch (err) {
-      console.error(err);
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setInput(text);
       setError(
@@ -234,10 +197,8 @@ export default function Assistant() {
 
     try {
       await deleteConversation(idToDelete);
-    } catch (err) {
-      if (err.response?.status !== 404) {
-        console.error(err);
-      }
+    } catch {
+      // A 404 just means it was already gone.
     }
   };
 
@@ -302,47 +263,14 @@ export default function Assistant() {
                     Array.isArray(msg.products) &&
                     msg.products.length > 0 && (
                       <div className="assistant-products">
-                        {msg.products.map((product) => {
-                          const productId = product.product_id;
-                          return (
-                            <Link
-                              key={productId}
-                              to={`/products/${productId}`}
-                              className="assistant-product-card"
-                            >
-                              <img
-                                src={formatImageUrl(product.image_url)}
-                                alt={product.name || ""}
-                                className="assistant-product-image"
-                                onError={(e) => {
-                                  e.target.onerror = null;
-                                  e.target.src = PLACEHOLDER_IMAGE;
-                                }}
-                              />
-                              <div className="assistant-product-info">
-                                <div className="assistant-product-name">
-                                  {product.name}
-                                </div>
-                                {product.price != null && (
-                                  <div className="assistant-product-price">
-                                    {product.price} ₽
-                                  </div>
-                                )}
-                                <div
-                                  className={
-                                    product.in_stock
-                                      ? "assistant-product-stock in-stock"
-                                      : "assistant-product-stock out-of-stock"
-                                  }
-                                >
-                                  {product.in_stock
-                                    ? "В наличии"
-                                    : "Нет в наличии"}
-                                </div>
-                              </div>
-                            </Link>
-                          );
-                        })}
+                        {msg.products.map((product) => (
+                          <ProductCard
+                            key={product.product_id}
+                            product={product}
+                            variant="assistant"
+                            inStock={product.in_stock}
+                          />
+                        ))}
                       </div>
                     )}
                 </div>

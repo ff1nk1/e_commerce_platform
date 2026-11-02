@@ -1,6 +1,10 @@
 package store
 
-import "time"
+import (
+	"time"
+
+	"github.com/shopspring/decimal"
+)
 
 // KafkaProvenance tracks the source message for ClickHouse dedup / audit columns.
 type KafkaProvenance struct {
@@ -21,7 +25,7 @@ type OrderFunnelEvent struct {
 	OrderID     uint64
 	UserID      uint64
 	EventType   string // created | paid | completed | cancelled
-	TotalAmount string
+	TotalAmount decimal.Decimal
 	Reason      string
 	OccurredAt  time.Time
 	KafkaProvenance
@@ -36,7 +40,7 @@ type OrderLineItem struct {
 	CategoryName string
 	CategorySlug string
 	Quantity     uint32
-	UnitPrice    string
+	UnitPrice    decimal.Decimal
 	OccurredAt   time.Time
 	KafkaProvenance
 }

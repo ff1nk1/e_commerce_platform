@@ -6,7 +6,6 @@ namespace App\Services\Search;
 
 use App\DTO\Search\AutocompleteQuery;
 use App\DTO\Search\AutocompleteResult;
-use App\Infrastructure\OpenSearch\OpenSearchIndexManager;
 use App\Infrastructure\OpenSearch\ProductAutocompleteQuery;
 use OpenSearch\Client;
 
@@ -16,7 +15,6 @@ final class AutocompleteProductsService
 
     public function __construct(
         private readonly Client $client,
-        private readonly OpenSearchIndexManager $indices,
         private readonly ProductAutocompleteQuery $autocompleteQuery,
     ) {}
 
@@ -25,8 +23,6 @@ final class AutocompleteProductsService
      */
     public function handle(AutocompleteQuery $query): AutocompleteResult
     {
-        $this->indices->ensureIndices();
-
         $q = is_string($query->q) ? trim($query->q) : '';
         if (mb_strlen($q) < self::MIN_AUTOCOMPLETE_CHARS) {
             return new AutocompleteResult(suggestions: []);

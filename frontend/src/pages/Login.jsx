@@ -1,38 +1,46 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import {
+  Form,
+  Link,
+  redirect,
+  useActionData,
+  useNavigation,
+} from "react-router-dom";
 import { login } from "../api/auth";
 import PageShell from "../components/PageShell";
 import Button from "../components/Button";
 import "../styles/auth.css";
 
-export default function Login() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [errors, setErrors] = useState({});
-  const [processing, setProcessing] = useState(false);
-  const navigate = useNavigate();
+/** Route action for /login. Returns `{ errors }` on validation failure. */
+export async function loginAction({ request }) {
+  const formData = await request.formData();
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "");
 
-  const submit = async (e) => {
-    e.preventDefault();
+  if (!email || !password) {
+    return { errors: { email: "Укажите email и пароль." } };
+  }
 
-    setProcessing(true);
-    setErrors({});
-
-    try {
-      await login(email, password);
-      navigate("/profile");
-    } catch (error) {
-      if (error.response?.status === 422) {
-        setErrors(error.response.data.errors ?? {});
-      } else {
-        setErrors({
-          email: "Ошибка при авторизации",
-        });
-      }
-    } finally {
-      setProcessing(false);
+  try {
+    await login(email, password);
+    return redirect("/profile");
+  } catch (error) {
+    if (error.response?.status === 422) {
+      return { errors: error.response.data.errors ?? {} };
     }
-  };
+    return { errors: { email: "Ошибка при авторизации" } };
+  }
+}
+
+function errorText(value) {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default function Login() {
+  const actionData = useActionData();
+  const navigation = useNavigation();
+  const errors = actionData?.errors ?? {};
+  const processing = navigation.state !== "idle";
 
   return (
     <PageShell
@@ -41,20 +49,18 @@ export default function Login() {
       title="Welcome back"
       subtitle="Sign in to your account"
     >
-      <form onSubmit={submit} className="auth-form">
+      <Form method="post" className="auth-form">
         <div className="form-group">
           <label htmlFor="email">Email</label>
           <input
             id="email"
+            name="email"
             type="email"
             className="auth-input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
           />
-          {errors.email && (
-            <span className="error">
-              {Array.isArray(errors.email) ? errors.email[0] : errors.email}
-            </span>
+          {errorText(errors.email) && (
+            <span className="error">{errorText(errors.email)}</span>
           )}
         </div>
 
@@ -62,24 +68,20 @@ export default function Login() {
           <label htmlFor="password">Password</label>
           <input
             id="password"
+            name="password"
             type="password"
             className="auth-input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
           />
-          {errors.password && (
-            <span className="error">
-              {Array.isArray(errors.password)
-                ? errors.password[0]
-                : errors.password}
-            </span>
+          {errorText(errors.password) && (
+            <span className="error">{errorText(errors.password)}</span>
           )}
         </div>
 
         <Button type="submit" className="auth-button" disabled={processing}>
           {processing ? "Signing in..." : "Sign in"}
         </Button>
-      </form>
+      </Form>
 
       <div className="auth-footer">
         <span>Первый раз на сайте?</span>

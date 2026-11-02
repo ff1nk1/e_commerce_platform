@@ -16,6 +16,8 @@ flowchart LR
   end
   subgraph consumersBin [analytic-consumers]
     H[handlers]
+    B[microbatch]
+    D[DLQ publisher]
   end
   subgraph ch [ClickHouse]
     UR[user_registrations]
@@ -27,16 +29,20 @@ flowchart LR
   subgraph apiBin [analytic-api]
     HTTP["GET /analytics/*"]
   end
+  DLQ[".dlq topics"]
   Gateway[auth_service gateway]
   UE --> H
   OE --> H
   SE --> H
   PE --> H
-  H --> UR
-  H --> OF
-  H --> OLI
-  H --> PD
-  H --> SQ
+  H --> B
+  H --> D
+  B --> UR
+  B --> OF
+  B --> OLI
+  B --> PD
+  B --> SQ
+  D --> DLQ
   Gateway --> HTTP
   HTTP --> ch
 ```
@@ -54,12 +60,12 @@ flowchart LR
 
 | Пакет | Назначение |
 |-------|------------|
-| `internal/config` | Env-конфиг (`CLICKHOUSE_*`, Kafka, HTTP) |
+| `internal/config` | Env-конфиг (`CLICKHOUSE_*`, Kafka, HTTP, батчинг, DLQ) |
 | `internal/bootstrap` | Общий bootstrap API и consumers |
-| `internal/clickhouse` | Connect, create DB, SQL-миграции |
-| `internal/store` | Inserts + метрики (ClickHouse) |
-| `internal/httpapi` | HTTP handlers; зависит от интерфейса `MetricsReader` |
-| `internal/kafka` | Consumers; узкие write-порты (`UserRegistrar`, `OrderIngester`, …) |
+| `internal/clickhouse` | Connect, create DB, версионированные SQL-миграции (`schema_migrations`) |
+| `internal/store` | Батчевые inserts + метрики (ClickHouse), `decimal` для денег |
+| `internal/httpapi` | HTTP handlers; зависит от интерфейса `MetricsReader`; безопасные `500` |
+| `internal/kafka` | Consumers; единый write-порт `EventStore`, микробатчи, DLQ |
 | `internal/testutil` | Хелперы для integration-тестов |
 
 ## Compose-сервисы
@@ -85,17 +91,22 @@ flowchart LR
 | `CLICKHOUSE_USER` | `default` | Пользователь |
 | `CLICKHOUSE_PASSWORD` | **обязателен** | Пустой пароль → ошибка `config.Load` |
 | `CLICKHOUSE_ASYNC_INSERT` | `1` | Server-side буфер INSERT |
-| `CLICKHOUSE_WAIT_FOR_ASYNC_INSERT` | `0` | `0` = ack сразу (fire-and-forget); `1` = ждать flush |
+| `CLICKHOUSE_WAIT_FOR_ASYNC_INSERT` | `1` | `1` = ack только после flush на диск; `0` = fire-and-forget (небезопасно) |
 | `CLICKHOUSE_ASYNC_INSERT_BUSY_TIMEOUT_MS` | `1000` | Flush по времени (мс) |
 | `CLICKHOUSE_ASYNC_INSERT_MAX_DATA_SIZE` | `10485760` | Flush по размеру (байты, 10 МБ) |
 | `CLICKHOUSE_ASYNC_INSERT_MAX_QUERY_NUMBER` | `100` | Flush примерно после N INSERT’ов |
+| `CLICKHOUSE_BATCH_MAX_ROWS` | `500` | Микробатч: строк на таблицу до flush |
+| `CLICKHOUSE_BATCH_FLUSH_INTERVAL_MS` | `1000` | Микробатч: flush по таймеру (мс) |
+| `CLICKHOUSE_QUERY_TIMEOUT_MS` | `5000` | Таймаут на каждый запрос к ClickHouse |
+| `KAFKA_DLQ_SUFFIX` | `.dlq` | Суффикс DLQ-топика (напр. `user.events.dlq`) |
+| `KAFKA_RETRY_BACKOFF_MS` | `1000` | Backoff при retry транзиентной ошибки |
 | `MIGRATIONS_DIR` | `migrations` | Каталог `.sql` миграций |
 
 Локальный compose подставляет `${CLICKHOUSE_PASSWORD:-analytic_local_secret}` в ClickHouse, API и consumers.
 
-### Async insert (батчинг на стороне CH)
+### Микробатчи и async insert
 
-Клиент шлёт мелкие `PrepareBatch` INSERT’ы; ClickHouse склеивает их по `async_insert_*` (session settings на native Connect). При `wait_for_async_insert=0` Kafka commit может пройти до физического flush — при краше CH до сброса пачки возможна потеря уже «принятых» строк. В тестах `testutil` форсирует `wait_for_async_insert=1`.
+Consumers копят строки по таблицам и пишут их одним `PrepareBatch` INSERT’ом, когда набрано `CLICKHOUSE_BATCH_MAX_ROWS` строк или истёк `CLICKHOUSE_BATCH_FLUSH_INTERVAL_MS`. Kafka offset коммитится **только после успешной записи** батча (или после отправки сообщения в DLQ), поэтому падение ClickHouse до flush не теряет данные. Серверный `async_insert` дополнительно склеивает батчи, а `wait_for_async_insert=1` гарантирует, что сервер подтверждает запись лишь после flush на диск.
 
 ### Смена пароля на уже созданном volume
 
@@ -126,18 +137,18 @@ docker compose restart analytic_consumers
 
 Семантика доставки:
 
-- `StartOffset: FirstOffset`, ручной commit после успешного handle.
-- При ошибке handler — retry той же message (1s backoff), следующая не fetch'ится.
-- Невалидный JSON — warn + skip (`return nil` → commit).
+- `StartOffset: FirstOffset`, ручной commit — **только после успешного flush батча** в ClickHouse.
+- Транзиентная ошибка (сеть / ClickHouse) — retry той же message с backoff (`KAFKA_RETRY_BACKOFF_MS`), следующая не fetch’ится.
+- Постоянная ошибка (битый JSON, нет обязательного id) — сообщение уходит в DLQ-топик `<topic><KAFKA_DLQ_SUFFIX>` (напр. `user.events.dlq`) с заголовками `dlq-reason` / `dlq-failed-at`, после чего offset коммитится, чтобы не блокировать партицию.
+- Неизвестный тип события и `skip-analytics` — нормальный пропуск без DLQ.
 - Тип события: header `event-type`, иначе поля body `event_type` / `event`.
-- Search: header/body `skip-analytics` пропускает запись.
 - `order.shipped` в ClickHouse пишется как `event_type = completed` (стадия воронки).
 
-На `order.created` дополнительно пишутся line items; недостающие store/category имена подтягиваются из `product_dim` (`LookupProductDim`).
+На `order.created` дополнительно пишутся line items; недостающие store/category имена подтягиваются из `product_dim` (`LookupProductDim`). Деньги (`total_amount`, `unit_price`) хранятся и агрегируются через `shopspring/decimal`.
 
 ## ClickHouse: схема
 
-Миграции в [`migrations/`](migrations/) — idempotent `CREATE` / `ALTER IF NOT EXISTS`, выполняются при каждом старте API и consumers.
+Миграции в [`migrations/`](migrations/) применяются один раз и версионируются таблицей `schema_migrations` (имя файла + `applied_at`); повторный старт API/consumers уже применённые файлы пропускает. **Каждый файл содержит ровно один SQL-стейтмент** (ClickHouse отклоняет multi-statements, а SQL-сплиттера в коде нет), поэтому одна миграция = один файл. Тела миграций остаются idempotent (`CREATE` / `ALTER ... IF NOT EXISTS`), поэтому первый запуск поверх существующего volume безопасен.
 
 Движок: **ReplacingMergeTree**. Чтение метрик идёт с **`FINAL`**.
 

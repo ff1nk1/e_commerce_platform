@@ -25,7 +25,9 @@ func pingKafka(t *testing.T, brokers []string) {
 	_ = conn.Close()
 }
 
-func writeAndHandle(t *testing.T, brokers []string, topic string, msg kafka.Message, handle func(context.Context, kafka.Message) error) {
+// writeAndHandle publishes a message and feeds it to the sink, flushing so the
+// row reaches ClickHouse before assertions run.
+func writeAndHandle(t *testing.T, brokers []string, topic string, msg kafka.Message, handle func(context.Context, kafka.Message) error, flush func(context.Context) error) {
 	t.Helper()
 
 	conn, err := kafka.Dial("tcp", brokers[0])
@@ -52,9 +54,10 @@ func writeAndHandle(t *testing.T, brokers []string, topic string, msg kafka.Mess
 	defer cancel()
 	require.NoError(t, w.WriteMessages(ctx, msg))
 
-	// Handlers read msg.Topic for kafka_* columns; Writer owns the publish topic.
+	// Sinks read msg.Topic for kafka_* columns; Writer owns the publish topic.
 	msg.Topic = topic
 	require.NoError(t, handle(ctx, msg))
+	require.NoError(t, flush(ctx))
 }
 
 func TestIntegrationKafkaToClickHouse(t *testing.T) {
@@ -64,11 +67,15 @@ func TestIntegrationKafkaToClickHouse(t *testing.T) {
 	st, conn := testutil.OpenTestStore(t)
 	testutil.TruncateAnalytics(t, conn)
 
-	c := NewConsumers(brokers, st, slog.Default())
+	product := newProductSink(st, 100)
+	order := newOrderSink(st, 100, slog.Default())
+	user := newUserSink(st, 100)
+	search := newSearchSink(st, 100)
+
 	ctx := context.Background()
 
 	// product.created → product_dim
-	writeAndHandle(t, brokers, "product.created", kafka.Message{
+	writeAndHandle(t, brokers, "product.events", kafka.Message{
 		Headers: []kafka.Header{{Key: "event-type", Value: []byte("product.created")}},
 		Value: []byte(`{
 			"data":{
@@ -77,7 +84,7 @@ func TestIntegrationKafkaToClickHouse(t *testing.T) {
 				"store":{"id":8,"name":"Outlet"}
 			}
 		}`),
-	}, c.handleProduct)
+	}, product.handle, product.flush)
 
 	dim, found, err := st.LookupProductDim(ctx, 1001)
 	require.NoError(t, err)
@@ -95,7 +102,7 @@ func TestIntegrationKafkaToClickHouse(t *testing.T) {
 			"occurred_at":"2024-08-01T10:00:00Z",
 			"items":[{"product_id":1001,"quantity":1,"unit_price":"25.00"}]
 		}`),
-	}, c.handleOrder)
+	}, order.handle, order.flush)
 
 	var storeName string
 	var categorySlug string
@@ -128,7 +135,7 @@ func TestIntegrationKafkaToClickHouse(t *testing.T) {
 			"occurred_at":"2024-08-01T11:00:00Z",
 			"items":[{"product_id":1001,"quantity":9,"unit_price":"25.00"}]
 		}`),
-	}, c.handleOrder)
+	}, order.handle, order.flush)
 
 	var lineCount uint64
 	err = conn.QueryRow(ctx, `
@@ -141,7 +148,7 @@ func TestIntegrationKafkaToClickHouse(t *testing.T) {
 	writeAndHandle(t, brokers, "user.events", kafka.Message{
 		Headers: []kafka.Header{{Key: "event-type", Value: []byte("user.registered")}},
 		Value:   []byte(`{"user_id":42,"email":"u@x","name":"U","registered_at":"2024-08-01T09:00:00Z"}`),
-	}, c.handleUser)
+	}, user.handle, user.flush)
 
 	var users uint64
 	err = conn.QueryRow(ctx, `SELECT count() FROM user_registrations FINAL WHERE user_id = 42`).Scan(&users)
@@ -155,12 +162,12 @@ func TestIntegrationKafkaToClickHouse(t *testing.T) {
 			{Key: "skip-analytics", Value: []byte("true")},
 		},
 		Value: []byte(`{"data":{"query":"secret","results_count":1}}`),
-	}, c.handleSearch)
+	}, search.handle, search.flush)
 
 	writeAndHandle(t, brokers, "search.events", kafka.Message{
 		Headers: []kafka.Header{{Key: "event-type", Value: []byte("search.performed")}},
 		Value:   []byte(`{"timestamp":"2024-08-01T12:00:00Z","data":{"query":"visible","results_count":2}}`),
-	}, c.handleSearch)
+	}, search.handle, search.flush)
 
 	var searches uint64
 	err = conn.QueryRow(ctx, `

@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useLoaderData, useNavigate } from "react-router-dom";
+import { useFetcher, useLoaderData, redirect, Form } from "react-router-dom";
 import {
   logout as apiLogout,
   updatePassword,
@@ -15,9 +14,7 @@ function normalizePhone(value) {
 
 function validatePhone(value) {
   const normalized = normalizePhone(value);
-  if (!normalized) {
-    return "Укажите номер телефона.";
-  }
+  if (!normalized) return "Укажите номер телефона.";
   if (normalized.length > 16 || !E164_PHONE_RE.test(normalized)) {
     return "Номер телефона должен быть в формате E.164 (например +48123456789).";
   }
@@ -26,203 +23,182 @@ function validatePhone(value) {
 
 function fieldErrorMessage(error, field) {
   const fieldErrors = error.response?.data?.errors?.[field];
-  if (Array.isArray(fieldErrors) && fieldErrors[0]) {
-    return fieldErrors[0];
-  }
+  if (Array.isArray(fieldErrors) && fieldErrors[0]) return fieldErrors[0];
   return error.response?.data?.message || "Ошибка при изменении данных";
 }
 
-export default function Profile() {
-  const user = useLoaderData();
-  const navigate = useNavigate();
-  const [name, setName] = useState(user?.name || "");
-  const [number, setNumber] = useState(user?.number || "");
+/**
+ * Route action for /profile. Handles logout, profile field updates and password
+ * changes via the `intent` field. Returns a `{ status }` object for inline
+ * messages (or a redirect for logout).
+ */
+export async function profileAction({ request }) {
+  const formData = await request.formData();
+  const intent = formData.get("intent");
 
-  // --- Добавлено: состояния для смены пароля ---
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordStatus, setPasswordStatus] = useState({
-    message: "",
-    type: "",
-  });
-  // ---------------------------------------------
+  if (intent === "logout") {
+    try {
+      await apiLogout();
+    } catch {
+      // Session is discarded client-side regardless.
+    }
+    return redirect("/login");
+  }
 
-  const [loadingField, setLoadingField] = useState(null);
-  const [status, setStatus] = useState({ message: "", type: "" });
-
-  const handleUpdate = async (field, value) => {
-    setStatus({ message: "", type: "" });
+  if (intent === "field") {
+    const field = formData.get("field");
+    let value = formData.get("value");
+    const displayValue = value;
 
     if (field === "number") {
       const phoneError = validatePhone(value);
       if (phoneError) {
-        setStatus({ message: phoneError, type: "error" });
-        return;
+        return { status: { type: "error", message: phoneError } };
       }
       value = normalizePhone(value);
-      setNumber(value);
     }
 
-    setLoadingField(field);
-
     try {
-      // Используем твой api, он сам подставит baseURL, куки и токены (withCredentials: true)
-      // Если бэкенд вернет 401, твой интерсептор сам обновит сессию и повторит этот запрос!
       const response = await updateProfile(field, value);
-      const saved = response?.data?.user?.[field];
-      if (field === "number" && typeof saved === "string") {
-        setNumber(saved);
-      }
-      if (field === "name" && typeof saved === "string") {
-        setName(saved);
-      }
-
-      setStatus({ message: "Данные успешно обновлены!", type: "success" });
+      return {
+        status: { type: "success", message: "Данные успешно обновлены!" },
+        field,
+        value: response?.data?.user?.[field] ?? displayValue,
+      };
     } catch (error) {
-      setStatus({ message: fieldErrorMessage(error, field), type: "error" });
-    } finally {
-      setLoadingField(null);
+      return {
+        status: { type: "error", message: fieldErrorMessage(error, field) },
+      };
     }
-  };
+  }
 
-  // --- Отредактировано: выход из аккаунта ---
-  const logout = async () => {
-    try {
-      await apiLogout();
-    } catch (error) {
-      const errorMessage =
-        error.response?.data?.message || "Ошибка при выходе из аккаунта";
-      console.warn(errorMessage);
-    } finally {
-      navigate("/login", { replace: true });
-    }
-  };
-  // -------------------------------------------
-
-  // --- Добавлено: функция смены пароля ---
-  const handleChangePassword = async () => {
-    setPasswordLoading(true);
-    setPasswordStatus({ message: "", type: "" });
-
+  if (intent === "password") {
     try {
       await updatePassword({
-        current_password: currentPassword,
-        new_password: newPassword,
+        current_password: formData.get("current_password"),
+        new_password: formData.get("new_password"),
       });
-
-      setPasswordStatus({
-        message: "Пароль успешно изменён!",
-        type: "success",
-      });
-      setCurrentPassword("");
-      setNewPassword("");
+      return {
+        status: { type: "success", message: "Пароль успешно изменён!" },
+        cleared: true,
+      };
     } catch (error) {
-      const errorMessage =
-        error.response?.data?.message || "Ошибка при смене пароля";
-      setPasswordStatus({ message: errorMessage, type: "error" });
-    } finally {
-      setPasswordLoading(false);
+      return {
+        status: {
+          type: "error",
+          message: error.response?.data?.message || "Ошибка при смене пароля",
+        },
+      };
     }
-  };
-  // ---------------------------------------
+  }
+
+  return { status: { type: "", message: "" } };
+}
+
+export default function Profile() {
+  const user = useLoaderData();
+  const fetcher = useFetcher();
+  const passwordFetcher = useFetcher();
 
   if (!user) return null;
 
-  const avatarInitial = (name || user.email || "U").charAt(0).toUpperCase();
+  const avatarInitial = (user.name || user.email || "U")
+    .charAt(0)
+    .toUpperCase();
+
+  const busy = fetcher.state !== "idle";
+  const status = fetcher.data?.status;
+  const passwordBusy = passwordFetcher.state !== "idle";
+  const passwordStatus = passwordFetcher.data?.status;
 
   return (
     <div className="profile-page">
       <div className="profile-card">
-        {/* --- Добавлено: кнопка выхода в углу --- */}
-        <button
-          className="logout-button"
-          onClick={logout}
-          title="Выйти из аккаунта"
-          aria-label="Выйти из аккаунта"
-        >
-          {/* Иконка "выход" (стрелка из двери). Можно заменить на свой SVG или текст "→]" */}
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <Form method="post" className="logout-form">
+          <input type="hidden" name="intent" value="logout" />
+          <button
+            className="logout-button"
+            type="submit"
+            title="Выйти из аккаунта"
+            aria-label="Выйти из аккаунта"
           >
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-        </button>
-        {/* ------------------------------------ */}
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+        </Form>
 
-        {/* Заголовок с информацией о пользователе */}
         <div className="profile-header">
           <div className="profile-avatar">{avatarInitial}</div>
           <div className="profile-title-group">
-            <h1>{name || "Профиль"}</h1>
+            <h1>{user.name || "Профиль"}</h1>
             <p>{user.email}</p>
           </div>
         </div>
 
-        {/* Служебные данные (ID и Role ID) */}
         <div className="profile-badges">
           <span className="badge">ID: {user.id}</span>
           <span className="badge">Role ID: {user.role_id}</span>
         </div>
 
-        {/* Статусное сообщение об успехе или ошибке */}
-        {status.message && (
+        {status?.message && (
           <div className={`status-message ${status.type}`}>
             {status.message}
           </div>
         )}
 
-        {/* Интерактивные поля ввода */}
         <div className="profile-form">
           <div className="field-group">
             <label htmlFor="profile-name">Имя</label>
-            <div className="input-wrapper">
+            <fetcher.Form method="post" className="input-wrapper">
+              <input type="hidden" name="intent" value="field" />
+              <input type="hidden" name="field" value="name" />
               <input
                 id="profile-name"
+                name="value"
                 type="text"
                 className="profile-input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                defaultValue={user.name || ""}
                 placeholder="Введите имя"
               />
-              <button
-                className="save-button"
-                onClick={() => handleUpdate("name", name)}
-                disabled={loadingField === "name"}
-              >
-                {loadingField === "name" ? "Сохранение..." : "Изменить"}
+              <button className="save-button" type="submit" disabled={busy}>
+                {busy && fetcher.formData?.get("field") === "name"
+                  ? "Сохранение..."
+                  : "Изменить"}
               </button>
-            </div>
+            </fetcher.Form>
           </div>
 
           <div className="field-group">
             <label htmlFor="profile-number">Номер телефона</label>
-            <div className="input-wrapper">
+            <fetcher.Form method="post" className="input-wrapper">
+              <input type="hidden" name="intent" value="field" />
+              <input type="hidden" name="field" value="number" />
               <input
                 id="profile-number"
+                name="value"
                 type="tel"
                 className="profile-input"
-                value={number}
-                onChange={(e) => setNumber(e.target.value)}
+                defaultValue={user.number || ""}
                 placeholder="+7 (999) 000-00-00"
               />
-              <button
-                className="save-button"
-                onClick={() => handleUpdate("number", number)}
-                disabled={loadingField === "number"}
-              >
-                {loadingField === "number" ? "Сохранение..." : "Изменить"}
+              <button className="save-button" type="submit" disabled={busy}>
+                {busy && fetcher.formData?.get("field") === "number"
+                  ? "Сохранение..."
+                  : "Изменить"}
               </button>
-            </div>
+            </fetcher.Form>
           </div>
         </div>
 
@@ -231,46 +207,49 @@ export default function Profile() {
             Смена пароля
           </h2>
 
-          {passwordStatus.message && (
+          {passwordStatus?.message && (
             <div className={`status-message ${passwordStatus.type}`}>
               {passwordStatus.message}
             </div>
           )}
 
-          <div className="field-group">
-            <label htmlFor="profile-current-password">Текущий пароль</label>
-            <div className="input-wrapper">
-              <input
-                id="profile-current-password"
-                type="password"
-                className="profile-input"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Введите текущий пароль"
-              />
+          <passwordFetcher.Form method="post">
+            <input type="hidden" name="intent" value="password" />
+            <div className="field-group">
+              <label htmlFor="profile-current-password">Текущий пароль</label>
+              <div className="input-wrapper">
+                <input
+                  id="profile-current-password"
+                  name="current_password"
+                  type="password"
+                  className="profile-input"
+                  placeholder="Введите текущий пароль"
+                  key={passwordFetcher.data?.cleared ? "cleared" : "current"}
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="field-group">
-            <label htmlFor="profile-new-password">Новый пароль</label>
-            <div className="input-wrapper">
-              <input
-                id="profile-new-password"
-                type="password"
-                className="profile-input"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Введите новый пароль"
-              />
-              <button
-                className="save-button"
-                onClick={handleChangePassword}
-                disabled={passwordLoading || !currentPassword || !newPassword}
-              >
-                {passwordLoading ? "Сохранение..." : "Изменить пароль"}
-              </button>
+            <div className="field-group">
+              <label htmlFor="profile-new-password">Новый пароль</label>
+              <div className="input-wrapper">
+                <input
+                  id="profile-new-password"
+                  name="new_password"
+                  type="password"
+                  className="profile-input"
+                  placeholder="Введите новый пароль"
+                  key={passwordFetcher.data?.cleared ? "cleared-new" : "new"}
+                />
+                <button
+                  className="save-button"
+                  type="submit"
+                  disabled={passwordBusy}
+                >
+                  {passwordBusy ? "Сохранение..." : "Изменить пароль"}
+                </button>
+              </div>
             </div>
-          </div>
+          </passwordFetcher.Form>
         </div>
       </div>
     </div>

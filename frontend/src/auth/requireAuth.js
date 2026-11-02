@@ -1,10 +1,5 @@
 import { redirect } from "react-router-dom";
-import { getUser } from "../api/auth";
-
-/** In-flight + short-lived cache so nested loaders share one GET /user per navigation. */
-let userRequest = null;
-let cachedUser = null;
-let cacheClearTimer = null;
+import { fetchSessionUser } from "./session";
 
 function forbidden(message = "Forbidden") {
   throw new Response(message, { status: 403, statusText: "Forbidden" });
@@ -12,32 +7,14 @@ function forbidden(message = "Forbidden") {
 
 /**
  * Loader that requires a valid session. Redirects to /login on 401.
+ * Reuses the deduped session request, so nested loaders share one GET /user.
  */
 export async function requireAuth() {
-  if (cachedUser) {
-    return cachedUser;
-  }
-
-  if (!userRequest) {
-    userRequest = getUser()
-      .then(({ data }) => {
-        cachedUser = data;
-        clearTimeout(cacheClearTimer);
-        cacheClearTimer = setTimeout(() => {
-          cachedUser = null;
-        }, 100);
-        return data;
-      })
-      .finally(() => {
-        userRequest = null;
-      });
-  }
-
-  try {
-    return await userRequest;
-  } catch {
+  const user = await fetchSessionUser();
+  if (!user) {
     throw redirect("/login");
   }
+  return user;
 }
 
 /**

@@ -27,6 +27,10 @@ Route::middleware('throttle:search')->group(function (): void {
     Route::get('/search', [GatewayController::class, 'search']);
 });
 
+// Storefront catalog — public so guests can browse categories, stores and products
+Route::any('/catalog/{path?}', [GatewayController::class, 'catalog'])
+    ->where('path', '.*');
+
 // Recommendations health — public probe
 Route::get('/recommendations/health', [GatewayController::class, 'recommendationsHealth']);
 
@@ -35,10 +39,6 @@ Route::middleware(['ensure.token', 'auth:api'])->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::patch('/profile', [AuthController::class, 'updateProfile']);
     Route::patch('/profile/password', [AuthController::class, 'changePassword']);
-
-    // Storefront catalog — any authenticated role
-    Route::any('/catalog/{path?}', [GatewayController::class, 'catalog'])
-        ->where('path', '.*');
 
     // Customer orders — auth injects user_id when proxying
     Route::any('/orders/{path?}', [GatewayController::class, 'orders'])

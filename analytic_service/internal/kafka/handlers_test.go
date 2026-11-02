@@ -25,19 +25,19 @@ type mockEventStore struct {
 	lookupCalls []uint64
 }
 
-func (m *mockEventStore) InsertUserRegistration(_ context.Context, row store.UserRegistration) error {
+func (m *mockEventStore) InsertUserRegistrations(_ context.Context, rows []store.UserRegistration) error {
 	if m.insertErr != nil {
 		return m.insertErr
 	}
-	m.users = append(m.users, row)
+	m.users = append(m.users, rows...)
 	return nil
 }
 
-func (m *mockEventStore) InsertOrderFunnelEvent(_ context.Context, row store.OrderFunnelEvent) error {
+func (m *mockEventStore) InsertOrderFunnelEvents(_ context.Context, rows []store.OrderFunnelEvent) error {
 	if m.insertErr != nil {
 		return m.insertErr
 	}
-	m.orders = append(m.orders, row)
+	m.orders = append(m.orders, rows...)
 	return nil
 }
 
@@ -49,11 +49,19 @@ func (m *mockEventStore) InsertOrderLineItems(_ context.Context, rows []store.Or
 	return nil
 }
 
-func (m *mockEventStore) InsertProductDim(_ context.Context, row store.ProductDim) error {
+func (m *mockEventStore) InsertProductDims(_ context.Context, rows []store.ProductDim) error {
 	if m.insertErr != nil {
 		return m.insertErr
 	}
-	m.products = append(m.products, row)
+	m.products = append(m.products, rows...)
+	return nil
+}
+
+func (m *mockEventStore) InsertSearchQueries(_ context.Context, rows []store.SearchQuery) error {
+	if m.insertErr != nil {
+		return m.insertErr
+	}
+	m.searches = append(m.searches, rows...)
 	return nil
 }
 
@@ -69,49 +77,57 @@ func (m *mockEventStore) LookupProductDim(_ context.Context, productID uint64) (
 	return dim, ok, nil
 }
 
-func (m *mockEventStore) InsertSearchQuery(_ context.Context, row store.SearchQuery) error {
-	if m.insertErr != nil {
-		return m.insertErr
-	}
-	m.searches = append(m.searches, row)
-	return nil
+func flushSink(t *testing.T, sink consumerSink) {
+	t.Helper()
+	require.NoError(t, sink.flush(context.Background()))
 }
 
-func newTestConsumers(st EventStore) *Consumers {
-	return NewConsumers([]string{"localhost:9092"}, st, slog.Default())
-}
-
-func TestHandleUser(t *testing.T) {
+func TestUserSink(t *testing.T) {
 	t.Parallel()
 
-	st := &mockEventStore{}
-	c := newTestConsumers(st)
-
-	err := c.handleUser(context.Background(), kafka.Message{
-		Topic: "user.events",
-		Value: []byte(`{"event_type":"user.registered","user_id":10,"email":"a@b.c","name":"Ann","registered_at":"2024-01-02T00:00:00Z"}`),
+	t.Run("valid", func(t *testing.T) {
+		st := &mockEventStore{}
+		sink := newUserSink(st, 100)
+		require.NoError(t, sink.handle(context.Background(), kafka.Message{
+			Topic: "user.events",
+			Value: []byte(`{"event_type":"user.registered","user_id":10,"email":"a@b.c","name":"Ann","registered_at":"2024-01-02T00:00:00Z"}`),
+		}))
+		flushSink(t, sink)
+		require.Len(t, st.users, 1)
+		assert.Equal(t, uint64(10), st.users[0].UserID)
+		assert.Equal(t, "a@b.c", st.users[0].Email)
 	})
-	require.NoError(t, err)
-	require.Len(t, st.users, 1)
-	assert.Equal(t, uint64(10), st.users[0].UserID)
-	assert.Equal(t, "a@b.c", st.users[0].Email)
 
-	st2 := &mockEventStore{}
-	c2 := newTestConsumers(st2)
-	err = c2.handleUser(context.Background(), kafka.Message{
-		Value: []byte(`{"event_type":"user.registered"}`),
+	t.Run("missing user_id is permanent", func(t *testing.T) {
+		st := &mockEventStore{}
+		sink := newUserSink(st, 100)
+		err := sink.handle(context.Background(), kafka.Message{Value: []byte(`{"event_type":"user.registered"}`)})
+		require.Error(t, err)
+		assert.True(t, isPermanent(err))
+		flushSink(t, sink)
+		assert.Empty(t, st.users)
 	})
-	require.NoError(t, err)
-	assert.Empty(t, st2.users)
 
-	st3 := &mockEventStore{}
-	c3 := newTestConsumers(st3)
-	err = c3.handleUser(context.Background(), kafka.Message{Value: []byte(`{bad`)})
-	require.NoError(t, err)
-	assert.Empty(t, st3.users)
+	t.Run("invalid json is permanent", func(t *testing.T) {
+		st := &mockEventStore{}
+		sink := newUserSink(st, 100)
+		err := sink.handle(context.Background(), kafka.Message{Value: []byte(`{bad`)})
+		require.Error(t, err)
+		assert.True(t, isPermanent(err))
+	})
+
+	t.Run("other event type ignored", func(t *testing.T) {
+		st := &mockEventStore{}
+		sink := newUserSink(st, 100)
+		require.NoError(t, sink.handle(context.Background(), kafka.Message{
+			Value: []byte(`{"event_type":"user.deleted","user_id":1}`),
+		}))
+		flushSink(t, sink)
+		assert.Empty(t, st.users)
+	})
 }
 
-func TestHandleOrderEventTypes(t *testing.T) {
+func TestOrderSinkEventTypes(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -129,16 +145,16 @@ func TestHandleOrderEventTypes(t *testing.T) {
 		t.Run(tc.eventType, func(t *testing.T) {
 			t.Parallel()
 			st := &mockEventStore{}
-			c := newTestConsumers(st)
+			sink := newOrderSink(st, 100, slog.Default())
 			body := `{"event_type":"` + tc.eventType + `","order_id":5,"user_id":1,"total_amount":"12.50","items":[{"product_id":99,"quantity":1,"unit_price":"12.50","store_id":1,"store_name":"S","category_id":2,"category_name":"C","category_slug":"c"}]}`
-			err := c.handleOrder(context.Background(), kafka.Message{
+			require.NoError(t, sink.handle(context.Background(), kafka.Message{
 				Topic: "order.events",
 				Value: []byte(body),
-			})
-			require.NoError(t, err)
+			}))
+			flushSink(t, sink)
 			require.Len(t, st.orders, 1)
 			assert.Equal(t, tc.wantShort, st.orders[0].EventType)
-			assert.Equal(t, "12.50", st.orders[0].TotalAmount)
+			assert.Equal(t, "12.5", st.orders[0].TotalAmount.String())
 			if tc.wantLines {
 				require.Len(t, st.lines, 1)
 				assert.Equal(t, uint64(99), st.lines[0].ProductID)
@@ -149,19 +165,21 @@ func TestHandleOrderEventTypes(t *testing.T) {
 	}
 }
 
-func TestHandleOrderSkipsZeroOrderID(t *testing.T) {
+func TestOrderSinkZeroOrderIDIsPermanent(t *testing.T) {
 	t.Parallel()
 
 	st := &mockEventStore{}
-	c := newTestConsumers(st)
-	err := c.handleOrder(context.Background(), kafka.Message{
+	sink := newOrderSink(st, 100, slog.Default())
+	err := sink.handle(context.Background(), kafka.Message{
 		Value: []byte(`{"event_type":"order.created","order_id":0}`),
 	})
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.True(t, isPermanent(err))
+	flushSink(t, sink)
 	assert.Empty(t, st.orders)
 }
 
-func TestHandleOrderLineItemsSkipZeroProductAndDimBackfill(t *testing.T) {
+func TestOrderSinkSkipZeroProductAndDimBackfill(t *testing.T) {
 	t.Parallel()
 
 	st := &mockEventStore{
@@ -176,9 +194,9 @@ func TestHandleOrderLineItemsSkipZeroProductAndDimBackfill(t *testing.T) {
 			},
 		},
 	}
-	c := newTestConsumers(st)
+	sink := newOrderSink(st, 100, slog.Default())
 
-	err := c.handleOrder(context.Background(), kafka.Message{
+	require.NoError(t, sink.handle(context.Background(), kafka.Message{
 		Topic: "order.events",
 		Value: []byte(`{
 			"event_type":"order.created",
@@ -190,8 +208,8 @@ func TestHandleOrderLineItemsSkipZeroProductAndDimBackfill(t *testing.T) {
 				{"product_id":7,"quantity":2,"unit_price":"5.00"}
 			]
 		}`),
-	})
-	require.NoError(t, err)
+	}))
+	flushSink(t, sink)
 	require.Len(t, st.orders, 1)
 	require.Len(t, st.lines, 1)
 	assert.Equal(t, []uint64{7}, st.lookupCalls)
@@ -203,12 +221,12 @@ func TestHandleOrderLineItemsSkipZeroProductAndDimBackfill(t *testing.T) {
 	assert.Equal(t, uint32(2), st.lines[0].Quantity)
 }
 
-func TestHandleOrderNoDimLookupWhenComplete(t *testing.T) {
+func TestOrderSinkNoDimLookupWhenComplete(t *testing.T) {
 	t.Parallel()
 
 	st := &mockEventStore{dims: map[uint64]store.ProductDim{}}
-	c := newTestConsumers(st)
-	err := c.handleOrder(context.Background(), kafka.Message{
+	sink := newOrderSink(st, 100, slog.Default())
+	require.NoError(t, sink.handle(context.Background(), kafka.Message{
 		Value: []byte(`{
 			"event_type":"order.created",
 			"order_id":101,
@@ -223,19 +241,19 @@ func TestHandleOrderNoDimLookupWhenComplete(t *testing.T) {
 				"unit_price":"1.00"
 			}]
 		}`),
-	})
-	require.NoError(t, err)
+	}))
+	flushSink(t, sink)
 	assert.Empty(t, st.lookupCalls)
 	require.Len(t, st.lines, 1)
 	assert.Equal(t, "S", st.lines[0].StoreName)
 }
 
-func TestHandleProductNestedCategoryStore(t *testing.T) {
+func TestProductSinkNestedCategoryStore(t *testing.T) {
 	t.Parallel()
 
 	st := &mockEventStore{}
-	c := newTestConsumers(st)
-	err := c.handleProduct(context.Background(), kafka.Message{
+	sink := newProductSink(st, 100)
+	require.NoError(t, sink.handle(context.Background(), kafka.Message{
 		Topic:   "product.created",
 		Headers: []kafka.Header{{Key: "event-type", Value: []byte("product.created")}},
 		Value: []byte(`{
@@ -245,8 +263,8 @@ func TestHandleProductNestedCategoryStore(t *testing.T) {
 				"store":{"id":2,"name":"Main"}
 			}
 		}`),
-	})
-	require.NoError(t, err)
+	}))
+	flushSink(t, sink)
 	require.Len(t, st.products, 1)
 	p := st.products[0]
 	assert.Equal(t, uint64(55), p.ProductID)
@@ -257,38 +275,65 @@ func TestHandleProductNestedCategoryStore(t *testing.T) {
 	assert.Equal(t, "Main", p.StoreName)
 }
 
-func TestHandleProductSkipsMissingID(t *testing.T) {
+func TestProductSinkMissingIDIsPermanent(t *testing.T) {
 	t.Parallel()
 
 	st := &mockEventStore{}
-	c := newTestConsumers(st)
-	err := c.handleProduct(context.Background(), kafka.Message{
+	sink := newProductSink(st, 100)
+	err := sink.handle(context.Background(), kafka.Message{
 		Value: []byte(`{"event_type":"product.updated","data":{}}`),
 	})
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.True(t, isPermanent(err))
+
+	err = sink.handle(context.Background(), kafka.Message{
+		Value: []byte(`{"event_type":"product.updated"}`),
+	})
+	require.Error(t, err)
+	assert.True(t, isPermanent(err))
+	flushSink(t, sink)
 	assert.Empty(t, st.products)
 }
 
-func TestHandleSearchSkipAndNestedQuery(t *testing.T) {
+func TestSearchSinkSkipAndNestedQuery(t *testing.T) {
 	t.Parallel()
 
 	st := &mockEventStore{}
-	c := newTestConsumers(st)
-	err := c.handleSearch(context.Background(), kafka.Message{
+	sink := newSearchSink(st, 100)
+	require.NoError(t, sink.handle(context.Background(), kafka.Message{
 		Headers: []kafka.Header{{Key: "skip-analytics", Value: []byte("1")}},
 		Value:   []byte(`{"event_type":"search.performed","data":{"query":"boots"}}`),
-	})
-	require.NoError(t, err)
+	}))
+	flushSink(t, sink)
 	assert.Empty(t, st.searches)
 
-	err = c.handleSearch(context.Background(), kafka.Message{
+	require.NoError(t, sink.handle(context.Background(), kafka.Message{
 		Value: []byte(`{"event_type":"search.performed","timestamp":"2024-03-01T10:00:00Z","data":{"query":"boots","results_count":3,"sort":"price","filters":{"color":"red"}}}`),
-	})
-	require.NoError(t, err)
+	}))
+	flushSink(t, sink)
 	require.Len(t, st.searches, 1)
 	assert.Equal(t, "boots", st.searches[0].Query)
 	assert.Equal(t, uint32(3), st.searches[0].ResultsCount)
 	assert.Equal(t, "price", st.searches[0].Sort)
 	assert.Contains(t, st.searches[0].Filters, "color")
 	assert.True(t, st.searches[0].OccurredAt.Equal(time.Date(2024, 3, 1, 10, 0, 0, 0, time.UTC)))
+}
+
+func TestSinkBatchesUntilFull(t *testing.T) {
+	t.Parallel()
+
+	st := &mockEventStore{}
+	sink := newUserSink(st, 2)
+	msg := kafka.Message{Value: []byte(`{"event_type":"user.registered","user_id":1}`)}
+
+	require.NoError(t, sink.handle(context.Background(), msg))
+	assert.False(t, sink.full())
+	assert.Empty(t, st.users) // not flushed yet
+
+	require.NoError(t, sink.handle(context.Background(), msg))
+	assert.True(t, sink.full())
+
+	flushSink(t, sink)
+	assert.Len(t, st.users, 2)
+	assert.False(t, sink.full())
 }

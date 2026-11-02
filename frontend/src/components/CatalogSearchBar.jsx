@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import useSearchAutocomplete from "../hooks/useSearchAutocomplete";
 import { formatImageUrl, PLACEHOLDER_IMAGE } from "../utils/formatImageUrl";
+import { formatMoney } from "../utils/money";
 
 export default function CatalogSearchBar({ className = "" }) {
   const navigate = useNavigate();
@@ -75,7 +76,7 @@ export default function CatalogSearchBar({ className = "" }) {
                   <span className="search-autocomplete-name">{item.name}</span>
                   {item.price != null ? (
                     <span className="search-autocomplete-price">
-                      {item.price} ₽
+                      {formatMoney(item.price)}
                     </span>
                   ) : null}
                 </button>

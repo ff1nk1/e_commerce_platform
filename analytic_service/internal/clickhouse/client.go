@@ -3,8 +3,6 @@ package clickhouse
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -71,43 +69,6 @@ func EnsureDatabase(ctx context.Context, cfg config.Config) error {
 		return fmt.Errorf("create database: %w", err)
 	}
 	return nil
-}
-
-func Migrate(ctx context.Context, conn driver.Conn, migrationsDir string) error {
-	entries, err := os.ReadDir(migrationsDir)
-	if err != nil {
-		return fmt.Errorf("read migrations dir: %w", err)
-	}
-
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
-			continue
-		}
-		path := filepath.Join(migrationsDir, e.Name())
-		body, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read migration %s: %w", e.Name(), err)
-		}
-		for _, stmt := range splitStatements(string(body)) {
-			if err := conn.Exec(ctx, stmt); err != nil {
-				return fmt.Errorf("exec migration %s: %w", e.Name(), err)
-			}
-		}
-	}
-	return nil
-}
-
-func splitStatements(sql string) []string {
-	parts := strings.Split(sql, ";")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" || strings.HasPrefix(p, "--") {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
 }
 
 func quoteIdent(name string) string {

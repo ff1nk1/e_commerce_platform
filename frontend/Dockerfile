@@ -15,7 +15,8 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 FROM dev AS assets
 
 ARG VITE_API_URL=/api
-ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_API_URL=${VITE_API_URL} \
+    NODE_ENV=production
 
 RUN npm run build
 

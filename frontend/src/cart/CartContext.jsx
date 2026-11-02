@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { loadCart, saveCart } from "./cartStorage";
+import { fromCents, lineCents } from "../utils/money";
 
 const CartContext = createContext(null);
 
@@ -80,10 +81,12 @@ export function CartProvider({ children }) {
     [items],
   );
 
-  const totalPrice = useMemo(
-    () => items.reduce((sum, i) => sum + Number(i.price || 0) * i.quantity, 0),
+  const totalCents = useMemo(
+    () => items.reduce((sum, i) => sum + lineCents(i), 0),
     [items],
   );
+
+  const totalPrice = useMemo(() => fromCents(totalCents), [totalCents]);
 
   const value = useMemo(
     () => ({
@@ -93,9 +96,19 @@ export function CartProvider({ children }) {
       removeItem,
       clear,
       totalCount,
+      totalCents,
       totalPrice,
     }),
-    [items, addItem, updateQuantity, removeItem, clear, totalCount, totalPrice],
+    [
+      items,
+      addItem,
+      updateQuantity,
+      removeItem,
+      clear,
+      totalCount,
+      totalCents,
+      totalPrice,
+    ],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

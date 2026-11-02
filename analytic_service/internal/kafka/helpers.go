@@ -1,9 +1,7 @@
 package kafka
 
 import (
-	"encoding/json"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 
@@ -32,104 +30,27 @@ func headerEventType(msg kafka.Message) string {
 	return headerValue(msg, "event-type")
 }
 
-func isSkipAnalytics(msg kafka.Message, body map[string]any) bool {
-	raw := strings.ToLower(strings.TrimSpace(headerValue(msg, "skip-analytics")))
-	if raw == "1" || raw == "true" || raw == "yes" {
-		return true
-	}
-	switch v := body["skip_analytics"].(type) {
-	case bool:
-		return v
-	case string:
-		s := strings.ToLower(strings.TrimSpace(v))
-		return s == "1" || s == "true" || s == "yes"
-	default:
-		return false
-	}
-}
-
-func eventTypeFromBody(body map[string]any) string {
-	if v, ok := body["event_type"].(string); ok && v != "" {
-		return v
-	}
-	if v, ok := body["event"].(string); ok && v != "" {
-		return v
-	}
-	return ""
-}
-
-func resolveEventType(msg kafka.Message, body map[string]any) string {
+// resolveEventType returns the event type using the header first, then the body
+// fields (typed struct field extraction happens before this call).
+func resolveEventType(msg kafka.Message, eventType, event string) string {
 	if t := headerEventType(msg); t != "" {
 		return t
 	}
-	return eventTypeFromBody(body)
+	if eventType != "" {
+		return eventType
+	}
+	return event
 }
 
-func parseJSONBody(msg kafka.Message) (map[string]any, error) {
-	var body map[string]any
-	if len(msg.Value) == 0 {
-		return map[string]any{}, nil
-	}
-	if err := json.Unmarshal(msg.Value, &body); err != nil {
-		return nil, err
-	}
-	return body, nil
+func truthy(raw string) bool {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	return s == "1" || s == "true" || s == "yes"
 }
 
-func asUint64(v any) uint64 {
-	switch n := v.(type) {
-	case float64:
-		if n < 0 {
-			return 0
-		}
-		return uint64(n)
-	case int64:
-		if n < 0 {
-			return 0
-		}
-		return uint64(n)
-	case int:
-		if n < 0 {
-			return 0
-		}
-		return uint64(n)
-	case json.Number:
-		i, _ := n.Int64()
-		if i < 0 {
-			return 0
-		}
-		return uint64(i)
-	case string:
-		i, _ := strconv.ParseUint(n, 10, 64)
-		return i
-	default:
-		return 0
-	}
-}
-
-func asUint32(v any) uint32 {
-	n := asUint64(v)
-	if n > math.MaxUint32 {
-		return 0
-	}
-	return uint32(n)
-}
-
-func asString(v any) string {
-	switch s := v.(type) {
-	case string:
-		return s
-	case float64:
-		return strconv.FormatFloat(s, 'f', -1, 64)
-	case nil:
-		return ""
-	default:
-		b, err := json.Marshal(s)
-		if err != nil {
-			return ""
-		}
-		return string(b)
-	}
+// isSkipAnalytics reports whether the message opts out of analytic recording,
+// via the header or the decoded body flag.
+func isSkipAnalytics(msg kafka.Message, bodyValue flexBool) bool {
+	return truthy(headerValue(msg, "skip-analytics")) || bool(bodyValue)
 }
 
 func parseTime(raw string, fallback time.Time) time.Time {

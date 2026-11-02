@@ -11,12 +11,15 @@ use App\DTO\Chat\SearchFilters;
 use App\Enums\EmbedTask;
 use App\Enums\MessageRole;
 use App\Infrastructure\Llm\Exceptions\LlmException;
+use App\Jobs\ReindexCatalogEmbeddings;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\ProductCatalog;
+use App\Services\Catalog\ReindexProductsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Tests\Fakes\FakeLlmClient;
 use Tests\TestCase;
 
@@ -658,7 +661,18 @@ final class RecommendationsApiTest extends TestCase
         $this->assertDatabaseMissing('messages', ['conversation_id' => $conversation->id]);
     }
 
-    public function test_reindex_updates_local_embeddings_without_external_http(): void
+    public function test_reindex_dispatches_queued_job_without_running_llm(): void
+    {
+        Queue::fake();
+
+        $this->postJson('/api/recommendations/reindex')->assertAccepted()
+            ->assertJsonPath('status', 'queued');
+
+        Queue::assertPushed(ReindexCatalogEmbeddings::class);
+        $this->assertSame(0, $this->llm->embedCalls);
+    }
+
+    public function test_reindex_job_updates_local_embeddings_without_external_http(): void
     {
         $product = ProductCatalog::query()->create([
             'product_id' => 11,
@@ -672,21 +686,19 @@ final class RecommendationsApiTest extends TestCase
             'in_stock' => true,
         ]);
 
-        $this->postJson('/api/recommendations/reindex')
-            ->assertOk()
-            ->assertJsonPath('indexed', 1);
+        $indexed = resolve(ReindexProductsService::class)->handle();
+
+        $this->assertSame(1, $indexed);
 
         $embedding = DB::table('product_catalog')->where('id', $product->id)->value('embedding');
         $this->assertNotNull($embedding);
     }
 
-    public function test_reindex_on_empty_table_returns_zero(): void
+    public function test_reindex_job_on_empty_table_returns_zero(): void
     {
         $this->assertSame(0, ProductCatalog::query()->count());
 
-        $this->postJson('/api/recommendations/reindex')
-            ->assertOk()
-            ->assertJsonPath('indexed', 0);
+        $this->assertSame(0, resolve(ReindexProductsService::class)->handle());
     }
 
     public function test_reindex_continues_when_one_embed_fails(): void
@@ -718,10 +730,9 @@ final class RecommendationsApiTest extends TestCase
             return array_fill(0, 768, $taskType === EmbedTask::RetrievalDocument ? 0.02 : 0.01);
         };
 
-        $this->postJson('/api/recommendations/reindex')
-            ->assertOk()
-            ->assertJsonPath('indexed', 1);
+        $indexed = resolve(ReindexProductsService::class)->handle();
 
+        $this->assertSame(1, $indexed);
         $this->assertNull(DB::table('product_catalog')->where('product_id', 21)->value('embedding'));
         $this->assertNotNull(DB::table('product_catalog')->where('product_id', 22)->value('embedding'));
     }
@@ -735,6 +746,11 @@ final class RecommendationsApiTest extends TestCase
             public function clearBudget(): void {}
 
             public function embed(string $text, EmbedTask $taskType = EmbedTask::RetrievalDocument): array
+            {
+                return [];
+            }
+
+            public function embedBatch(array $texts, EmbedTask $taskType = EmbedTask::RetrievalDocument): array
             {
                 return [];
             }

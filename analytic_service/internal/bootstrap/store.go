@@ -33,5 +33,7 @@ func OpenStore(ctx context.Context, cfg config.Config) (driver.Conn, *store.Stor
 		return nil, nil, fmt.Errorf("migrate: %w", err)
 	}
 
-	return conn, store.New(conn), nil
+	st := store.New(conn)
+	st.SetQueryTimeout(cfg.ClickHouseQueryTimeout)
+	return conn, st, nil
 }

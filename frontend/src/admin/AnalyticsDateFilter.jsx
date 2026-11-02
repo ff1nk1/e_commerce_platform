@@ -1,24 +1,23 @@
 import { useMemo, useState } from "react";
 import { matchPreset, PRESET_OPTIONS, presetRange } from "./analyticsDates";
 
-export default function AnalyticsDateFilter({
-  from,
-  to,
-  onFromChange,
-  onToChange,
-  onApply,
-  isLoading,
-}) {
+export default function AnalyticsDateFilter({ from, to, onApply, isLoading }) {
   const [forceCustom, setForceCustom] = useState(false);
   const matched = useMemo(() => matchPreset(from, to), [from, to]);
   const activePreset = forceCustom || !matched ? "custom" : matched;
   const isCustom = activePreset === "custom";
+  const [customFrom, setCustomFrom] = useState(from || "");
+  const [customTo, setCustomTo] = useState(to || "");
+  const [syncedRange, setSyncedRange] = useState(`${from}|${to}`);
+  if (syncedRange !== `${from}|${to}`) {
+    setSyncedRange(`${from}|${to}`);
+    setCustomFrom(from || "");
+    setCustomTo(to || "");
+  }
 
   const applyPreset = (days) => {
     const range = presetRange(days);
     setForceCustom(false);
-    onFromChange(range.from);
-    onToChange(range.to);
     onApply(range.from, range.to);
   };
 
@@ -59,7 +58,7 @@ export default function AnalyticsDateFilter({
           className="analytics-filters-custom"
           onSubmit={(e) => {
             e.preventDefault();
-            onApply(from, to);
+            onApply(customFrom, customTo);
           }}
         >
           <label className="analytics-filter-field">
@@ -67,10 +66,10 @@ export default function AnalyticsDateFilter({
             <input
               type="date"
               className="search-input analytics-date-input"
-              value={from}
+              value={customFrom}
               onChange={(e) => {
                 setForceCustom(true);
-                onFromChange(e.target.value);
+                setCustomFrom(e.target.value);
               }}
             />
           </label>
@@ -79,10 +78,10 @@ export default function AnalyticsDateFilter({
             <input
               type="date"
               className="search-input analytics-date-input"
-              value={to}
+              value={customTo}
               onChange={(e) => {
                 setForceCustom(true);
-                onToChange(e.target.value);
+                setCustomTo(e.target.value);
               }}
             />
           </label>

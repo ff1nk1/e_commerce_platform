@@ -9,22 +9,77 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+/** Keys that identify a Laravel paginator payload. */
+const PAGINATOR_KEYS = [
+  "current_page",
+  "last_page",
+  "per_page",
+  "total",
+  "from",
+  "to",
+];
+
+/** A "pure" paginator: `{ data: [...], current_page, last_page, ... }`. */
+function isPaginator(body) {
+  return (
+    !!body &&
+    typeof body === "object" &&
+    Array.isArray(body.data) &&
+    PAGINATOR_KEYS.some((key) => key in body)
+  );
+}
+
+/** Extract pagination metadata from a Laravel paginator payload. */
+export function paginatorMeta(body) {
+  if (!body || typeof body !== "object") return null;
+  const count = Array.isArray(body.data) ? body.data.length : 0;
+  return {
+    current_page: body.current_page ?? 1,
+    last_page: body.last_page ?? 1,
+    per_page: body.per_page ?? count,
+    total: body.total ?? count,
+    from: body.from ?? null,
+    to: body.to ?? null,
+  };
+}
+
+/**
+ * Normalize a paginator OR a bare array into `{ items, meta }`.
+ * Used for paginators nested inside partials (e.g. `{ category, products }`),
+ * which the response interceptor intentionally leaves untouched.
+ */
+export function toPage(body) {
+  if (Array.isArray(body)) return { items: body, meta: null };
+  if (isPaginator(body)) return { items: body.data, meta: paginatorMeta(body) };
+  return { items: [], meta: null };
+}
+
 let isRefreshing = false;
 let failedQueue = [];
 
-function processQueue(error, token = null) {
-  failedQueue.forEach((prom) => {
+function processQueue(error) {
+  failedQueue.forEach(({ resolve, reject }) => {
     if (error) {
-      prom.reject(error);
+      reject(error);
     } else {
-      prom.resolve(token);
+      resolve();
     }
   });
   failedQueue = [];
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Unwrap only pure Laravel paginator envelopes: `response.data` becomes the
+    // list and pagination metadata is exposed on `response.meta`. Partial
+    // payloads such as `{ category, products }` or `{ suggestions }` are kept
+    // intact so `response.data` never requires guessing.
+    if (isPaginator(response.data)) {
+      response.meta = paginatorMeta(response.data);
+      response.data = response.data.data;
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
@@ -32,7 +87,9 @@ api.interceptors.response.use(
       error.response?.status === 401 &&
       !!originalRequest &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes("/refresh");
+      !originalRequest.url?.includes("/refresh") &&
+      !originalRequest.url?.includes("/login") &&
+      !originalRequest.url?.includes("/registration");
 
     if (!shouldAttemptRefresh) {
       return Promise.reject(error);
@@ -41,9 +98,7 @@ api.interceptors.response.use(
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject });
-      })
-        .then(() => api(originalRequest))
-        .catch((err) => Promise.reject(err));
+      }).then(() => api(originalRequest));
     }
 
     isRefreshing = true;
@@ -53,16 +108,14 @@ api.interceptors.response.use(
       const refreshed = await refreshSession();
 
       if (!refreshed) {
-        processQueue(new Error("Refresh failed"), null);
-        window.location.href = "/login";
+        processQueue(new Error("Session expired"));
         return Promise.reject(error);
       }
 
-      processQueue(null, "Success");
+      processQueue(null);
       return api(originalRequest);
     } catch (err) {
-      processQueue(err, null);
-      window.location.href = "/login";
+      processQueue(err);
       return Promise.reject(err);
     } finally {
       isRefreshing = false;

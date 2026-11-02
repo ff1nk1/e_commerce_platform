@@ -68,6 +68,62 @@ final class GeminiLlmClientTest extends TestCase
         });
     }
 
+    public function test_embed_batch_returns_positional_vectors(): void
+    {
+        Http::fake([
+            '*/models/text-embedding-004:batchEmbedContents' => Http::response([
+                'embeddings' => [
+                    ['values' => array_fill(0, 768, 0.1)],
+                    ['values' => array_fill(0, 768, 0.2)],
+                ],
+            ]),
+        ]);
+
+        $vectors = $this->client()->embedBatch(['first', 'second']);
+
+        $this->assertCount(2, $vectors);
+        $this->assertCount(768, $vectors[0]);
+        $this->assertSame(0.1, $vectors[0][0]);
+        $this->assertSame(0.2, $vectors[1][0]);
+
+        Http::assertSent(function (Request $request): bool {
+            $body = $request->data();
+
+            return str_contains($request->url(), 'batchEmbedContents')
+                && count($body['requests'] ?? []) === 2
+                && ($body['requests'][0]['content']['parts'][0]['text'] ?? null) === 'first'
+                && ($body['requests'][0]['taskType'] ?? null) === 'RETRIEVAL_DOCUMENT'
+                && ($body['requests'][0]['outputDimensionality'] ?? null) === 768;
+        });
+    }
+
+    public function test_embed_batch_empty_input_skips_http(): void
+    {
+        Http::fake();
+
+        $this->assertSame([], $this->client()->embedBatch([]));
+
+        Http::assertNothingSent();
+    }
+
+    public function test_embed_batch_count_mismatch_throws_parse_exception(): void
+    {
+        Http::fake([
+            '*/models/text-embedding-004:batchEmbedContents' => Http::response([
+                'embeddings' => [
+                    ['values' => array_fill(0, 768, 0.1)],
+                ],
+            ]),
+        ]);
+
+        try {
+            $this->client()->embedBatch(['first', 'second']);
+            $this->fail('Expected LlmException');
+        } catch (LlmException $e) {
+            $this->assertSame(LlmErrorKind::Parse, $e->kind());
+        }
+    }
+
     public function test_chat_returns_candidate_text(): void
     {
         Http::fake([

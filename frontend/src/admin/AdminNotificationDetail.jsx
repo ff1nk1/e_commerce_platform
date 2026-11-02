@@ -1,51 +1,24 @@
-import { useState } from "react";
-import { Link, useLoaderData } from "react-router-dom";
-import { getNotification, resendNotification } from "../api/notifications";
+import { Link, useFetcher, useLoaderData } from "react-router-dom";
+import { formatDateTime } from "../utils/date";
+import "../styles/admin.css";
+import "../styles/notifications.css";
 
 export default function AdminNotificationDetail() {
   const initial = useLoaderData();
-  const [notification, setNotification] = useState(initial);
-  const [isResending, setIsResending] = useState(false);
-  const [resendStatus, setResendStatus] = useState(null);
+  const fetcher = useFetcher();
+
+  // Adopt the freshly-resent record once the action resolves; otherwise fall
+  // back to the loader value (derived in render, no state-syncing effect).
+  const notification = fetcher.data?.notification ?? initial;
 
   const notificationId = notification._id || notification.id;
   const canResend = notification.status === "failed";
+  const isResending = fetcher.state !== "idle";
+  const resendStatus = fetcher.data?.statusMessage;
 
-  const handleResend = async () => {
+  const handleResend = () => {
     if (!canResend) return;
-    setIsResending(true);
-    setResendStatus({
-      type: "pending",
-      message: "Отправка с ретраями… это может занять несколько секунд",
-    });
-
-    try {
-      const response = await resendNotification(notificationId);
-      const data = response.data?.data;
-      if (data) setNotification(data);
-      const retries = data?.retries ?? "—";
-      setResendStatus({
-        type: "success",
-        message: response.data?.message
-          ? `${response.data.message} (попыток: ${retries})`
-          : `Уведомление отправлено (попыток: ${retries})`,
-      });
-    } catch (error) {
-      console.error("Resend error:", error);
-      setResendStatus({
-        type: "error",
-        message:
-          error.response?.data?.message || "Не удалось отправить повторно.",
-      });
-      try {
-        const refreshed = await getNotification(notificationId);
-        setNotification(refreshed.data?.data || refreshed.data);
-      } catch {
-        // keep current snapshot
-      }
-    } finally {
-      setIsResending(false);
-    }
+    fetcher.submit({ intent: "resend" }, { method: "post" });
   };
 
   return (
@@ -120,7 +93,9 @@ export default function AdminNotificationDetail() {
 
         <div className="detail-row">
           <strong>Время:</strong>{" "}
-          <span>{notification.time || notification.created_at || "—"}</span>
+          <span>
+            {formatDateTime(notification.time || notification.created_at)}
+          </span>
         </div>
 
         {notification.error_message && (

@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { getNotifications, resendNotification } from "../api/notifications";
+import {
+  Form,
+  Link,
+  useFetcher,
+  useLoaderData,
+  useSearchParams,
+} from "react-router-dom";
+import { formatShortDateTime } from "../utils/date";
+import "../styles/admin.css";
+import "../styles/notifications.css";
 
 const STATUS_OPTIONS = [
   { value: "", label: "Все статусы" },
@@ -8,24 +15,6 @@ const STATUS_OPTIONS = [
   { value: "pending", label: "В очереди" },
   { value: "failed", label: "Ошибка" },
 ];
-
-function formatDate(dateString) {
-  if (!dateString) return "—";
-  const isProbablyUnixSeconds =
-    typeof dateString === "number" && dateString < 1e12;
-  const toMilliseconds =
-    typeof dateString === "number"
-      ? isProbablyUnixSeconds
-        ? dateString * 1000
-        : dateString
-      : dateString;
-  return new Date(toMilliseconds).toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function recordId(log) {
   return String(log._id || log.id || "");
@@ -69,158 +58,38 @@ function shortenText(value, max = 18) {
 }
 
 export default function AdminNotifications() {
-  const [filters, setFilters] = useState({
-    status: "",
-    email: "",
-    date_from: "",
-    date_to: "",
-  });
-  const [page, setPage] = useState(1);
-  const [logs, setLogs] = useState([]);
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    lastPage: 1,
-    total: 0,
-    from: 0,
-    to: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [resendingId, setResendingId] = useState(null);
-  const [statusMessage, setStatusMessage] = useState(null);
+  const { logs, meta, filters, error } = useLoaderData();
+  const [, setSearchParams] = useSearchParams();
+  const resendFetcher = useFetcher();
 
-  const fetchNotifications = useCallback(
-    async (targetPage = 1, currentFilters = filters) => {
-      setIsLoading(true);
-      try {
-        const params = {
-          page: targetPage,
-          per_page: 15,
-          ...(currentFilters.status && { status: currentFilters.status }),
-          ...(currentFilters.email && { email: currentFilters.email }),
-          ...(currentFilters.date_from && {
-            date_from: currentFilters.date_from,
-          }),
-          ...(currentFilters.date_to && { date_to: currentFilters.date_to }),
-        };
+  const page = meta?.current_page || 1;
+  const lastPage = meta?.last_page || 1;
+  const resendingId = resendFetcher.formData?.get("notification_id");
+  const statusMessage = resendFetcher.data?.statusMessage;
 
-        const response = await getNotifications(params);
-        const data = response.data;
-
-        setLogs(data.data || []);
-        setPagination({
-          currentPage: data.current_page || 1,
-          lastPage: data.last_page || 1,
-          total: data.total || 0,
-          from: data.from || 0,
-          to: data.to || 0,
-        });
-        setPage(data.current_page || targetPage);
-      } catch (error) {
-        console.error("Fetch error:", error);
-        setStatusMessage({
-          type: "error",
-          message: "Не удалось загрузить уведомления",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [filters],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await getNotifications({ page: 1, per_page: 15 });
-        if (cancelled) return;
-        const data = response.data;
-        setLogs(data.data || []);
-        setPagination({
-          currentPage: data.current_page || 1,
-          lastPage: data.last_page || 1,
-          total: data.total || 0,
-          from: data.from || 0,
-          to: data.to || 0,
-        });
-        setPage(data.current_page || 1);
-      } catch (error) {
-        if (cancelled) return;
-        console.error("Fetch error:", error);
-        setStatusMessage({
-          type: "error",
-          message: "Не удалось загрузить уведомления",
-        });
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleInputChange = (field, value) => {
-    setFilters((prev) => ({ ...prev, [field]: value }));
+  const goToPage = (next) => {
+    if (next < 1 || next > lastPage) return;
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.set("page", String(next));
+      return params;
+    });
   };
 
-  const handleApplyFilters = (e) => {
-    e.preventDefault();
-    setPage(1);
-    fetchNotifications(1, filters);
-  };
-
-  const handleResetFilters = () => {
-    const resetState = { status: "", email: "", date_from: "", date_to: "" };
-    setFilters(resetState);
-    setPage(1);
-    fetchNotifications(1, resetState);
-  };
-
-  const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= pagination.lastPage) {
-      fetchNotifications(newPage, filters);
-    }
-  };
-
-  const handleResend = async (log) => {
+  const handleResend = (log) => {
     const id = recordId(log);
     if (!id || log.status !== "failed") return;
     if (
       !window.confirm(
         "Отправить письмо повторно с ретраями (как при первичной отправке)?",
       )
-    )
+    ) {
       return;
-
-    setResendingId(id);
-    setStatusMessage({
-      type: "pending",
-      message: "Отправка с ретраями… это может занять несколько секунд",
-    });
-    try {
-      const response = await resendNotification(id);
-      const data = response.data?.data;
-      const retries = data?.retries ?? "—";
-      setStatusMessage({
-        type: "success",
-        message: response.data?.message
-          ? `${response.data.message} (попыток: ${retries})`
-          : `Уведомление отправлено (попыток: ${retries})`,
-      });
-      await fetchNotifications(page, filters);
-    } catch (error) {
-      console.error("Resend error:", error);
-      setStatusMessage({
-        type: "error",
-        message:
-          error.response?.data?.message || "Не удалось отправить повторно",
-      });
-      await fetchNotifications(page, filters);
-    } finally {
-      setResendingId(null);
     }
+    resendFetcher.submit(
+      { notification_id: id, intent: "resend" },
+      { method: "post", action: `/admin/notifications/${id}` },
+    );
   };
 
   return (
@@ -229,21 +98,19 @@ export default function AdminNotifications() {
         <h2>Журнал уведомлений</h2>
       </div>
 
-      {statusMessage && (
+      {error ? <div className="alert-banner alert-error">{error}</div> : null}
+      {statusMessage ? (
         <div className={`alert-banner alert-${statusMessage.type}`}>
           {statusMessage.message}
         </div>
-      )}
+      ) : null}
 
-      <form
-        className="filter-bar filter-bar-compact"
-        onSubmit={handleApplyFilters}
-      >
+      <Form method="get" className="filter-bar filter-bar-compact">
         <div className="filter-group">
           <select
+            name="status"
             className="role-select filter-select"
-            value={filters.status}
-            onChange={(e) => handleInputChange("status", e.target.value)}
+            defaultValue={filters.status}
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -254,19 +121,19 @@ export default function AdminNotifications() {
 
           <input
             type="text"
+            name="email"
             className="search-input"
             placeholder="Email..."
-            value={filters.email}
-            onChange={(e) => handleInputChange("email", e.target.value)}
+            defaultValue={filters.email}
           />
 
           <div className="date-input-wrapper">
             <span className="date-label">От</span>
             <input
               type="date"
+              name="date_from"
               className="search-input date-input"
-              value={filters.date_from}
-              onChange={(e) => handleInputChange("date_from", e.target.value)}
+              defaultValue={filters.date_from}
             />
           </div>
 
@@ -274,36 +141,25 @@ export default function AdminNotifications() {
             <span className="date-label">До</span>
             <input
               type="date"
+              name="date_to"
               className="search-input date-input"
-              value={filters.date_to}
-              onChange={(e) => handleInputChange("date_to", e.target.value)}
+              defaultValue={filters.date_to}
             />
           </div>
 
           <div className="filter-actions">
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={isLoading}
-            >
+            <button type="submit" className="btn btn-primary">
               Применить
             </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleResetFilters}
-              disabled={isLoading}
-            >
+            <Link to="/admin/notifications" className="btn btn-secondary">
               Сброс
-            </button>
+            </Link>
           </div>
         </div>
-      </form>
+      </Form>
 
       <div className="table-wrapper table-wrapper-fit">
-        {isLoading ? (
-          <div className="table-loading">Загрузка данных...</div>
-        ) : logs.length === 0 ? (
+        {logs.length === 0 ? (
           <div className="table-empty">Записи не найдены</div>
         ) : (
           <table className="admin-table admin-table-compact">
@@ -347,7 +203,7 @@ export default function AdminNotifications() {
                       {shortenText(log.error_message, 20)}
                     </td>
                     <td className="time-cell">
-                      {formatDate(log.time || log.created_at)}
+                      {formatShortDateTime(log.time || log.created_at)}
                     </td>
                     <td className="actions-cell">
                       {log.status === "failed" && (
@@ -369,16 +225,16 @@ export default function AdminNotifications() {
         )}
       </div>
 
-      {!isLoading && logs.length > 0 && (
+      {logs.length > 0 && (
         <div className="pagination">
           <div className="pagination-info">
-            {pagination.from}–{pagination.to} / {pagination.total}
+            {meta?.from}–{meta?.to} / {meta?.total}
           </div>
           <div className="pagination-controls">
             <button
               type="button"
               className="btn btn-secondary btn-compact"
-              onClick={() => handlePageChange(page - 1)}
+              onClick={() => goToPage(page - 1)}
               disabled={page <= 1}
             >
               ←
@@ -386,8 +242,8 @@ export default function AdminNotifications() {
             <button
               type="button"
               className="btn btn-secondary btn-compact"
-              onClick={() => handlePageChange(page + 1)}
-              disabled={page >= pagination.lastPage}
+              onClick={() => goToPage(page + 1)}
+              disabled={page >= lastPage}
             >
               →
             </button>

@@ -20,13 +20,15 @@ func TestProductUpdatedContractFixture(t *testing.T) {
 		Topic   string            `json:"topic"`
 		Key     string            `json:"key"`
 		Headers map[string]string `json:"headers"`
-		Body    map[string]any    `json:"body"`
+		Body    productEvent      `json:"body"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &fixture))
 
 	assert.Equal(t, "product.events", fixture.Topic)
-	assert.Equal(t, "product.updated", fixture.Body["event_type"])
-	assert.Equal(t, "product.updated", fixture.Body["event"])
+	assert.Equal(t, "product.updated", string(fixture.Body.EventType))
+	assert.Equal(t, "product.updated", string(fixture.Body.Event))
+	require.NotNil(t, fixture.Body.Data)
+	assert.Equal(t, uint64(42), fixture.Body.Data.ID.u64())
 
 	headers := make([]kafka.Header, 0, len(fixture.Headers))
 	for key, value := range fixture.Headers {
@@ -38,5 +40,9 @@ func TestProductUpdatedContractFixture(t *testing.T) {
 		Headers: headers,
 	}
 
-	assert.Equal(t, "product.updated", resolveEventType(msg, fixture.Body))
+	var ev productEvent
+	bodyBytes, err := json.Marshal(fixture.Body)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(bodyBytes, &ev))
+	assert.Equal(t, "product.updated", resolveEventType(msg, string(ev.EventType), string(ev.Event)))
 }

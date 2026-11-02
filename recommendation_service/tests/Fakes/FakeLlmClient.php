@@ -59,6 +59,16 @@ final class FakeLlmClient implements LlmClient
         return array_fill(0, 768, 0.01);
     }
 
+    public function embedBatch(array $texts, EmbedTask $taskType = EmbedTask::RetrievalDocument): array
+    {
+        $vectors = [];
+        foreach ($texts as $text) {
+            $vectors[] = $this->embed($text, $taskType);
+        }
+
+        return $vectors;
+    }
+
     public function chat(array $messages, ?string $systemPrompt = null): string
     {
         $this->lastChatMessages = $messages;

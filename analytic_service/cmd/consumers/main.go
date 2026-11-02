@@ -35,13 +35,21 @@ func run() int {
 	}
 	defer func() { _ = conn.Close() }()
 
-	consumers := kafkaconsumer.NewConsumers(cfg.KafkaBrokers, st, log)
+	consumers := kafkaconsumer.NewConsumers(kafkaconsumer.Config{
+		Brokers:       cfg.KafkaBrokers,
+		BatchMaxRows:  cfg.ClickHouseBatchMaxRows,
+		FlushInterval: cfg.ClickHouseBatchFlushInterval,
+		RetryBackoff:  cfg.KafkaRetryBackoff,
+		DLQSuffix:     cfg.KafkaDLQSuffix,
+	}, st, nil, log)
 
 	log.Info("analytic consumers starting", "brokers", cfg.KafkaBrokers)
 	if err := consumers.Run(ctx); err != nil {
 		log.Error("consumers stopped with error", "err", err)
+		_ = consumers.Close()
 		return 1
 	}
+	_ = consumers.Close()
 	log.Info("analytic consumers stopped")
 	return 0
 }

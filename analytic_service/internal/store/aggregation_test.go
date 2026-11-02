@@ -8,6 +8,7 @@ import (
 	"analytic_service/internal/store"
 	"analytic_service/internal/testutil"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,22 +23,18 @@ func ts(day string) time.Time {
 
 func ptrTime(t time.Time) *time.Time { return &t }
 
+func dec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
+
 func TestUsersMetricsGrowthAndRange(t *testing.T) {
 	st, conn := testutil.OpenTestStore(t)
 	testutil.TruncateAnalytics(t, conn)
 	ctx := context.Background()
 
-	require.NoError(t, st.InsertUserRegistration(ctx, store.UserRegistration{
-		UserID: 1, Email: "a@x", Name: "A", RegisteredAt: ts("2024-01-01"),
-	}))
-	require.NoError(t, st.InsertUserRegistration(ctx, store.UserRegistration{
-		UserID: 2, Email: "b@x", Name: "B", RegisteredAt: ts("2024-01-01").Add(time.Hour),
-	}))
-	require.NoError(t, st.InsertUserRegistration(ctx, store.UserRegistration{
-		UserID: 3, Email: "c@x", Name: "C", RegisteredAt: ts("2024-01-02"),
-	}))
-	require.NoError(t, st.InsertUserRegistration(ctx, store.UserRegistration{
-		UserID: 4, Email: "d@x", Name: "D", RegisteredAt: ts("2024-01-05"),
+	require.NoError(t, st.InsertUserRegistrations(ctx, []store.UserRegistration{
+		{UserID: 1, Email: "a@x", Name: "A", RegisteredAt: ts("2024-01-01")},
+		{UserID: 2, Email: "b@x", Name: "B", RegisteredAt: ts("2024-01-01").Add(time.Hour)},
+		{UserID: 3, Email: "c@x", Name: "C", RegisteredAt: ts("2024-01-02")},
+		{UserID: 4, Email: "d@x", Name: "D", RegisteredAt: ts("2024-01-05")},
 	}))
 
 	from, to := ptrTime(ts("2024-01-01")), ptrTime(ts("2024-01-03"))
@@ -60,19 +57,17 @@ func TestOrdersMetricsFunnelExclusivityAndConversions(t *testing.T) {
 	day := ts("2024-02-01")
 
 	// order 1: created + paid + cancelled → cancelled wins over paid; completed independent
-	for _, ev := range []store.OrderFunnelEvent{
-		{OrderID: 1, UserID: 1, EventType: "created", TotalAmount: "100.00", OccurredAt: day},
-		{OrderID: 1, UserID: 1, EventType: "paid", TotalAmount: "100.00", OccurredAt: day.Add(time.Hour)},
-		{OrderID: 1, UserID: 1, EventType: "cancelled", TotalAmount: "100.00", OccurredAt: day.Add(2 * time.Hour)},
-		{OrderID: 1, UserID: 1, EventType: "completed", TotalAmount: "100.00", OccurredAt: day.Add(3 * time.Hour)},
+	require.NoError(t, st.InsertOrderFunnelEvents(ctx, []store.OrderFunnelEvent{
+		{OrderID: 1, UserID: 1, EventType: "created", TotalAmount: dec("100.00"), OccurredAt: day},
+		{OrderID: 1, UserID: 1, EventType: "paid", TotalAmount: dec("100.00"), OccurredAt: day.Add(time.Hour)},
+		{OrderID: 1, UserID: 1, EventType: "cancelled", TotalAmount: dec("100.00"), OccurredAt: day.Add(2 * time.Hour)},
+		{OrderID: 1, UserID: 1, EventType: "completed", TotalAmount: dec("100.00"), OccurredAt: day.Add(3 * time.Hour)},
 		// order 2: created + paid only
-		{OrderID: 2, UserID: 2, EventType: "created", TotalAmount: "50.00", OccurredAt: day},
-		{OrderID: 2, UserID: 2, EventType: "paid", TotalAmount: "50.00", OccurredAt: day.Add(time.Hour)},
+		{OrderID: 2, UserID: 2, EventType: "created", TotalAmount: dec("50.00"), OccurredAt: day},
+		{OrderID: 2, UserID: 2, EventType: "paid", TotalAmount: dec("50.00"), OccurredAt: day.Add(time.Hour)},
 		// order 3: created only → open
-		{OrderID: 3, UserID: 3, EventType: "created", TotalAmount: "20.00", OccurredAt: day},
-	} {
-		require.NoError(t, st.InsertOrderFunnelEvent(ctx, ev))
-	}
+		{OrderID: 3, UserID: 3, EventType: "created", TotalAmount: dec("20.00"), OccurredAt: day},
+	}))
 
 	from, to := ptrTime(day), ptrTime(day.Add(24*time.Hour))
 	m, err := st.OrdersMetrics(ctx, from, to)
@@ -93,17 +88,11 @@ func TestOrdersMetricsRevenueUsesPaidWindowNotCohort(t *testing.T) {
 	ctx := context.Background()
 
 	// created outside window, paid inside window → revenue counts, funnel created does not
-	require.NoError(t, st.InsertOrderFunnelEvent(ctx, store.OrderFunnelEvent{
-		OrderID: 10, UserID: 1, EventType: "created", TotalAmount: "80.00", OccurredAt: ts("2024-03-01"),
-	}))
-	require.NoError(t, st.InsertOrderFunnelEvent(ctx, store.OrderFunnelEvent{
-		OrderID: 10, UserID: 1, EventType: "paid", TotalAmount: "80.00", OccurredAt: ts("2024-03-10"),
-	}))
-	require.NoError(t, st.InsertOrderFunnelEvent(ctx, store.OrderFunnelEvent{
-		OrderID: 11, UserID: 2, EventType: "created", TotalAmount: "20.00", OccurredAt: ts("2024-03-10"),
-	}))
-	require.NoError(t, st.InsertOrderFunnelEvent(ctx, store.OrderFunnelEvent{
-		OrderID: 11, UserID: 2, EventType: "paid", TotalAmount: "20.00", OccurredAt: ts("2024-03-10").Add(time.Hour),
+	require.NoError(t, st.InsertOrderFunnelEvents(ctx, []store.OrderFunnelEvent{
+		{OrderID: 10, UserID: 1, EventType: "created", TotalAmount: dec("80.00"), OccurredAt: ts("2024-03-01")},
+		{OrderID: 10, UserID: 1, EventType: "paid", TotalAmount: dec("80.00"), OccurredAt: ts("2024-03-10")},
+		{OrderID: 11, UserID: 2, EventType: "created", TotalAmount: dec("20.00"), OccurredAt: ts("2024-03-10")},
+		{OrderID: 11, UserID: 2, EventType: "paid", TotalAmount: dec("20.00"), OccurredAt: ts("2024-03-10").Add(time.Hour)},
 	}))
 
 	from, to := ptrTime(ts("2024-03-10")), ptrTime(ts("2024-03-11"))
@@ -124,14 +113,12 @@ func TestSearchMetricsZeroRateAndEmptyLabel(t *testing.T) {
 	ctx := context.Background()
 	day := ts("2024-04-01")
 
-	for _, q := range []store.SearchQuery{
+	require.NoError(t, st.InsertSearchQueries(ctx, []store.SearchQuery{
 		{Query: "boots", ResultsCount: 5, Filters: "{}", OccurredAt: day, KafkaProvenance: store.KafkaProvenance{KafkaTopic: "t", KafkaOffset: 1}},
 		{Query: "boots", ResultsCount: 0, Filters: "{}", OccurredAt: day, KafkaProvenance: store.KafkaProvenance{KafkaTopic: "t", KafkaOffset: 2}},
 		{Query: "", ResultsCount: 0, Filters: "{}", OccurredAt: day, KafkaProvenance: store.KafkaProvenance{KafkaTopic: "t", KafkaOffset: 3}},
 		{Query: "hat", ResultsCount: 2, Filters: "{}", OccurredAt: day, KafkaProvenance: store.KafkaProvenance{KafkaTopic: "t", KafkaOffset: 4}},
-	} {
-		require.NoError(t, st.InsertSearchQuery(ctx, q))
-	}
+	}))
 
 	m, err := st.SearchMetrics(ctx, nil, nil, 10)
 	require.NoError(t, err)
@@ -158,11 +145,11 @@ func TestProductDimLookup(t *testing.T) {
 	testutil.TruncateAnalytics(t, conn)
 	ctx := context.Background()
 
-	require.NoError(t, st.InsertProductDim(ctx, store.ProductDim{
+	require.NoError(t, st.InsertProductDims(ctx, []store.ProductDim{{
 		ProductID: 42, StoreID: 7, StoreName: "Shop", CategoryID: 3,
 		CategoryName: "Cat", CategorySlug: "cat",
 		KafkaProvenance: store.KafkaProvenance{KafkaTopic: "p", KafkaOffset: 1},
-	}))
+	}}))
 
 	dim, found, err := st.LookupProductDim(ctx, 42)
 	require.NoError(t, err)
@@ -181,36 +168,30 @@ func TestOrdersByStoreRankingAndDetail(t *testing.T) {
 	ctx := context.Background()
 	day := ts("2024-05-01")
 
-	require.NoError(t, st.InsertProductDim(ctx, store.ProductDim{
-		ProductID: 1, StoreID: 10, StoreName: "Alpha", CategoryID: 100,
-		CategoryName: "Gear", CategorySlug: "gear",
-	}))
-	require.NoError(t, st.InsertProductDim(ctx, store.ProductDim{
-		ProductID: 2, StoreID: 20, StoreName: "Beta", CategoryID: 100,
-		CategoryName: "Gear", CategorySlug: "gear",
+	require.NoError(t, st.InsertProductDims(ctx, []store.ProductDim{
+		{ProductID: 1, StoreID: 10, StoreName: "Alpha", CategoryID: 100, CategoryName: "Gear", CategorySlug: "gear"},
+		{ProductID: 2, StoreID: 20, StoreName: "Beta", CategoryID: 100, CategoryName: "Gear", CategorySlug: "gear"},
 	}))
 
 	// order 1 paid at store 10
-	require.NoError(t, st.InsertOrderFunnelEvent(ctx, store.OrderFunnelEvent{
-		OrderID: 1, UserID: 1, EventType: "created", TotalAmount: "30.00", OccurredAt: day,
-	}))
-	require.NoError(t, st.InsertOrderFunnelEvent(ctx, store.OrderFunnelEvent{
-		OrderID: 1, UserID: 1, EventType: "paid", TotalAmount: "30.00", OccurredAt: day.Add(time.Hour),
+	require.NoError(t, st.InsertOrderFunnelEvents(ctx, []store.OrderFunnelEvent{
+		{OrderID: 1, UserID: 1, EventType: "created", TotalAmount: dec("30.00"), OccurredAt: day},
+		{OrderID: 1, UserID: 1, EventType: "paid", TotalAmount: dec("30.00"), OccurredAt: day.Add(time.Hour)},
 	}))
 	require.NoError(t, st.InsertOrderLineItems(ctx, []store.OrderLineItem{{
 		OrderID: 1, ProductID: 1, StoreID: 10, StoreName: "Alpha",
 		CategoryID: 100, CategoryName: "Gear", CategorySlug: "gear",
-		Quantity: 2, UnitPrice: "15.00", OccurredAt: day,
+		Quantity: 2, UnitPrice: dec("15.00"), OccurredAt: day,
 	}}))
 
 	// order 2 open at store 20
-	require.NoError(t, st.InsertOrderFunnelEvent(ctx, store.OrderFunnelEvent{
-		OrderID: 2, UserID: 2, EventType: "created", TotalAmount: "10.00", OccurredAt: day,
+	require.NoError(t, st.InsertOrderFunnelEvents(ctx, []store.OrderFunnelEvent{
+		{OrderID: 2, UserID: 2, EventType: "created", TotalAmount: dec("10.00"), OccurredAt: day},
 	}))
 	require.NoError(t, st.InsertOrderLineItems(ctx, []store.OrderLineItem{{
 		OrderID: 2, ProductID: 2, StoreID: 20, StoreName: "Beta",
 		CategoryID: 100, CategoryName: "Gear", CategorySlug: "gear",
-		Quantity: 1, UnitPrice: "10.00", OccurredAt: day,
+		Quantity: 1, UnitPrice: dec("10.00"), OccurredAt: day,
 	}}))
 
 	from, to := ptrTime(day), ptrTime(day.Add(24*time.Hour))
@@ -244,20 +225,18 @@ func TestOrdersByCategoryDetail(t *testing.T) {
 	ctx := context.Background()
 	day := ts("2024-06-01")
 
-	require.NoError(t, st.InsertProductDim(ctx, store.ProductDim{
+	require.NoError(t, st.InsertProductDims(ctx, []store.ProductDim{{
 		ProductID: 5, StoreID: 1, StoreName: "S", CategoryID: 77,
 		CategoryName: "Outdoor", CategorySlug: "outdoor",
-	}))
-	require.NoError(t, st.InsertOrderFunnelEvent(ctx, store.OrderFunnelEvent{
-		OrderID: 50, UserID: 1, EventType: "created", TotalAmount: "40.00", OccurredAt: day,
-	}))
-	require.NoError(t, st.InsertOrderFunnelEvent(ctx, store.OrderFunnelEvent{
-		OrderID: 50, UserID: 1, EventType: "cancelled", TotalAmount: "40.00", OccurredAt: day.Add(time.Hour),
+	}}))
+	require.NoError(t, st.InsertOrderFunnelEvents(ctx, []store.OrderFunnelEvent{
+		{OrderID: 50, UserID: 1, EventType: "created", TotalAmount: dec("40.00"), OccurredAt: day},
+		{OrderID: 50, UserID: 1, EventType: "cancelled", TotalAmount: dec("40.00"), OccurredAt: day.Add(time.Hour)},
 	}))
 	require.NoError(t, st.InsertOrderLineItems(ctx, []store.OrderLineItem{{
 		OrderID: 50, ProductID: 5, StoreID: 1, StoreName: "S",
 		CategoryID: 77, CategoryName: "Outdoor", CategorySlug: "outdoor",
-		Quantity: 1, UnitPrice: "40.00", OccurredAt: day,
+		Quantity: 1, UnitPrice: dec("40.00"), OccurredAt: day,
 	}}))
 
 	catID := uint64(77)
@@ -280,13 +259,13 @@ func TestOrdersByStoreNameFallbackToHashID(t *testing.T) {
 	ctx := context.Background()
 	day := ts("2024-07-01")
 
-	require.NoError(t, st.InsertOrderFunnelEvent(ctx, store.OrderFunnelEvent{
-		OrderID: 90, UserID: 1, EventType: "created", TotalAmount: "5.00", OccurredAt: day,
+	require.NoError(t, st.InsertOrderFunnelEvents(ctx, []store.OrderFunnelEvent{
+		{OrderID: 90, UserID: 1, EventType: "created", TotalAmount: dec("5.00"), OccurredAt: day},
 	}))
 	require.NoError(t, st.InsertOrderLineItems(ctx, []store.OrderLineItem{{
 		OrderID: 90, ProductID: 9, StoreID: 333, StoreName: "",
 		CategoryID: 1, CategoryName: "X", CategorySlug: "x",
-		Quantity: 1, UnitPrice: "5.00", OccurredAt: day,
+		Quantity: 1, UnitPrice: dec("5.00"), OccurredAt: day,
 	}}))
 
 	from, to := ptrTime(day), ptrTime(day.Add(24*time.Hour))

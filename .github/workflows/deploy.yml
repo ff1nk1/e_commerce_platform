@@ -94,13 +94,14 @@ jobs:
             (cd "$dir" && composer audit --no-interaction --locked)
           done
 
-      - name: Frontend lint, audit, and build
+      - name: Frontend lint, audit, build, and tests
         working-directory: frontend
         run: |
           npm ci
           npm audit --audit-level=high
           npm run lint
           npm run format:check
+          npm run test
           npm run build
 
   test:

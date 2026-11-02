@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -23,10 +24,14 @@ type MetricsReader interface {
 
 type Server struct {
 	store MetricsReader
+	log   *slog.Logger
 }
 
-func NewServer(st MetricsReader) *Server {
-	return &Server{store: st}
+func NewServer(st MetricsReader, log *slog.Logger) *Server {
+	if log == nil {
+		log = slog.Default()
+	}
+	return &Server{store: st, log: log}
 }
 
 func (s *Server) Routes() http.Handler {
@@ -40,12 +45,37 @@ func (s *Server) Routes() http.Handler {
 	return mux
 }
 
+// fail logs the underlying error server-side and returns a safe, generic body
+// so internal details never leak to the client.
+func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
+	s.failStatus(w, r, http.StatusInternalServerError, err)
+}
+
+// failStatus is fail with an explicit status code (e.g. 503 for health checks).
+func (s *Server) failStatus(w http.ResponseWriter, r *http.Request, status int, err error) {
+	s.log.Error("http request failed",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"status", status,
+		"err", err,
+	)
+	writeJSON(w, status, map[string]string{"error": "internal error"})
+}
+
+// badRequest logs the validation error and returns a safe, generic body so
+// internal details never leak to the client.
+func (s *Server) badRequest(w http.ResponseWriter, r *http.Request, err error) {
+	s.log.Warn("http bad request",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"err", err,
+	)
+	writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+}
+
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.Ping(r.Context()); err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"status": "unhealthy",
-			"error":  err.Error(),
-		})
+		s.failStatus(w, r, http.StatusServiceUnavailable, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -70,12 +100,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	limit, err := parseLimit(r, 20)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		s.badRequest(w, r, err)
 		return
 	}
 	m, err := s.store.SearchMetrics(r.Context(), from, to, limit)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, m)
@@ -98,17 +128,17 @@ func (s *Server) handleDimension(w http.ResponseWriter, r *http.Request, idParam
 	}
 	dimID, err := parseOptionalUint64(r, idParam)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		s.badRequest(w, r, err)
 		return
 	}
 	limit, err := parseLimit(r, 20)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		s.badRequest(w, r, err)
 		return
 	}
 	m, err := query(r.Context(), dimID, from, to, limit)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, m)
@@ -121,7 +151,7 @@ func (s *Server) withRange(w http.ResponseWriter, r *http.Request, fn func(ctx c
 	}
 	m, err := fn(r.Context(), from, to)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		s.fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, m)
@@ -130,7 +160,7 @@ func (s *Server) withRange(w http.ResponseWriter, r *http.Request, fn func(ctx c
 func (s *Server) parseRangeOrBadRequest(w http.ResponseWriter, r *http.Request) (from, to *time.Time, ok bool) {
 	from, to, err := parseRange(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		s.badRequest(w, r, err)
 		return nil, nil, false
 	}
 	return from, to, true

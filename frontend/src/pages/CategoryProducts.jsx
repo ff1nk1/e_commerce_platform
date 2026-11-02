@@ -1,25 +1,13 @@
-import { useState, useEffect } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
-import { getCategoryProducts } from "../api/catalog";
-import "../styles/catalog.css";
+import { useState } from "react";
+import { useLoaderData, useSearchParams } from "react-router-dom";
 import CatalogSearchBar from "../components/CatalogSearchBar";
-import { formatImageUrl, PLACEHOLDER_IMAGE } from "../utils/formatImageUrl";
+import ProductCard from "../components/ProductCard";
+import Pagination from "../components/Pagination";
+import "../styles/catalog.css";
 
 export default function CategoryProducts() {
-  const { slug } = useParams();
+  const { category, products, pagination, error } = useLoaderData();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const [category, setCategory] = useState(null);
-  const [products, setProducts] = useState([]);
-
-  const [pagination, setPagination] = useState({
-    current_page: 1,
-    last_page: 1,
-  });
-
-  const requestKey = `${slug}?${searchParams.toString()}`;
-  const [loadedKey, setLoadedKey] = useState("");
-  const loading = loadedKey !== requestKey;
 
   const [minPrice, setMinPrice] = useState(searchParams.get("min_price") || "");
   const [maxPrice, setMaxPrice] = useState(searchParams.get("max_price") || "");
@@ -27,47 +15,22 @@ export default function CategoryProducts() {
 
   const applyFilters = (e) => {
     e.preventDefault();
-    setSearchParams({
-      min_price: minPrice,
-      max_price: maxPrice,
-      sort: sortBy,
-      page: 1,
-    });
+    const next = new URLSearchParams();
+    if (minPrice) next.set("min_price", minPrice);
+    if (maxPrice) next.set("max_price", maxPrice);
+    next.set("sort", sortBy);
+    next.set("page", "1");
+    setSearchParams(next);
   };
 
   const handlePageChange = (newPage) => {
-    setSearchParams((prevParams) => {
-      prevParams.set("page", newPage);
-      return prevParams;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("page", String(newPage));
+      return next;
     });
-
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  useEffect(() => {
-    let cancelled = false;
-    getCategoryProducts(slug, searchParams)
-      .then((response) => {
-        if (cancelled) return;
-        const data = response.data;
-        setCategory(data.category);
-
-        setProducts(data.products.data);
-
-        setPagination({
-          current_page: data.products.current_page,
-          last_page: data.products.last_page,
-        });
-      })
-      .catch((error) => console.error("Ошибка загрузки товаров:", error))
-      .finally(() => {
-        if (!cancelled) setLoadedKey(requestKey);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, searchParams, requestKey]);
 
   return (
     <div className="catalog-page">
@@ -108,8 +71,8 @@ export default function CategoryProducts() {
           </div>
         </form>
 
-        {loading ? (
-          <div className="status-message">Загрузка товаров...</div>
+        {error ? (
+          <div className="status-message error">{error}</div>
         ) : (
           <>
             <div className="products-grid">
@@ -123,56 +86,15 @@ export default function CategoryProducts() {
               ) : null}
 
               {products.map((product) => (
-                <Link
-                  to={`/products/${product.id}`}
-                  key={product.id}
-                  className="product-card"
-                >
-                  {/* БЛОК КАРТИНКИ */}
-                  <div className="product-image-container">
-                    <img
-                      src={formatImageUrl(product.image_url)}
-                      alt={product.name}
-                      className="product-image"
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = PLACEHOLDER_IMAGE;
-                      }}
-                    />
-                  </div>
-
-                  {/* ИНФОРМАЦИЯ О ТОВАРЕ */}
-                  <div className="product-info">
-                    <h3 className="product-title">{product.name}</h3>
-                    <div className="product-price">{product.price} ₽</div>
-                  </div>
-                </Link>
+                <ProductCard key={product.id} product={product} />
               ))}
             </div>
 
-            {pagination.last_page > 1 && (
-              <div className="pagination">
-                <button
-                  className="pagination-button"
-                  disabled={pagination.current_page === 1}
-                  onClick={() => handlePageChange(pagination.current_page - 1)}
-                >
-                  ← Назад
-                </button>
-
-                <span className="pagination-info">
-                  Страница {pagination.current_page} из {pagination.last_page}
-                </span>
-
-                <button
-                  className="pagination-button"
-                  disabled={pagination.current_page === pagination.last_page}
-                  onClick={() => handlePageChange(pagination.current_page + 1)}
-                >
-                  Вперед →
-                </button>
-              </div>
-            )}
+            <Pagination
+              currentPage={pagination.current_page}
+              lastPage={pagination.last_page}
+              onPageChange={handlePageChange}
+            />
           </>
         )}
       </div>

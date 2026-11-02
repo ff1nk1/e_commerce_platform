@@ -49,6 +49,8 @@ flowchart LR
 
 Facets категорий берутся с denormalized `category_id` / `category_name` на product docs, не из индекса `categories`.
 
+Индексы создаются **только** командой `opensearch:setup` (деплой/ops). Read-путь search/autocomplete больше не вызывает `ensureIndices()` — индексация (write-путь) по-прежнему самовосстанавливается.
+
 Analyzers: `product_index` (index-time) и `product_search` (search-time + `synonym_graph`). Синонимы — `OPENSEARCH_PRODUCT_SYNONYMS` / [`config/opensearch.php`](config/opensearch.php).
 
 ---

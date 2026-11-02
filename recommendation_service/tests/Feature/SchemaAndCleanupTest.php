@@ -26,6 +26,17 @@ final class SchemaAndCleanupTest extends TestCase
         $this->assertTrue((bool) ($exists->present ?? false));
     }
 
+    public function test_product_catalog_embedding_has_hnsw_index(): void
+    {
+        $index = DB::selectOne(
+            "SELECT indexdef FROM pg_indexes WHERE tablename = 'product_catalog' AND indexname = 'product_catalog_embedding_hnsw'"
+        );
+
+        $this->assertNotNull($index);
+        $this->assertStringContainsString('hnsw', strtolower((string) $index->indexdef));
+        $this->assertStringContainsString('vector_cosine_ops', (string) $index->indexdef);
+    }
+
     public function test_product_catalog_stores_json_attributes_and_nullable_embedding(): void
     {
         $row = ProductCatalog::query()->create([

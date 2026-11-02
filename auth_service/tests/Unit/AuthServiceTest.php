@@ -130,12 +130,93 @@ final class AuthServiceTest extends TestCase
         $refresh = 'unknown-refresh';
         $hash = hash('sha256', $refresh);
 
-        Redis::shouldReceive('get')
+        Redis::shouldReceive('ttl')
             ->once()
             ->with("refresh_token:{$hash}")
+            ->andReturn(-2);
+
+        Redis::shouldReceive('command')
+            ->once()
+            ->with('GETDEL', ["refresh_token:{$hash}"])
             ->andReturn(null);
 
         $this->assertNull(resolve(RefreshTokensService::class)->handle($refresh));
+    }
+
+    public function test_refresh_token_is_consumed_atomically_once(): void
+    {
+        $role = Role::factory()->create(['slug' => 'customer', 'name' => 'Customer']);
+        $user = User::factory()->create([
+            'role_id' => $role->id,
+            'password' => Hash::make('password123'),
+        ]);
+
+        $refresh = 'atomic-refresh';
+        $hash = hash('sha256', $refresh);
+        $key = "refresh_token:{$hash}";
+
+        Redis::shouldReceive('ttl')
+            ->once()
+            ->with($key)
+            ->andReturn(3600);
+
+        Redis::shouldReceive('command')
+            ->once()
+            ->with('GETDEL', [$key])
+            ->andReturn((string) $user->id);
+
+        Redis::shouldReceive('srem')
+            ->once()
+            ->with("user_refresh_tokens:{$user->id}", $hash);
+
+        Redis::shouldReceive('setex')->once();
+        Redis::shouldReceive('sadd')->once();
+        Redis::shouldReceive('expire')->once();
+
+        $tokens = resolve(RefreshTokensService::class)->handle($refresh);
+
+        $this->assertNotNull($tokens);
+        $this->assertNotSame($refresh, $tokens->refreshToken);
+    }
+
+    public function test_concurrent_refresh_can_only_rotate_once(): void
+    {
+        $role = Role::factory()->create(['slug' => 'customer', 'name' => 'Customer']);
+        $user = User::factory()->create([
+            'role_id' => $role->id,
+            'password' => Hash::make('password123'),
+        ]);
+
+        $refresh = 'race-refresh';
+        $hash = hash('sha256', $refresh);
+        $key = "refresh_token:{$hash}";
+
+        // First GETDEL wins and returns the owner; the parallel caller gets null.
+        Redis::shouldReceive('ttl')
+            ->twice()
+            ->with($key)
+            ->andReturn(3600);
+
+        Redis::shouldReceive('command')
+            ->twice()
+            ->with('GETDEL', [$key])
+            ->andReturn((string) $user->id, null);
+
+        Redis::shouldReceive('srem')
+            ->once()
+            ->with("user_refresh_tokens:{$user->id}", $hash);
+
+        Redis::shouldReceive('setex')->once();
+        Redis::shouldReceive('sadd')->once();
+        Redis::shouldReceive('expire')->once();
+
+        $service = resolve(RefreshTokensService::class);
+        $this->assertNotNull($service->handle($refresh));
+
+        // Simulate the parallel request that read the blacklist before it was written.
+        Cache::flush();
+
+        $this->assertNull($service->handle($refresh));
     }
 
     public function test_blacklist_refresh_token_uses_fallback_ttl_when_redis_ttl_non_positive(): void

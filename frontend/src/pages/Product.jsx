@@ -1,87 +1,50 @@
-import { useState, useEffect } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom";
-import { getProduct } from "../api/catalog";
+import { useState } from "react";
+import { Link, useLoaderData, useNavigate } from "react-router-dom";
 import { createOrder } from "../api/orders";
 import { useCart } from "../cart/CartContext";
 import { formatImageUrl, PLACEHOLDER_IMAGE } from "../utils/formatImageUrl";
+import { formatMoney } from "../utils/money";
 import "../styles/product.css";
 import "../styles/orders.css";
 
 export default function Product() {
-  const { id } = useParams();
+  const { product, error } = useLoaderData();
   const navigate = useNavigate();
   const { addItem } = useCart();
 
-  const [product, setProduct] = useState(null);
-  const [loadedId, setLoadedId] = useState("");
-  const loading = loadedId !== String(id);
-  const [error, setError] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [ordering, setOrdering] = useState(false);
-  const [orderMessage, setOrderMessage] = useState("");
   const [orderError, setOrderError] = useState("");
   const [cartMessage, setCartMessage] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-    getProduct(id)
-      .then((response) => {
-        if (cancelled) return;
-        setProduct(response.data.product);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error("Ошибка загрузки товара:", err);
-        setError("Не удалось загрузить информацию о товаре.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoadedId(String(id));
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
   const handleAddToCart = () => {
     if (!product) return;
-    addItem(product, Number(quantity) || 1);
+    addItem(product, quantity);
     setCartMessage("Товар добавлен в корзину.");
-    setOrderMessage("");
     setOrderError("");
   };
 
   const handleOrder = async () => {
     if (!product || ordering) return;
     setOrdering(true);
-    setOrderMessage("");
     setOrderError("");
     setCartMessage("");
     try {
       const { data } = await createOrder(
-        [{ product_id: product.id, quantity: Number(quantity) || 1 }],
+        [{ product_id: product.id, quantity }],
         crypto.randomUUID(),
       );
-      setOrderMessage("Заказ создан.");
       navigate(`/orders/${data.id}`);
     } catch (err) {
-      const msg =
+      setOrderError(
         err.response?.data?.message ||
-        err.response?.data?.errors?.items?.[0] ||
-        "Не удалось создать заказ. Нужен локальный снапшот товара в order_service.";
-      setOrderError(msg);
+          err.response?.data?.errors?.items?.[0] ||
+          "Не удалось создать заказ. Нужен локальный снапшот товара в order_service.",
+      );
     } finally {
       setOrdering(false);
     }
   };
-
-  if (loading) {
-    return (
-      <div className="product-details-page">
-        <div className="status-message">Загрузка информации о товаре...</div>
-      </div>
-    );
-  }
 
   if (error || !product) {
     return (
@@ -115,7 +78,9 @@ export default function Product() {
           </div>
 
           <h1>{product.name}</h1>
-          <div className="product-price-large">{product.price} ₽</div>
+          <div className="product-price-large">
+            {formatMoney(product.price)}
+          </div>
 
           {/* Бейджи с категорией и магазином */}
           <div className="product-badges">
@@ -162,9 +127,6 @@ export default function Product() {
           </div>
           {cartMessage && (
             <div className="status-message success">{cartMessage}</div>
-          )}
-          {orderMessage && (
-            <div className="status-message success">{orderMessage}</div>
           )}
           {orderError && (
             <div className="status-message error">{orderError}</div>

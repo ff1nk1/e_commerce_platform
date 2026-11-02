@@ -53,4 +53,15 @@ return [
     */
     'chat_per_minute' => (int) env('RECOMMENDATION_CHAT_PER_MINUTE', 5),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Embedding reindex batch size
+    |--------------------------------------------------------------------------
+    |
+    | How many products are sent to the LLM in a single batchEmbedContents call
+    | during /reindex and embeddings:sweep-missing.
+    |
+    */
+    'embeddings_batch_size' => (int) env('RECOMMENDATION_EMBEDDINGS_BATCH_SIZE', 50),
+
 ];

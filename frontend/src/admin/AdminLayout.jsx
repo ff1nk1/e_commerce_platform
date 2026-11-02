@@ -1,9 +1,10 @@
-import { Link, NavLink, Outlet, useLoaderData } from "react-router-dom";
+import { Link, NavLink, Outlet, useRouteLoaderData } from "react-router-dom";
 import "../styles/admin.css";
 import "../styles/notifications.css";
 
 export default function AdminLayout() {
-  const user = useLoaderData();
+  const root = useRouteLoaderData("root");
+  const user = root?.user ?? null;
   const isAdmin = user?.role?.slug === "admin";
 
   return (

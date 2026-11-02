@@ -142,6 +142,45 @@ PROMPT;
         );
     }
 
+    /**
+     * @param  list<string>  $texts
+     * @return list<list<float>>
+     */
+    public function embedBatch(array $texts, EmbedTask $taskType = EmbedTask::RetrievalDocument): array
+    {
+        if ($texts === []) {
+            return [];
+        }
+
+        $requests = [];
+        foreach ($texts as $text) {
+            $request = [
+                'model' => 'models/'.$this->embeddingModel,
+                'content' => [
+                    'parts' => [
+                        ['text' => $text],
+                    ],
+                ],
+                'taskType' => $taskType->value,
+            ];
+
+            if ($this->embeddingDimensions > 0) {
+                $request['outputDimensionality'] = $this->embeddingDimensions;
+            }
+
+            $requests[] = $request;
+        }
+
+        return $this->parseBatchEmbedResponse(
+            $this->post(
+                $this->endpoint($this->embeddingModel, 'batchEmbedContents'),
+                ['requests' => $requests],
+                retry: $this->budgetRemaining === null,
+            ),
+            count($texts),
+        );
+    }
+
     public function chat(array $messages, ?string $systemPrompt = null): string
     {
         [$contents, $inlineSystem] = $this->toGeminiContents($messages);
@@ -358,6 +397,36 @@ PROMPT;
         }
 
         return array_map(static fn (mixed $v): float => (float) $v, array_values($values));
+    }
+
+    /**
+     * @return list<list<float>>
+     */
+    private function parseBatchEmbedResponse(Response $response, int $expected): array
+    {
+        if (! $response->successful()) {
+            throw LlmException::http(
+                sprintf('Gemini batchEmbed failed (%s): %s', $response->status(), $response->body()),
+                $response->status(),
+            );
+        }
+
+        $embeddings = $response->json('embeddings');
+        if (! is_array($embeddings) || count($embeddings) !== $expected) {
+            throw LlmException::parse('Gemini batchEmbed response had an unexpected number of embeddings');
+        }
+
+        $vectors = [];
+        foreach ($embeddings as $embedding) {
+            $values = is_array($embedding) ? ($embedding['values'] ?? null) : null;
+            if (! is_array($values) || $values === []) {
+                throw LlmException::parse('Gemini batchEmbed response missing embedding values');
+            }
+
+            $vectors[] = array_map(static fn (mixed $v): float => (float) $v, array_values($values));
+        }
+
+        return $vectors;
     }
 
     private function parseExtractFiltersResponse(Response $response): SearchFilters

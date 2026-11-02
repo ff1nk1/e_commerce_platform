@@ -1,79 +1,25 @@
-import { useCallback, useState } from "react";
-import { useLoaderData } from "react-router-dom";
-import { getAdminOrders, shipOrder } from "../api/admin";
-
-function formatDate(dateString) {
-  if (!dateString) return "—";
-  return new Date(dateString).toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import { useLoaderData, useSearchParams, useFetcher } from "react-router-dom";
+import { formatMoney } from "../utils/money";
+import { formatDateTime } from "../utils/date";
+import "../styles/admin.css";
 
 export default function AdminOrders() {
-  const initial = useLoaderData();
-  const [orders, setOrders] = useState(initial?.data || []);
-  const [pagination, setPagination] = useState({
-    currentPage: initial?.current_page || 1,
-    lastPage: initial?.last_page || 1,
-    total: initial?.total || 0,
-    from: initial?.from || 0,
-    to: initial?.to || 0,
-  });
-  const [page, setPage] = useState(initial?.current_page || 1);
-  const [isLoading, setIsLoading] = useState(false);
-  const [shippingId, setShippingId] = useState(null);
-  const [actionError, setActionError] = useState("");
+  const { orders, meta } = useLoaderData();
+  const [, setSearchParams] = useSearchParams();
+  const fetcher = useFetcher();
 
-  const fetchOrders = useCallback(async (targetPage = 1) => {
-    setIsLoading(true);
-    try {
-      const response = await getAdminOrders({
-        page: targetPage,
-        per_page: 15,
-      });
-      const data = response.data;
-      setOrders(data.data || []);
-      setPagination({
-        currentPage: data.current_page || 1,
-        lastPage: data.last_page || 1,
-        total: data.total || 0,
-        from: data.from || 0,
-        to: data.to || 0,
-      });
-      setPage(data.current_page || targetPage);
-    } catch (error) {
-      console.error("Orders fetch error:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const page = meta?.current_page || 1;
+  const lastPage = meta?.last_page || 1;
+  const shippingId = fetcher.formData?.get("order_id");
+  const actionError = fetcher.data?.error;
 
-  const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= pagination.lastPage) {
-      fetchOrders(newPage);
-    }
-  };
-
-  const handleShip = async (orderId) => {
-    setActionError("");
-    setShippingId(orderId);
-    try {
-      await shipOrder(orderId);
-      await fetchOrders(page);
-    } catch (error) {
-      console.error("Ship order error:", error);
-      setActionError(
-        error.response?.data?.message ||
-          error.response?.data?.errors?.status?.[0] ||
-          "Не удалось отгрузить заказ",
-      );
-    } finally {
-      setShippingId(null);
-    }
+  const goToPage = (next) => {
+    if (next < 1 || next > lastPage) return;
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      params.set("page", String(next));
+      return params;
+    });
   };
 
   return (
@@ -85,9 +31,7 @@ export default function AdminOrders() {
       {actionError && <div className="analytics-error">{actionError}</div>}
 
       <div className="table-wrapper">
-        {isLoading ? (
-          <div className="table-loading">Загрузка данных...</div>
-        ) : orders.length === 0 ? (
+        {orders.length === 0 ? (
           <div className="table-empty">Заказы не найдены</div>
         ) : (
           <table className="admin-table">
@@ -111,18 +55,20 @@ export default function AdminOrders() {
                       {order.status || "—"}
                     </span>
                   </td>
-                  <td>{order.total_amount ?? "—"}</td>
-                  <td>{formatDate(order.created_at)}</td>
+                  <td>{formatMoney(order.total_amount)}</td>
+                  <td>{formatDateTime(order.created_at)}</td>
                   <td>
                     {order.status === "confirmed" ? (
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={shippingId === order.id}
-                        onClick={() => handleShip(order.id)}
-                      >
-                        {shippingId === order.id ? "…" : "Отгрузить"}
-                      </button>
+                      <fetcher.Form method="post">
+                        <input type="hidden" name="order_id" value={order.id} />
+                        <button
+                          type="submit"
+                          className="btn btn-primary"
+                          disabled={shippingId === String(order.id)}
+                        >
+                          {shippingId === String(order.id) ? "…" : "Отгрузить"}
+                        </button>
+                      </fetcher.Form>
                     ) : (
                       "—"
                     )}
@@ -134,16 +80,16 @@ export default function AdminOrders() {
         )}
       </div>
 
-      {!isLoading && orders.length > 0 && (
+      {orders.length > 0 && (
         <div className="pagination">
           <div className="pagination-info">
-            Показано {pagination.from}–{pagination.to} из {pagination.total}
+            Показано {meta?.from}–{meta?.to} из {meta?.total}
           </div>
           <div className="pagination-controls">
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => handlePageChange(page - 1)}
+              onClick={() => goToPage(page - 1)}
               disabled={page <= 1}
             >
               Назад
@@ -151,8 +97,8 @@ export default function AdminOrders() {
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => handlePageChange(page + 1)}
-              disabled={page >= pagination.lastPage}
+              onClick={() => goToPage(page + 1)}
+              disabled={page >= lastPage}
             >
               Вперед
             </button>

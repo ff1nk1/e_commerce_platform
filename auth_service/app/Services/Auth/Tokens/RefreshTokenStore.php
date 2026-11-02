@@ -37,6 +37,19 @@ final class RefreshTokenStore
         return is_numeric($userId) ? (int) $userId : null;
     }
 
+    /**
+     * Atomically read-and-delete the token hash (Redis 6.2+ GETDEL).
+     *
+     * Returns the owning user id on the first call and null for every later
+     * call, so concurrent refresh requests cannot rotate the same token twice.
+     */
+    public function consume(string $hash): ?int
+    {
+        $userId = Redis::command('GETDEL', [$this->key($hash)]);
+
+        return is_numeric($userId) ? (int) $userId : null;
+    }
+
     public function ttl(string $hash): int
     {
         return (int) Redis::ttl($this->key($hash));

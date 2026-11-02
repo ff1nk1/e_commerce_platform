@@ -1,28 +1,16 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { getCategories } from "../api/catalog";
+import { Link, useLoaderData } from "react-router-dom";
 import CatalogSearchBar from "../components/CatalogSearchBar";
 import PageShell from "../components/PageShell";
 import "../styles/catalog.css";
 
 export default function Categories() {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getCategories()
-      .then((response) => {
-        setCategories(response.data);
-      })
-      .catch((error) => console.error("Ошибка загрузки категорий:", error))
-      .finally(() => setLoading(false));
-  }, []);
+  const { categories, error } = useLoaderData();
 
   return (
     <PageShell title="Каталог" subtitle="Выберите интересующий вас раздел">
       <CatalogSearchBar />
-      {loading ? (
-        <div className="status-message">Загрузка категорий...</div>
+      {error ? (
+        <div className="status-message error">{error}</div>
       ) : (
         <ul className="category-list">
           {categories.map((category) => (

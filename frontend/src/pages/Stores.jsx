@@ -1,21 +1,9 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { getStores } from "../api/catalog";
+import { Link, useLoaderData } from "react-router-dom";
 import CatalogSearchBar from "../components/CatalogSearchBar";
 import "../styles/catalog.css";
 
 export default function Stores() {
-  const [stores, setStores] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getStores()
-      .then((response) => {
-        setStores(response.data.data || response.data || []);
-      })
-      .catch((error) => console.error("Ошибка загрузки магазинов:", error))
-      .finally(() => setLoading(false));
-  }, []);
+  const { stores, error } = useLoaderData();
 
   return (
     <div className="catalog-page">
@@ -26,8 +14,8 @@ export default function Stores() {
           <CatalogSearchBar />
         </div>
 
-        {loading ? (
-          <div className="status-message">Загрузка магазинов...</div>
+        {error ? (
+          <div className="status-message error">{error}</div>
         ) : stores.length === 0 ? (
           <div className="status-message">Магазины не найдены.</div>
         ) : (

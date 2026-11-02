@@ -13,7 +13,10 @@ Read-only агрегаты для админки: регистрации, вор
 | Что | Зачем |
 |-----|--------|
 | ClickHouse `analytics` | таблицы метрик |
-| Kafka | `user.events`, `order.events`, `search.events`, `product.created`, `product.updated` |
+| Kafka | `user.events`, `order.events`, `search.events`, `product.events` |
+| Kafka (DLQ) | `*.dlq` — постоянные (poison-pill) сообщения |
+
+Доставка: consumers пишут микробатчами и коммитят offset только после успешной записи в ClickHouse. Транзиентные ошибки ретраятся, постоянные уходят в `<topic><KAFKA_DLQ_SUFFIX>` с коммитом оффсета.
 
 ## ENV
 
@@ -26,10 +29,15 @@ Read-only агрегаты для админки: регистрации, вор
 | `CLICKHOUSE_USER` | string | `default` | да |
 | `CLICKHOUSE_PASSWORD` | string | `analytic_local_secret` | да. Пустой пароль `config.Load` отвергает |
 | `CLICKHOUSE_ASYNC_INSERT` | 0/1 | `1` | нет |
-| `CLICKHOUSE_WAIT_FOR_ASYNC_INSERT` | 0/1 | `0` | нет |
+| `CLICKHOUSE_WAIT_FOR_ASYNC_INSERT` | 0/1 | `1` | нет |
 | `CLICKHOUSE_ASYNC_INSERT_BUSY_TIMEOUT_MS` | int | `1000` | нет |
 | `CLICKHOUSE_ASYNC_INSERT_MAX_DATA_SIZE` | int, байты | `10485760` | нет |
 | `CLICKHOUSE_ASYNC_INSERT_MAX_QUERY_NUMBER` | int | `100` | нет |
+| `CLICKHOUSE_BATCH_MAX_ROWS` | int | `500` | нет |
+| `CLICKHOUSE_BATCH_FLUSH_INTERVAL_MS` | int, мс | `1000` | нет |
+| `CLICKHOUSE_QUERY_TIMEOUT_MS` | int, мс | `5000` | нет |
+| `KAFKA_DLQ_SUFFIX` | string | `.dlq` | нет |
+| `KAFKA_RETRY_BACKOFF_MS` | int, мс | `1000` | нет |
 | `MIGRATIONS_DIR` | string | `migrations` | нет |
 
 ## Запуск и тесты

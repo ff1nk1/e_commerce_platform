@@ -21,6 +21,7 @@ services:
       DB_PORT: 5432
       KAFKA_BROKERS: kafka:29092
       APP_URL: http://recommendation_service_app:8007
+      QUEUE_CONNECTION: database
     healthcheck:
       test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:'.getenv('NGINX_PORT').'/up')===false?1:0);"]
       interval: 5s
@@ -69,6 +70,32 @@ services:
       DB_PORT: 5432
       KAFKA_BROKERS: kafka:29092
       KAFKA_CACHE_DRIVER: array
+      QUEUE_CONNECTION: database
+    depends_on:
+      recommendation_db:
+        condition: service_healthy
+      recommendation_app:
+        condition: service_healthy
+    networks:
+      - php_project_net
+
+  recommendation_queue_worker:
+    image: recommendation_service:local
+    pull_policy: never
+    container_name: recommendation_queue_worker
+    restart: unless-stopped
+    command: php artisan queue:work --queue=default --tries=3 --timeout=900
+    volumes:
+      - .:/var/www
+      - ../packages/messaging:/var/packages/messaging:ro
+    env_file:
+      - .env
+    environment:
+      DB_HOST: recommendation_service_db
+      DB_PORT: 5432
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CACHE_DRIVER: array
+      QUEUE_CONNECTION: database
     depends_on:
       recommendation_db:
         condition: service_healthy
