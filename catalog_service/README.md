@@ -42,7 +42,7 @@ flowchart LR
    - `ANY /api/admin/{path}` → `{CATALOG}/api/admin/...`
    - `POST /api/get-upload-url` → `{CATALOG}/api/get-upload-url`
    - Filament: `/admin-catalog` → `{CATALOG}/admin-catalog`
-3. Gateway после JWT вшивает `X-User-Id`, `X-User-Role`, опционально name/email ([`ProxyService`](../auth_service/app/Services/Gateway/ProxyService.php)).
+3. Gateway после JWT вшивает `X-User-Id`, `X-User-Role`, опционально name/email ([`GatewayIdentity`](../auth_service/app/DTO/Auth/GatewayIdentity.php)).
 
 ### Catalog API
 

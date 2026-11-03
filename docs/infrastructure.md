@@ -35,6 +35,15 @@ ClickHouse Play слушает порт `8123` (пароль пользоват�
 
 Нагрузочный сценарий поиска: [`search_service/k6`](../search_service/k6).
 
+## TLS-сертификаты
+
+Traefik (`websecure`) читает сертификаты из `infra/traefik/certs/`:
+
+- `infra/traefik/certs/app.localhost.pem`
+- `infra/traefik/certs/app.localhost-key.pem`
+
+Файлы **не коммитятся** (каталог игнорируется `.gitignore`) — их кладут вручную. Подойдёт self-signed сертификат или `mkcert app.localhost`. Без этих двух файлов HTTPS-роутеры Traefik (`app.localhost`) не поднимутся.
+
 ## Локальный запуск
 
 Из корня репозитория:
@@ -67,8 +76,9 @@ docker compose up -d --build
 |-----|------------|
 | lint | PHP 8.5, Go 1.27.0, `./scripts/lint-all.sh --no-fix` |
 | test | `./scripts/bootstrap.sh`, подстановка секретов, `docker compose up` нужных контейнеров, `./scripts/test-all.sh` |
-| deploy | после lint и test, только не на pull request: SCP проекта на VM и SSH. `docker compose up` на VM в скрипте закомментирован |
+| test-live | только по `workflow_dispatch`: те же шаги с `RUN_LIVE_TESTS=1` (Stripe + Gemini) |
+| deploy | **отключён** — job `deploy:` полностью закомментирован в workflow (SCP на VM и SSH не выполняются) |
 
 Секреты репозитория для test: `JWT_SECRET`, `STRIPE_SECRET`, `STRIPE_WEBHOOK_SECRET`, `GEMINI_API_KEY`.
 
-Секреты для deploy: `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_KEY`. Каталог на VM — `/home/ubuntu/app`.
+Секреты для отключённого deploy-job (оставлены на случай включения): `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_KEY`. Каталог на VM — `/home/ubuntu/app`.

@@ -129,6 +129,20 @@ golangci_built_go() {
   "$1" version 2>/dev/null | sed -n 's/.*built with go\([0-9][0-9.]*\).*/\1/p' | head -1
 }
 
+# Release asset platform, e.g. linux + amd64 → "linux-amd64".
+golangci_platform() {
+  local os arch
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64|amd64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    armv6l|armv7l) arch="armv6" ;;
+    i386|i686) arch="386" ;;
+  esac
+  printf '%s-%s' "$os" "$arch"
+}
+
 golangci_supports_module() {
   local built
   built="$(golangci_built_go "$1")"
@@ -147,15 +161,19 @@ ensure_golangci() {
   fi
   log "${YELLOW}golangci-lint on PATH cannot load go 1.27.0 — downloading v${GOLANGCI_VERSION}${NC}"
   mkdir -p "$ROOT/.tools"
-  local url="https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_VERSION}/golangci-lint-${GOLANGCI_VERSION}-linux-amd64.tar.gz"
+  local platform asset
+  platform="$(golangci_platform)"
+  asset="golangci-lint-${GOLANGCI_VERSION}-${platform}.tar.gz"
+  local url="https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_VERSION}/${asset}"
   local tmp
   tmp="$(mktemp)"
   if ! curl -fsSL -o "$tmp" "$url"; then
-    log "${RED}ERROR:${NC} failed to download golangci-lint v${GOLANGCI_VERSION}"
+    log "${RED}ERROR:${NC} failed to download golangci-lint v${GOLANGCI_VERSION} for ${platform}"
+    log "  URL: ${url}"
     rm -f "$tmp"
     exit 1
   fi
-  tar -C "$ROOT/.tools" --strip-components=1 -xzf "$tmp" "golangci-lint-${GOLANGCI_VERSION}-linux-amd64/golangci-lint"
+  tar -C "$ROOT/.tools" --strip-components=1 -xzf "$tmp" "golangci-lint-${GOLANGCI_VERSION}-${platform}/golangci-lint"
   rm -f "$tmp"
   chmod +x "$candidate"
   if ! golangci_supports_module "$candidate"; then

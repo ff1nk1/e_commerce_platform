@@ -32,3 +32,6 @@ Thumbs.db
 startup
 /local-vm.md
 compose.override.yml
+
+# Host-specific network fix script (sudo, machine local)
+/scripts/net-fix.sh

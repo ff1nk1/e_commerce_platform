@@ -17,7 +17,7 @@ Laravel-сервис **идентификации и API gateway**: регист
 
 Свои маршруты ([`routes/api.php`](routes/api.php)): login, registration, refresh, logout, профиль, смена пароля, admin users/roles.
 
-Остальное — прокси ([`GatewayController`](app/Http/Controllers/GatewayController.php), [`config/services.php`](config/services.php)). После проверки JWT [`ProxyService`](app/Services/Gateway/ProxyService.php) вшивает `X-User-Id` и `X-User-Role`. Для заказов ещё подставляет `user_id` в body и query.
+Остальное — прокси ([`GatewayController`](app/Http/Controllers/GatewayController.php), [`ForwardRequestService`](app/Services/Gateway/ForwardRequestService.php), [`config/services.php`](config/services.php)). После проверки JWT [`GatewayIdentity`](app/DTO/Auth/GatewayIdentity.php) вшивает `X-User-Id` и `X-User-Role`. Для заказов [`JsonForwarder::mergeInjectedUser`](app/Services/Gateway/Forwarders/JsonForwarder.php) ещё подставляет `user_id` в body и query.
 
 | Кто | Куда уходит |
 |-----|-------------|

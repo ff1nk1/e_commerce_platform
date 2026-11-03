@@ -36,7 +36,7 @@ flowchart LR
 
 **JWT и роли проверяет только `auth_service` gateway.** Order service не валидирует токены и не является вторым IdP.
 
-1. Customer: `ANY /api/orders/...` на gateway → proxy на order; gateway **перезаписывает** `user_id` / `email` / `name` в query и body из JWT ([`ProxyService::mergeInjectedUser`](../auth_service/app/Services/Gateway/ProxyService.php)).
+1. Customer: `ANY /api/orders/...` на gateway → proxy на order; gateway **перезаписывает** `user_id` / `email` / `name` в query и body из JWT ([`JsonForwarder::mergeInjectedUser`](../auth_service/app/Services/Gateway/Forwarders/JsonForwarder.php)).
 2. Admin/analyst: middleware `role:admin,analyst` на gateway → `/api/admin/orders/...`. `analyst` строго read-only: gateway и middleware [`DenyAnalystWrites`](app/Http/Middleware/DenyAnalystWrites.php) по заголовку `X-User-Role` отклоняют любой не-`GET` (ship → 403).
 3. Stripe webhook: raw proxy; auth = проверка `Stripe-Signature` внутри order service.
 4. Сервис слушает `:8004` только во внутренней Docker-сети (`expose`); публичный вход — через gateway. Прямой вызов с mesh без gateway — assumption периметра.

@@ -58,12 +58,14 @@ ensure_app_key() {
       FAILED=1
       return 1
     fi
-    local key
+    local key tmp
     key="base64:$(openssl rand -base64 32)"
     # Escape for sed replacement
     local escaped
     escaped=$(printf '%s' "$key" | sed -e 's/[\/&]/\\&/g')
-    sed -i "s/^APP_KEY=$/APP_KEY=${escaped}/" "$envfile"
+    # Portable in-place edit (GNU sed -i and BSD sed -i differ); rewrite via temp file.
+    tmp="$(mktemp)"
+    sed "s/^APP_KEY=$/APP_KEY=${escaped}/" "$envfile" > "$tmp" && mv "$tmp" "$envfile"
     log "${GREEN}Set${NC} ${dir}/.env APP_KEY"
   fi
 }

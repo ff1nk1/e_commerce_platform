@@ -44,7 +44,7 @@ flowchart LR
 
 - JWT middleware → `GatewayController::recommendations`
 - Прокси на `{RECOMMENDATION_SERVICE_URL}/api/recommendations/...`
-- `ProxyService` вшивает `user_id` в body/query
+- `JsonForwarder::mergeInjectedUser` вшивает `user_id` в body/query
 - Таймаут чата **120s** (LLM медленный)
 
 ### Recommendation API

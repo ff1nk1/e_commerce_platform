@@ -45,7 +45,7 @@ flowchart LR
 
 Браузер открывает `app.localhost`. [`frontend/nginx.conf`](frontend/nginx.conf) режет трафик так: `/api` → `auth_service_app:8001`, `/` → Vite, `/storage` → MinIO (картинки каталога).
 
-JWT и роли проверяет только auth. [`ProxyService`](auth_service/app/Services/Gateway/ProxyService.php) проксирует запрос и вшивает `X-User-Id` / `X-User-Role` (для заказов ещё `user_id` в body и query). Маршруты — [`auth_service/routes/api.php`](auth_service/routes/api.php):
+JWT и роли проверяет только auth. [`ForwardRequestService`](auth_service/app/Services/Gateway/ForwardRequestService.php) проксирует запрос, [`GatewayIdentity`](auth_service/app/DTO/Auth/GatewayIdentity.php) вшивает `X-User-Id` / `X-User-Role` (для заказов [`JsonForwarder`](auth_service/app/Services/Gateway/Forwarders/JsonForwarder.php) ещё добавляет `user_id` в body и query). Маршруты — [`auth_service/routes/api.php`](auth_service/routes/api.php):
 
 | Кто | Пути gateway |
 |-----|----------------|
@@ -136,7 +136,27 @@ stripe listen --forward-to https://app.localhost/api/webhooks/stripe \
 docker compose up -d --force-recreate order_app auth_app
 ```
 
-Без Stripe стек и юнит-тесты работают; `./scripts/test-all.sh` упадёт на order integration, пока ключи не заданы. Без Gemini ассистент пустой, Gemini-тесты skip.
+Без Stripe стек и юнит-тесты работают; order integration запускается только при `RUN_LIVE_TESTS=1` (иначе `SKIP`) и падает без заданных ключей. Без Gemini ассистент пустой, Gemini-тесты skip.
+
+## Если обрываются ответы ИИ в браузере
+
+Симптом: страницы грузятся, но ответ в ChatGPT/Claude/Gemini приходит наполовину и замирает, а загрузка скриншотов/больших файлов не завершается — особенно когда поднят стек.
+
+Причина — **PMTU blackhole**: маленькие пакеты (загрузка страниц) проходят, а полноразмерные TCP-сегменты (~1500 Б) молча дропаются на узле с меньшим MTU. Хост не умеет восстанавливаться, потому что `net.ipv4.tcp_mtu_probing=0`. Один Wi-Fi-аплинк с включённым power-save под нагрузкой 49 контейнеров усиливает эффект.
+
+```bash
+# применить хостовые фиксы (нужен root)
+sudo ./scripts/net-fix.sh
+```
+
+Скрипт идемпотентен и делает только две вещи:
+
+- включает `net.ipv4.tcp_mtu_probing=1` (постоянно, через `/etc/sysctl.d/99-php-project-net.conf`);
+- выключает Wi-Fi power-save (сразу и постоянно, через NetworkManager drop-in).
+
+Docker-сеть `php_project_net` намеренно оставлена с **MTU 1400** ([compose.override.yml](compose.override.yml)) — так починены скачивания некоторых библиотек; это не трогаем.
+
+Если проблема вернётся, проверь: `sysctl net.ipv4.tcp_mtu_probing`, `iw dev wlp4s0 get power_save`, `tracepath -n -m 15 <host>` и память (`free -h`) — при 100% swap останови лишние VM/ClickHouse/OpenSearch Dashboards.
 
 ## Полезные команды
 

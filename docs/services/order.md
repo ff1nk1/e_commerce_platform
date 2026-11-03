@@ -39,4 +39,10 @@
 ./scripts/lint-all.sh order
 ```
 
-`test-all.sh order` гоняет и unit, и integration. Integration падает, пока в `order_service/.env` нет тестовых ключей Stripe.
+`test-all.sh order` гоняет unit-тесты. Integration (Stripe) запускается только при `RUN_LIVE_TESTS=1` — иначе шаг пропускается (`SKIP`). Для прогона:
+
+```bash
+RUN_LIVE_TESTS=1 ./scripts/test-all.sh order
+```
+
+Integration падает, пока в `order_service/.env` нет тестовых ключей Stripe.
