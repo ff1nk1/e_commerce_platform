@@ -5,7 +5,7 @@ go 1.27.0
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.30.0
 	github.com/segmentio/kafka-go v0.4.51
-	github.com/shopspring/decimal v1.4.0
+	github.com/shopspring/decimal v1.6.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sync v0.10.0
 )
