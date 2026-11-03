@@ -50,9 +50,9 @@ services:
       - php_project_net
 
   analytic_consumers:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # Image is built by analytic_api — do NOT repeat the build block here.
+    # Two services building the same tag in parallel make Bake export
+    # `analytic_service:local` twice and one fails with "already exists".
     image: analytic_service:local
     pull_policy: never
     container_name: analytic_service_consumers

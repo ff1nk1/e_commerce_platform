@@ -74,9 +74,6 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
-        },
-        "platform": {
-            "ext-mongodb": "2.1.7"
         }
     },
     "repositories": [
