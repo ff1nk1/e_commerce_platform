@@ -11,12 +11,21 @@ use App\Infrastructure\Stripe\StripeClient;
 use RuntimeException;
 use Stripe\ApiRequestor;
 use Stripe\HttpClient\ClientInterface;
+use Tests\Concerns\UsesFakeStripe;
 use Tests\Fakes\StripeRecordingHttpClient;
 use Tests\TestCase;
 
 final class StripeClientIdempotencyTest extends TestCase
 {
+    use UsesFakeStripe;
+
     private ?ClientInterface $previousHttpClient = null;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->useFakeStripe();
+    }
 
     protected function tearDown(): void
     {
