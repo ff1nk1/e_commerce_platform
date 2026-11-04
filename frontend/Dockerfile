@@ -24,7 +24,7 @@ ENV VITE_API_URL=${VITE_API_URL} \
 
 RUN npm run build
 
-FROM nginx:1.28.0-alpine AS prod
+FROM nginx:1.31.8-alpine AS prod
 
 COPY nginx.prod.conf /etc/nginx/conf.d/default.conf
 COPY --from=assets /app/dist /usr/share/nginx/html
