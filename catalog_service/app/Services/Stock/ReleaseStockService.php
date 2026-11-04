@@ -6,7 +6,7 @@ namespace App\Services\Stock;
 
 use App\Enums\StockReservationStatus;
 use App\Events\StockChanged;
-use App\Kafka\Saga\StockSagaMessage;
+use App\Saga\StockSagaMessage;
 use App\Services\Products\ProductCache;
 use Illuminate\Support\Facades\Log;
 
@@ -26,7 +26,7 @@ final class ReleaseStockService
     public function handle(StockSagaMessage $message): bool
     {
         $orderId = $message->orderId;
-        $normalized = $this->normalizer->normalize($message->items);
+        $normalized = $this->normalizer->normalizeSettlement($message->items);
 
         if ($normalized === []) {
             Log::warning('stock.release skipped: invalid items', ['order_id' => $orderId]);

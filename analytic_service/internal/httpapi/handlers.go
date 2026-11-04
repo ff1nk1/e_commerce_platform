@@ -42,7 +42,33 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /analytics/orders/stores", s.handleOrdersByStore)
 	mux.HandleFunc("GET /analytics/orders/categories", s.handleOrdersByCategory)
 	mux.HandleFunc("GET /analytics/search", s.handleSearch)
-	return mux
+	return requireRole(mux, "admin", "analyst")
+}
+
+// requireRole is a defense-in-depth guard on the analytics API.
+//
+// The gateway already restricts /analytics to admin|analyst and enforces
+// read-only analyst, but this service checks the trusted X-User-Role header in
+// case a request arrives directly over the internal Docker network.
+func requireRole(next http.Handler, allowed ...string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			next.ServeHTTP(w, r)
+
+			return
+		}
+
+		role := r.Header.Get("X-User-Role")
+		for _, a := range allowed {
+			if role == a {
+				next.ServeHTTP(w, r)
+
+				return
+			}
+		}
+
+		http.Error(w, "forbidden", http.StatusForbidden)
+	})
 }
 
 // fail logs the underlying error server-side and returns a safe, generic body

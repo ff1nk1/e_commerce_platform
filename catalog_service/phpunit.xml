@@ -35,6 +35,7 @@
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <env name="REDIS_CLIENT" value="predis"/>
         <env name="REDIS_HOST" value="catalog_service_redis"/>
+        <env name="REDIS_PASSWORD" value="redis_local_secret"/>
         <env name="REDIS_PORT" value="6379"/>
         <env name="REDIS_DB" value="15"/>
         <env name="KAFKA_BROKERS" value="kafka:29092"/>

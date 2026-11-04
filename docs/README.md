@@ -6,7 +6,7 @@
 |----------|--------|
 | [Архитектура](architecture.md) | Gateway, Kafka, базы, внешние системы |
 | [Инфраструктура](infrastructure.md) | Логи, Mailpit, локальный запуск, CI |
-| [ADR](adr/) | Почему gateway, Kafka, отдельные хранилища, Stripe |
+| [ADR](adr/) | Почему gateway, Kafka, отдельные хранилища, Stripe, слои `app/` |
 | [Сервисы](services/) | Назначение, зависимости, ENV, тесты каждого сервиса |
 
 Swagger UI (стек должен быть запущен): [https://app.localhost/docs/](https://app.localhost/docs/). Спека — [`auth_service/public/docs/openapi.yaml`](../auth_service/public/docs/openapi.yaml).

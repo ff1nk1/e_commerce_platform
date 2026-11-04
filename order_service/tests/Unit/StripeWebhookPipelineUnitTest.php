@@ -131,7 +131,7 @@ final class StripeWebhookPipelineUnitTest extends TestCase
         $this->assertNotNull($release);
         $this->assertSame($order->saga_id, $release->payload['saga_id'] ?? null);
         $this->assertSame([
-            ['product_id' => 42, 'store_id' => 3, 'quantity' => 1],
+            ['product_id' => 42, 'quantity' => 1],
         ], $release->payload['items'] ?? null);
     }
 

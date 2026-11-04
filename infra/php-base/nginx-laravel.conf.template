@@ -14,8 +14,6 @@ server {
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
 
-    charset utf-8;
-
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }
@@ -24,6 +22,11 @@ server {
     location = /robots.txt  { access_log off; log_not_found off; }
 
     error_page 404 /index.php;
+
+    # Optional: long-running gateway routes served by the dedicated [gateway]
+    # php-fpm pool (rendered by entrypoint-http.sh when GATEWAY_FPM_PORT is set).
+    # Wildcard include is a no-op when the directory is empty.
+    include /etc/nginx/gateway/*.conf;
 
     location ~ \.php$ {
         try_files $uri =404;

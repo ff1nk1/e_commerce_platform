@@ -143,7 +143,7 @@ final class StockSagaFlowUnitTest extends TestCase
         $this->assertNotNull($release);
         $this->assertSame($sagaId, $release->payload['saga_id'] ?? null);
         $this->assertSame([
-            ['product_id' => 88, 'store_id' => 2, 'quantity' => 2],
+            ['product_id' => 88, 'quantity' => 2],
         ], $release->payload['items'] ?? null);
     }
 }

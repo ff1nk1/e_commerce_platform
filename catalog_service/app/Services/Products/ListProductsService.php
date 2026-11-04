@@ -7,10 +7,14 @@ namespace App\Services\Products;
 use App\DTO\Catalog\ProductFilters;
 use App\Enums\CatalogAvailabilityFilter;
 use App\Enums\ProductSort;
+use App\Http\Resources\CategoryResource;
+use App\Http\Resources\ProductResource;
+use App\Http\Resources\StoreResource;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Store;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 
 final class ListProductsService
@@ -43,15 +47,15 @@ final class ListProductsService
                 );
 
                 return [
-                    'category' => $category->toArray(),
-                    'products' => $products->toArray(),
+                    'category' => CategoryResource::make($category)->resolve(),
+                    'products' => $this->presentPaginator($products),
                 ];
             }
         );
     }
 
     /**
-     * @return array{store: Store, products: mixed}
+     * @return array{store: array<string, mixed>, products: array<string, mixed>}
      */
     public function byStoreId(int $storeId, ProductFilters $filters): array
     {
@@ -66,9 +70,23 @@ final class ListProductsService
         );
 
         return [
-            'store' => $store,
-            'products' => $products,
+            'store' => StoreResource::make($store)->resolve(),
+            'products' => $this->presentPaginator($products),
         ];
+    }
+
+    /**
+     * Keep the Laravel paginator envelope (`current_page`, `last_page`, …)
+     * while whitelisting each item through {@see ProductResource}.
+     *
+     * @param  LengthAwarePaginator<int, Product>  $paginator
+     * @return array<string, mixed>
+     */
+    private function presentPaginator(LengthAwarePaginator $paginator): array
+    {
+        return $paginator
+            ->through(static fn (Product $product): array => ProductResource::make($product)->resolve())
+            ->toArray();
     }
 
     /**

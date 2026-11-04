@@ -10,4 +10,6 @@
 | notification | [notification.md](notification.md) |
 | analytic | [analytic.md](analytic.md) |
 
+Раскладка слоёв нового сервиса — в [_skeleton.md](_skeleton.md) (обоснование — [ADR 0006](../adr/0006-app-layers.md)).
+
 Запуск всего стека и фильтры тестов — в [инфраструктуре](../infrastructure.md).

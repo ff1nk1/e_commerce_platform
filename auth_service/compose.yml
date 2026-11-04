@@ -23,6 +23,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: auth_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
       CATALOG_SERVICE_URL: http://catalog_service_app:8002
       NOTIFICATION_SERVICE_URL: http://notification_service_app:8003
@@ -33,6 +34,11 @@ services:
       SESSION_DOMAIN: null
       JWT_COOKIE_DOMAIN: ""
       APP_URL: http://auth_service_app:8001
+      # Long-running gateway routes (recommendation chat, ~120s) get a dedicated
+      # php-fpm pool so they cannot exhaust the [www] workers serving /api/login.
+      GATEWAY_FPM_PORT: 9001
+      GATEWAY_FPM_MAX_CHILDREN: 40
+      GATEWAY_ROUTES: "^/api/recommendations"
     healthcheck:
       test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:'.getenv('NGINX_PORT').'/up')===false?1:0);"]
       interval: 5s
@@ -75,9 +81,11 @@ services:
       - "127.0.0.1:6380:6379"
     volumes:
       - auth_redisdata:/data
-    command: redis-server --appendonly yes
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
+    command: sh -c 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -100,6 +108,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: auth_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
     depends_on:
       auth_app:

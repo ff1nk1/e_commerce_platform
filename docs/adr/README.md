@@ -7,3 +7,4 @@
 | [0003](0003-datastores.md) | Своё хранилище под задачу |
 | [0004](0004-stripe-checkout.md) | Оплата через Stripe Checkout |
 | [0005](0005-trust-gateway-headers.md) | Downstream не проверяет JWT |
+| [0006](0006-app-layers.md) | Слои внутри `app/` и место саг |

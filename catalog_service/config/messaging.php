@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Kafka\Saga\StockFulfillment;
+use App\Saga\StockFulfillment;
 
 return [
     'document_store_aggregates' => [

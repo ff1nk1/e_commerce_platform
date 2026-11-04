@@ -6,27 +6,44 @@ namespace App\Infrastructure\Idempotency;
 
 use App\Contracts\IdempotencyStore;
 use App\DTO\Orders\IdempotentResponse;
+use App\Models\IdempotencyRecord;
 use Illuminate\Support\Facades\Cache;
 
-final class CacheIdempotencyStore implements IdempotencyStore
+/**
+ * DB-backed idempotency store.
+ *
+ * The stored response lives in the same database as the domain rows it
+ * describes, so it can be written inside the domain transaction and can never
+ * drift from Postgres. Redis is used only for a short-lived lock so two
+ * concurrent identical requests do not both run the domain flow.
+ */
+final class DatabaseIdempotencyStore implements IdempotencyStore
 {
-    private const TTL_SECONDS = 86400;
-
     private const LOCK_TTL_SECONDS = 30;
 
     public function get(string $scopeKey): ?IdempotentResponse
     {
-        $decoded = Cache::get($this->responseKey($scopeKey));
+        $record = IdempotencyRecord::query()->where('scope_key', $scopeKey)->first();
+        if (! $record instanceof IdempotencyRecord) {
+            return null;
+        }
 
-        return is_array($decoded) ? IdempotentResponse::fromArray($decoded) : null;
+        return IdempotentResponse::fromArray($record->response);
     }
 
     public function put(string $scopeKey, IdempotentResponse $response): void
     {
-        Cache::put(
-            $this->responseKey($scopeKey),
-            $response->toArray(),
-            self::TTL_SECONDS
+        // Atomic upsert (ON CONFLICT) so a concurrent retry cannot raise inside an
+        // open DB transaction the way a caught unique-violation would.
+        IdempotencyRecord::query()->upsert(
+            [[
+                'scope_key' => $scopeKey,
+                'response' => json_encode($response->toArray(), JSON_THROW_ON_ERROR),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]],
+            ['scope_key'],
+            ['response', 'updated_at'],
         );
     }
 
@@ -53,11 +70,6 @@ final class CacheIdempotencyStore implements IdempotencyStore
         $parts[] = $clientKey;
 
         return implode(':', $parts);
-    }
-
-    private function responseKey(string $scopeKey): string
-    {
-        return $scopeKey;
     }
 
     private function lockKey(string $scopeKey): string

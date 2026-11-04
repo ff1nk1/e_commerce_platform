@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Orders;
 
 use App\Models\Order;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 final class ListAllOrdersService
 {

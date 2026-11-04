@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\DTO\Gateway;
 
 use App\DTO\Auth\GatewayIdentity;
-use App\DTO\Auth\InjectedGatewayUser;
 use App\Enums\ProxyMode;
 
 final readonly class ProxyOptions
@@ -15,7 +14,6 @@ final readonly class ProxyOptions
     public function __construct(
         public ProxyMode $mode = ProxyMode::Json,
         public ?GatewayIdentity $identity = null,
-        public ?InjectedGatewayUser $injectUser = null,
         public int $timeout = self::DEFAULT_TIMEOUT,
     ) {}
 }

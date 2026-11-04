@@ -6,11 +6,11 @@ namespace Tests\Feature;
 
 use App\DTO\Catalog\CategoryData;
 use App\DTO\Catalog\ProductData;
-use App\Kafka\Saga\StockSagaMessage;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Stock;
 use App\Models\Store;
+use App\Saga\StockSagaMessage;
 use App\Services\Categories\CategoriesCache;
 use App\Services\Categories\CreateCategoryService;
 use App\Services\Categories\ListCategoriesService;

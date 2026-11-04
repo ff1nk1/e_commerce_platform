@@ -116,7 +116,7 @@ sequenceDiagram
 ```
 
 1. Consumer `kafka:consume:order-events` → [`OrderEventsHandler`](app/Kafka/Handlers/OrderEventsHandler.php) → `OrderCreatedHandler` / `StockReleaseHandler` / `StockCommitHandler`.
-2. Сага [`StockFulfillment`](app/Kafka/Saga/StockFulfillment.php) (Ecotone `#[Saga]`, документ в `ecotone_document_store`) хранит статусы шагов `stock.reserve` / `stock.commit` / `stock.release`; `busy` бросает [`SagaStepBusyException`](app/Exceptions/SagaStepBusyException.php) (без потери сообщения по auto-commit); каждый шаг идемпотентен по `saga_id`.
+2. Сага [`StockFulfillment`](app/Saga/StockFulfillment.php) (Ecotone `#[Saga]`, документ в `ecotone_document_store`) хранит статусы шагов `stock.reserve` / `stock.commit` / `stock.release`; `busy` бросает [`SagaStepBusyException`](app/Exceptions/SagaStepBusyException.php) (без потери сообщения по auto-commit); каждый шаг идемпотентен по `saga_id`.
 3. Резервы стока персистентны в таблице `stock_reservations` (строка на `order_id` + `product_id` + `store_id`, с колонкой `saga_id`); settle идёт строго по строке резерва, а не вычитанием из общего счётчика:
    - reserve: merge duplicate lines → lock rows → проверка `available` → создать `held`-строку → `reserved +=` → events;
    - release: `reserved -= quantity` по строке (статус `released`);

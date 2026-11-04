@@ -7,10 +7,10 @@ namespace App\Services\Payments;
 use App\DTO\Payments\StripeCheckoutSession;
 use App\Enums\PaymentStatus;
 use App\Infrastructure\Stripe\StripePaymentResolver;
-use App\Messaging\FulfillmentEvents;
-use App\Messaging\PaymentFailed;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Saga\FulfillmentEvents;
+use App\Saga\PaymentFailed;
 use Illuminate\Support\Facades\DB;
 
 final class FailPaymentService

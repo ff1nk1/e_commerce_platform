@@ -50,11 +50,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 COPY --from=composer:2.10.3 /usr/bin/composer /usr/bin/composer
 
 COPY zz-laravel-fpm.conf /usr/local/etc/php-fpm.d/zz-laravel.conf
+COPY zz-gateway-fpm.conf.template /usr/local/etc/php-fpm.d/zz-gateway.conf.template
 COPY zz-laravel-php.ini /usr/local/etc/php/conf.d/zz-laravel.ini
 COPY nginx-laravel.conf.template /etc/nginx/templates/laravel.conf.template
 COPY entrypoint-http.sh /usr/local/bin/entrypoint-http.sh
 
-RUN chmod +x /usr/local/bin/entrypoint-http.sh
+RUN chmod +x /usr/local/bin/entrypoint-http.sh \
+    && mkdir -p /etc/nginx/gateway
 
 WORKDIR /var/www
 

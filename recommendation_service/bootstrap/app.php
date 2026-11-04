@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureGatewayRole;
 use App\Http\Middleware\EnsureInternalToken;
 use App\Http\Middleware\ResolveGatewayUserId;
 use App\Infrastructure\Llm\Exceptions\LlmException;
@@ -18,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->api(prepend: [
             EnsureInternalToken::class,
+            EnsureGatewayRole::class,
             ResolveGatewayUserId::class,
         ]);
     })

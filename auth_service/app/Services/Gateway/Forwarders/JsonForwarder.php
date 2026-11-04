@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\Gateway\Forwarders;
 
-use App\DTO\Auth\InjectedGatewayUser;
 use App\DTO\Gateway\ProxyOptions;
 use App\Services\Gateway\UpstreamHeaders;
 use Illuminate\Http\Client\Response as HttpResponse;
@@ -31,10 +30,6 @@ final class JsonForwarder implements Forwarder
         $query = $request->query();
         $body = $request->all();
 
-        if ($options->injectUser instanceof InjectedGatewayUser) {
-            [$query, $body] = $this->mergeInjectedUser($query, $body, $options->injectUser);
-        }
-
         $headers = array_merge(
             ['Accept' => 'application/json'],
             $this->headers->forwarded($request),
@@ -55,25 +50,5 @@ final class JsonForwarder implements Forwarder
         $upstream = $pending->send($method, $url, $payload);
 
         return $this->headers->jsonResponse($upstream);
-    }
-
-    /**
-     * @param  array<string, mixed>  $query
-     * @param  array<string, mixed>  $body
-     * @return array{0: array<string, mixed>, 1: array<string, mixed>}
-     */
-    private function mergeInjectedUser(array $query, array $body, InjectedGatewayUser $injectUser): array
-    {
-        $query['user_id'] = $injectUser->id;
-        $body['user_id'] = $injectUser->id;
-
-        foreach (['email' => $injectUser->email, 'name' => $injectUser->name] as $field => $value) {
-            if (is_string($value) && $value !== '') {
-                $query[$field] = $value;
-                $body[$field] = $value;
-            }
-        }
-
-        return [$query, $body];
     }
 }

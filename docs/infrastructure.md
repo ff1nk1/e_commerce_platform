@@ -68,13 +68,15 @@ docker compose up -d --build
 
 `test-all.sh` гоняет тесты в уже поднятых контейнерах. `lint-all.sh` работает на хосте: Pint и PHPStan для Laravel, golangci-lint для analytic. Docker для линта не нужен.
 
+`check-deps.sh` проверяет, что сервисы не запинены на точную версию `shop/messaging` и что пакет объявляет широкие ограничения на `illuminate/*` (см. [ADR 0002](adr/0002-kafka-and-outbox.md)). `load-chat-login.sh` — нагрузочная проверка изоляции gateway-пула: параллельные чаты не должны замедлять `/api/login` (см. [ADR 0001](adr/0001-gateway-in-auth.md)).
+
 ## CI
 
 Файл [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml). Запускается на push и pull request в `main` и вручную.
 
 | Job | Что делает |
 |-----|------------|
-| lint | PHP 8.5, Go 1.27.0, `./scripts/lint-all.sh --no-fix` |
+| lint | PHP 8.5, Go 1.27.0, `./scripts/lint-all.sh --no-fix`, `./scripts/check-deps.sh` |
 | test | `./scripts/bootstrap.sh`, подстановка секретов, `docker compose up` нужных контейнеров, `./scripts/test-all.sh` |
 | test-live | только по `workflow_dispatch`: те же шаги с `RUN_LIVE_TESTS=1` (Stripe + Gemini) |
 | deploy | **отключён** — job `deploy:` полностью закомментирован в workflow (SCP на VM и SSH не выполняются) |

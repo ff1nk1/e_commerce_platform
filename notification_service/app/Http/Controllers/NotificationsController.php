@@ -6,6 +6,8 @@ namespace App\Http\Controllers;
 
 use App\DTO\Notifications\NotificationFilters;
 use App\Http\Requests\NotificationsRequest;
+use App\Http\Resources\NotificationResource;
+use App\Models\Notification;
 use App\Services\Notifications\FindNotificationService;
 use App\Services\Notifications\ListNotificationsService;
 use App\Services\Notifications\ResendNotificationService;
@@ -31,12 +33,17 @@ final class NotificationsController extends Controller
             perPage: (int) ($request->validated('per_page') ?? 20),
         );
 
-        return response()->json($this->listNotifications->handle($filters));
+        $paginator = $this->listNotifications->handle($filters);
+
+        // Keep the Laravel paginator envelope, but whitelist each record.
+        return response()->json(
+            $paginator->through(static fn (Notification $notification): array => NotificationResource::make($notification)->resolve())
+        );
     }
 
     public function show(string $id): JsonResponse
     {
-        return response()->json($this->findNotification->handle($id));
+        return response()->json(NotificationResource::make($this->findNotification->handle($id)));
     }
 
     public function resend(string $id): JsonResponse
@@ -54,7 +61,7 @@ final class NotificationsController extends Controller
         if ($result->isSent) {
             return response()->json([
                 'message' => 'Уведомление успешно отправлено!',
-                'data' => $notification->fresh(),
+                'data' => NotificationResource::make($notification->fresh()),
             ], 200);
         }
 

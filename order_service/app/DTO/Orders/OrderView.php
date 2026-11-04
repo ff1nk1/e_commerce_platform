@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace App\DTO\Orders;
 
+use App\Http\Resources\OrderResource;
 use App\Models\Order;
 
+/**
+ * Serializes an order for HTTP responses through the whitelisting
+ * {@see OrderResource} (no `saga_id`, no Stripe identifiers).
+ */
 final readonly class OrderView
 {
     /**
@@ -19,8 +24,8 @@ final readonly class OrderView
     {
         $order->loadMissing(['items.productSnapshot', 'payments']);
 
-        $data = $order->toArray();
-        $data['status'] = $order->statusEnum()->value;
+        /** @var array<string, mixed> $data */
+        $data = OrderResource::make($order)->resolve();
 
         return new self($data);
     }

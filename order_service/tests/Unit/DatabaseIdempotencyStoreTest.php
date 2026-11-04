@@ -5,27 +5,25 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\DTO\Orders\IdempotentResponse;
-use App\Infrastructure\Idempotency\CacheIdempotencyStore;
-use Illuminate\Support\Str;
-use Tests\Concerns\UsesRedis;
+use App\Infrastructure\Idempotency\DatabaseIdempotencyStore;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
-final class IdempotencyServiceTest extends TestCase
+final class DatabaseIdempotencyStoreTest extends TestCase
 {
-    use UsesRedis;
+    use RefreshDatabase;
 
-    private CacheIdempotencyStore $idempotency;
+    private DatabaseIdempotencyStore $idempotency;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->enableRedis();
-        $this->idempotency = new CacheIdempotencyStore;
+        $this->idempotency = new DatabaseIdempotencyStore;
     }
 
     public function test_put_and_get_round_trip(): void
     {
-        $key = 'idem-'.Str::uuid();
+        $key = 'order:idempotency:create:9:unit-key';
         $body = ['id' => 9, 'status' => 'pending'];
 
         $this->assertNull($this->idempotency->get($key));
@@ -36,18 +34,7 @@ final class IdempotencyServiceTest extends TestCase
         $this->assertNotNull($cached);
         $this->assertSame(201, $cached->status);
         $this->assertSame($body, $cached->body);
-    }
-
-    public function test_acquire_lock_is_exclusive(): void
-    {
-        $key = 'lock-'.Str::uuid();
-
-        $this->assertTrue($this->idempotency->acquireLock($key));
-        $this->assertFalse($this->idempotency->acquireLock($key));
-
-        $this->idempotency->releaseLock($key);
-        $this->assertTrue($this->idempotency->acquireLock($key));
-        $this->idempotency->releaseLock($key);
+        $this->assertDatabaseHas('idempotency_keys', ['scope_key' => $key]);
     }
 
     public function test_scope_key_includes_user_and_operation(): void

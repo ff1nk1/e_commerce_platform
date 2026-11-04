@@ -6,7 +6,11 @@ COPY package.json package-lock.json ./
 
 RUN npm ci
 
-COPY . .
+# Explicit paths only (no `COPY . .`): .env / node_modules never enter the image.
+COPY index.html ./
+COPY vite.config.js ./
+COPY public/ ./public/
+COPY src/ ./src/
 
 EXPOSE 5173
 

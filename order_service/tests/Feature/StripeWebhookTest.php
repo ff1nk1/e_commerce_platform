@@ -71,7 +71,7 @@ final class StripeWebhookTest extends TestCase
         $this->assertNotNull($commit);
         $this->assertSame($order->saga_id, $commit->payload['saga_id'] ?? null);
         $this->assertSame([
-            ['product_id' => 42, 'store_id' => 3, 'quantity' => 1],
+            ['product_id' => 42, 'quantity' => 1],
         ], $commit->payload['items'] ?? null);
     }
 
@@ -101,7 +101,7 @@ final class StripeWebhookTest extends TestCase
         $this->assertNotNull($event);
         $this->assertSame($order->saga_id, $event->payload['saga_id']);
         $this->assertSame([
-            ['product_id' => 42, 'store_id' => 3, 'quantity' => 1],
+            ['product_id' => 42, 'quantity' => 1],
         ], $event->payload['items']);
     }
 

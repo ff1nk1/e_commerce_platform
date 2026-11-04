@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Kafka\Saga;
+namespace App\Saga;
 
 use App\Support\KafkaPayload;
 use Shop\Messaging\EnvelopeMessage;

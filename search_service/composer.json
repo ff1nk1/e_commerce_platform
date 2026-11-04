@@ -11,7 +11,7 @@
         "laravel/tinker": "^3.0",
         "ecotone/dbal": "^1.328",
         "ecotone/laravel": "^1.328",
-        "shop/messaging": "1.0.0",
+        "shop/messaging": "^1.0",
         "opensearch-project/opensearch-php": "^2.7"
     },
     "require-dev": {

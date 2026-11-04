@@ -89,7 +89,7 @@ final class StripeSessionExpiredCompensationTest extends IntegrationTestCase
         $this->assertNotNull($release);
         $this->assertSame($sagaId, $release->payload['saga_id'] ?? null);
         $this->assertSame([
-            ['product_id' => 505, 'store_id' => 2, 'quantity' => 1],
+            ['product_id' => 505, 'quantity' => 1],
         ], $release->payload['items'] ?? null);
 
         OutboxQueue::flush();

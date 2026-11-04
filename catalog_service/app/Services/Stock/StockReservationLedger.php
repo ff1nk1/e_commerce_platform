@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Stock;
 
-use App\DTO\Stock\StockLine;
+use App\DTO\Stock\SettlementLine;
 use App\Enums\StockReservationStatus;
 use App\Exceptions\InsufficientStockReservationException;
 use App\Exceptions\MissingStockReservationException;
@@ -30,23 +30,15 @@ final class StockReservationLedger
         ];
     }
 
-    public function settleHeld(int|string $orderId, StockLine $item, StockReservationStatus $nextStatus, bool $decrementQuantity, ?string $sagaId = null): Stock
+    public function settleHeld(int|string $orderId, SettlementLine $item, StockReservationStatus $nextStatus, bool $decrementQuantity, ?string $sagaId = null): Stock
     {
         $orderKey = $this->orderKey($orderId);
         $productId = $item->productId;
-        $storeId = $item->storeId;
         $requested = $item->quantity;
-
-        $stock = Stock::query()
-            ->where('product_id', $productId)
-            ->where('store_id', $storeId)
-            ->lockForUpdate()
-            ->first();
 
         $reservationQuery = StockReservation::query()
             ->where('order_id', $orderKey)
             ->where('product_id', $productId)
-            ->where('store_id', $storeId)
             ->where('status', StockReservationStatus::Held);
 
         if ($sagaId !== null && $sagaId !== '') {
@@ -58,9 +50,25 @@ final class StockReservationLedger
         $reservation = $reservationQuery->lockForUpdate()->first();
 
         throw_if(
-            ! $stock instanceof Stock || ! $reservation instanceof StockReservation,
+            ! $reservation instanceof StockReservation,
             MissingStockReservationException::class,
-            "No held reservation for order {$orderKey}, product {$productId}, store {$storeId}."
+            "No held reservation for order {$orderKey}, product {$productId}."
+        );
+
+        // The warehouse is owned by the reservation (source of truth in catalog),
+        // never by the order's product snapshot which may have changed store.
+        $storeId = $reservation->store_id;
+
+        $stock = Stock::query()
+            ->where('product_id', $productId)
+            ->where('store_id', $storeId)
+            ->lockForUpdate()
+            ->first();
+
+        throw_if(
+            ! $stock instanceof Stock,
+            MissingStockReservationException::class,
+            "No stock row for product {$productId}, store {$storeId}."
         );
 
         if ($reservation->quantity !== $requested || $stock->reserved < $requested) {

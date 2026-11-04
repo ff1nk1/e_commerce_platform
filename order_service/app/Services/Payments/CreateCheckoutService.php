@@ -15,6 +15,7 @@ use App\Infrastructure\Stripe\StripeIdempotencyKey;
 use App\Infrastructure\Stripe\StripeLineItems;
 use App\Models\Order;
 use App\Models\Payment;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Sleep;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -72,7 +73,12 @@ final class CreateCheckoutService
                 ->first();
 
             $result = $this->createCheckout($order, $pendingWithSession);
-            $this->idempotency->put($scopeKey, new IdempotentResponse(200, $result->toArray()));
+
+            // Persist the idempotent response atomically (DB-backed store), so a
+            // retry with the same key returns the same checkout URL.
+            DB::transaction(function () use ($scopeKey, $result): void {
+                $this->idempotency->put($scopeKey, new IdempotentResponse(200, $result->toArray()));
+            });
 
             return $result;
         } finally {

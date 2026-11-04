@@ -11,9 +11,9 @@ use App\Events\StockChanged;
 use App\Events\StockReservationFailed;
 use App\Events\StockReserved;
 use App\Exceptions\DuplicateStockReservationException;
-use App\Kafka\Saga\StockSagaMessage;
 use App\Models\Stock;
 use App\Models\StockReservation;
+use App\Saga\StockSagaMessage;
 use App\Services\Products\ProductCache;
 use Illuminate\Support\Facades\Log;
 
@@ -67,13 +67,12 @@ final class ReserveStockService
                 $existing = StockReservation::query()
                     ->where('order_id', $orderKey)
                     ->where('product_id', $stock->product_id)
-                    ->where('store_id', $stock->store_id)
                     ->lockForUpdate()
                     ->first();
 
                 if ($existing instanceof StockReservation) {
                     throw new DuplicateStockReservationException(
-                        "Reservation already exists for order {$orderKey}, product {$stock->product_id}, store {$stock->store_id}."
+                        "Reservation already exists for order {$orderKey}, product {$stock->product_id}."
                     );
                 }
 

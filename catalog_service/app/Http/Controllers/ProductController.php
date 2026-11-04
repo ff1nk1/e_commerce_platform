@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\DTO\Catalog\ProductData;
 use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
+use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use App\Services\Products\CreateProductService;
 use App\Services\Products\DeleteProductService;
@@ -40,7 +41,11 @@ final class ProductController extends Controller
             $q->where('store_id', (int) $request->input('store_id'));
         });
 
-        return response()->json($query->paginate($perPage));
+        $paginator = $query->paginate($perPage);
+
+        return response()->json(
+            $paginator->through(static fn (Product $product): array => ProductResource::make($product)->resolve())
+        );
     }
 
     // POST /api/admin/products
@@ -49,13 +54,15 @@ final class ProductController extends Controller
         // Сервис создаст товар и отправит событие в Kafka
         $product = $this->createProduct->handle(ProductData::fromArray($request->validated()));
 
-        return response()->json(['message' => 'Товар добавлен', 'product' => $product], 201);
+        return response()->json(['message' => 'Товар добавлен', 'product' => ProductResource::make($product)], 201);
     }
 
     public function show(int|string $id): JsonResponse
     {   // Когда память редиса заполнится, он будет убирать самые редко вызываемые
-        $product = Cache::tags(['products'])->remember(ProductCache::product($id), self::PRODUCT_CACHE_TTL_SECONDS, function () use ($id) {
-            return Product::with(['category', 'store', 'attributes'])->findOrFail($id)->toArray();
+        $product = Cache::tags(['products'])->remember(ProductCache::product($id), self::PRODUCT_CACHE_TTL_SECONDS, function () use ($id): array {
+            $model = Product::with(['category', 'store', 'attributes'])->findOrFail($id);
+
+            return ProductResource::make($model)->resolve();
         });
 
         return response()->json(['product' => $product]);
@@ -64,11 +71,10 @@ final class ProductController extends Controller
     // PUT/PATCH /api/admin/products/{product}
     public function update(UpdateProductRequest $request, Product $product): JsonResponse
     {
-
         // Сервис обновит товар и отправит событие в Kafka
         $product = $this->updateProduct->handle($product, ProductData::fromArray($request->validated()));
 
-        return response()->json(['message' => 'Товар обновлен', 'product' => $product]);
+        return response()->json(['message' => 'Товар обновлен', 'product' => ProductResource::make($product)]);
     }
 
     // DELETE /api/admin/products/{product}

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Kafka\Handlers;
 
 use App\Enums\SagaStep;
-use App\Kafka\Saga\ApplyStockStep;
-use App\Kafka\Saga\StockSagaMessage;
 use App\Messaging\StockReleaseRequested;
+use App\Saga\ApplyStockStep;
+use App\Saga\StockSagaMessage;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Ecotone\Modelling\EventBus;
 use Illuminate\Support\Facades\Log;

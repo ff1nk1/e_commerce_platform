@@ -2,6 +2,7 @@
 # Lint microservices locally:
 #   Laravel — Pint, PHPStan/Larastan, Rector --dry-run (each service's vendor/bin)
 #   analytic — golangci-lint (host Go + golangci-lint v2.15.x)
+#   frontend — oxlint + Prettier --check (frontend/node_modules)
 # No Docker. PHPStan, Larastan, Pint and Rector live in each service.
 #
 # Usage (from repo root):
@@ -9,9 +10,10 @@
 #   ./scripts/lint-all.sh --fix           # check, then autofix without asking
 #   ./scripts/lint-all.sh --no-fix        # check only (CI / non-interactive)
 #   ./scripts/lint-all.sh auth catalog    # filter by short name
+#   ./scripts/lint-all.sh frontend        # frontend only (oxlint + Prettier)
 #   ./scripts/lint-all.sh analytic        # Go only (no PHP required)
 #
-# Short names: auth catalog notification order recommendation search analytic
+# Short names: auth catalog notification order recommendation search frontend analytic
 
 set -uo pipefail
 
@@ -29,12 +31,14 @@ PINT_FAILED=0
 PHPSTAN_FAILED=0
 RECTOR_FAILED=0
 GOLANGCI_FAILED=0
+FRONTEND_FAILED=0
 DO_FIX=ask
 declare -a RESULTS=()
 declare -a FILTER=()
 declare -a PINT_PATHS=()
 declare -a SELECTED_PHP=()
 RUN_ANALYTIC=0
+RUN_FRONTEND=0
 
 log() { printf '%b\n' "$*"; }
 
@@ -48,7 +52,7 @@ for arg in "$@"; do
       DO_FIX=no
       ;;
     -h|--help)
-      sed -n '2,14p' "$0" | sed 's/^# \?//'
+      sed -n '2,16p' "$0" | sed 's/^# \?//'
       exit 0
       ;;
     -*)
@@ -62,7 +66,7 @@ for arg in "$@"; do
 done
 
 PHP_SERVICES=(auth catalog notification order recommendation search)
-VALID=(auth catalog notification order recommendation search analytic)
+VALID=(auth catalog notification order recommendation search frontend analytic)
 declare -A DIR_OF=(
   [auth]=auth_service
   [catalog]=catalog_service
@@ -71,6 +75,7 @@ declare -A DIR_OF=(
   [recommendation]=recommendation_service
   [search]=search_service
   [analytic]=analytic_service
+  [frontend]=frontend
 )
 
 for f in "${FILTER[@]+"${FILTER[@]}"}"; do
@@ -109,6 +114,10 @@ if should_run analytic; then
   RUN_ANALYTIC=1
 fi
 
+if should_run frontend; then
+  RUN_FRONTEND=1
+fi
+
 require_host_php() {
   if ! command -v php >/dev/null 2>&1; then
     log "${RED}ERROR:${NC} php not found on PATH (local lint only)."
@@ -116,6 +125,17 @@ require_host_php() {
   fi
   if ! command -v composer >/dev/null 2>&1; then
     log "${RED}ERROR:${NC} composer not found on PATH (local lint only)."
+    exit 1
+  fi
+}
+
+require_host_node() {
+  if ! command -v node >/dev/null 2>&1; then
+    log "${RED}ERROR:${NC} node not found on PATH (needed for frontend lint)."
+    exit 1
+  fi
+  if ! command -v npm >/dev/null 2>&1; then
+    log "${RED}ERROR:${NC} npm not found on PATH (needed for frontend lint)."
     exit 1
   fi
 }
@@ -218,12 +238,32 @@ ensure_service_vendor() {
   return 0
 }
 
+ensure_frontend_deps() {
+  local dir="frontend"
+  if [[ -x "$ROOT/$dir/node_modules/.bin/oxlint" \
+    && -x "$ROOT/$dir/node_modules/.bin/prettier" ]]; then
+    return 0
+  fi
+
+  log "${YELLOW}Missing${NC} ${dir}/node_modules — running npm ci..."
+  if ! (cd "$ROOT/$dir" && npm ci --no-audit --no-fund); then
+    log "${RED}ERROR:${NC} npm ci failed for ${dir}"
+    return 1
+  fi
+  if [[ ! -x "$ROOT/$dir/node_modules/.bin/oxlint" ]]; then
+    log "${RED}ERROR:${NC} npm ci finished but ${dir}/node_modules/.bin/oxlint is still missing"
+    return 1
+  fi
+  log "${GREEN}Installed${NC} ${dir}/node_modules"
+  return 0
+}
+
 # Non-interactive stdin → never prompt for fix
 if [[ "$DO_FIX" == "ask" ]] && [[ ! -t 0 ]]; then
   DO_FIX=no
 fi
 
-if [[ ${#SELECTED_PHP[@]} -eq 0 && $RUN_ANALYTIC -eq 0 ]]; then
+if [[ ${#SELECTED_PHP[@]} -eq 0 && $RUN_ANALYTIC -eq 0 && $RUN_FRONTEND -eq 0 ]]; then
   log "${RED}ERROR:${NC} no services selected."
   exit 2
 fi
@@ -237,6 +277,11 @@ fi
 
 if [[ $RUN_ANALYTIC -eq 1 ]]; then
   require_host_go
+fi
+
+if [[ $RUN_FRONTEND -eq 1 ]]; then
+  require_host_node
+  ensure_frontend_deps || exit 1
 fi
 
 TOTAL_START=$(date +%s)
@@ -355,6 +400,32 @@ if [[ $RUN_ANALYTIC -eq 1 ]]; then
   fi
 fi
 
+# --- Frontend (oxlint + Prettier --check) ---
+if [[ $RUN_FRONTEND -eq 1 ]]; then
+  log ""
+  log "${BOLD}═══ [frontend] oxlint ═══${NC}"
+  FRONTEND_START=$(date +%s)
+  FRONTEND_RC=0
+  if ! (cd "$ROOT/frontend" && npm run --silent lint); then
+    FRONTEND_RC=1
+  fi
+  log ""
+  log "${BOLD}═══ [frontend] prettier --check ═══${NC}"
+  if ! (cd "$ROOT/frontend" && npm run --silent format:check); then
+    FRONTEND_RC=1
+  fi
+  FRONTEND_ELAPSED=$(( $(date +%s) - FRONTEND_START ))
+  if [[ $FRONTEND_RC -eq 0 ]]; then
+    log "${GREEN}PASS${NC} [frontend] (${FRONTEND_ELAPSED}s)"
+    RESULTS+=("PASS frontend")
+  else
+    log "${RED}FAIL${NC} [frontend] exit=${FRONTEND_RC} (${FRONTEND_ELAPSED}s)"
+    RESULTS+=("FAIL frontend")
+    FRONTEND_FAILED=1
+    FAILED=1
+  fi
+fi
+
 TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
 
 log ""
@@ -369,7 +440,7 @@ done
 
 recompute_failed() {
   FAILED=0
-  if [[ $PINT_FAILED -ne 0 || $PHPSTAN_FAILED -ne 0 || $RECTOR_FAILED -ne 0 || $GOLANGCI_FAILED -ne 0 ]]; then
+  if [[ $PINT_FAILED -ne 0 || $PHPSTAN_FAILED -ne 0 || $RECTOR_FAILED -ne 0 || $GOLANGCI_FAILED -ne 0 || $FRONTEND_FAILED -ne 0 ]]; then
     FAILED=1
   fi
 }
@@ -446,6 +517,44 @@ if [[ $GOLANGCI_FAILED -ne 0 ]]; then
   fi
 fi
 
+# --- Autofix offer (frontend) ---
+if [[ $FRONTEND_FAILED -ne 0 ]]; then
+  APPLY=0
+  if [[ "$DO_FIX" == "yes" ]]; then
+    APPLY=1
+  elif [[ "$DO_FIX" == "ask" ]]; then
+    log ""
+    printf '%b' "${YELLOW}Применить автофикс frontend (oxlint --fix + prettier --write)? [y/N] ${NC}"
+    read -r answer || answer=
+    case "$answer" in
+      y|Y|yes|YES) APPLY=1 ;;
+      *) APPLY=0 ;;
+    esac
+  fi
+
+  if [[ $APPLY -eq 1 ]]; then
+    log ""
+    log "${BOLD}═══ [frontend] autofix ═══${NC}"
+    frontend_fix_ok=0
+    if ! (cd "$ROOT/frontend" && npm run --silent lint:fix); then
+      frontend_fix_ok=1
+    fi
+    if ! (cd "$ROOT/frontend" && npm run --silent format); then
+      frontend_fix_ok=1
+    fi
+    if [[ $frontend_fix_ok -eq 0 ]]; then
+      log "${GREEN}Frontend autofix applied.${NC} Re-run ./scripts/lint-all.sh frontend to verify."
+      FRONTEND_FAILED=0
+      recompute_failed
+    else
+      log "${RED}Frontend autofix failed.${NC}"
+    fi
+  else
+    log ""
+    log "Frontend autofix skipped. Run ${BOLD}./scripts/lint-all.sh --fix frontend${NC} later to apply."
+  fi
+fi
+
 if [[ $PHPSTAN_FAILED -ne 0 ]]; then
   log ""
   log "${YELLOW}PHPStan errors are not auto-fixed — edit the reported code manually.${NC}"
@@ -454,6 +563,11 @@ fi
 if [[ $GOLANGCI_FAILED -ne 0 ]]; then
   log ""
   log "${YELLOW}Remaining golangci issues are not auto-fixed — edit the reported code manually.${NC}"
+fi
+
+if [[ $FRONTEND_FAILED -ne 0 ]]; then
+  log ""
+  log "${YELLOW}Remaining frontend issues are not auto-fixed — edit the reported code manually.${NC}"
 fi
 
 if [[ $FAILED -ne 0 ]]; then

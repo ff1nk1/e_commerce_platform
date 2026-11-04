@@ -6,7 +6,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY . .
+# Explicit paths only (no `COPY . .`): keeps .env and stray files out of the image.
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/analytic-api ./cmd/api \
  && CGO_ENABLED=0 GOOS=linux go build -o /out/analytic-consumers ./cmd/consumers
 

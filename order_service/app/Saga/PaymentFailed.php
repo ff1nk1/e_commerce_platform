@@ -2,14 +2,11 @@
 
 declare(strict_types=1);
 
-namespace App\Kafka\Saga;
+namespace App\Saga;
 
-use App\Enums\SagaStep;
-
-final class HoldStockStep
+final class PaymentFailed
 {
     public function __construct(
         public string $sagaId,
-        public SagaStep $step,
     ) {}
 }

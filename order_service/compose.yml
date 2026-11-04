@@ -23,6 +23,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: order_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
       APP_URL: http://order_service_app:8004
       CATALOG_DB_HOST: catalog_service_db
@@ -76,9 +77,11 @@ services:
       - "127.0.0.1:6382:6379"
     volumes:
       - order_redisdata:/data
-    command: redis-server --appendonly yes
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
+    command: sh -c 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -101,6 +104,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: order_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
       # Avoid Predis stream errors killing the consumer on Redis blips during stack restarts.
       KAFKA_CACHE_DRIVER: array
@@ -132,6 +136,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: order_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
       KAFKA_CACHE_DRIVER: array
     depends_on:
@@ -162,6 +167,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: order_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
       KAFKA_CACHE_DRIVER: array
     depends_on:
@@ -192,6 +198,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: order_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
       KAFKA_CACHE_DRIVER: array
     depends_on:
@@ -220,6 +227,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: order_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
       KAFKA_CACHE_DRIVER: array
     depends_on:

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Messaging;
+namespace App\Saga;
 
-final class PaymentCaptured
+final class OrderCancelRequested
 {
     public function __construct(
         public string $sagaId,

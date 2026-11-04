@@ -1,0 +1,24 @@
+; Dedicated pool for long-running gateway routes (recommendation chat, etc.).
+;
+; Rendered at container start by entrypoint-http.sh only when GATEWAY_FPM_PORT
+; is set to something other than the default 9000. Keeping these requests out
+; of the [www] pool means a burst of 120s chats cannot exhaust the workers that
+; serve /api/login, /api/registration and /api/refresh.
+[gateway]
+listen = 127.0.0.1:${GATEWAY_FPM_PORT}
+user = www-data
+group = www-data
+clear_env = no
+pm = dynamic
+pm.max_children = ${GATEWAY_FPM_MAX_CHILDREN}
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 5
+pm.max_requests = 500
+; Must be >= the slowest upstream (recommendation chat ~120s, nginx read 300s).
+request_terminate_timeout = 300s
+; Network waits do not count towards max_execution_time on Linux, but make the
+; ceiling explicit so a busy chat worker is never killed mid-upstream.
+php_admin_value[max_execution_time] = 300
+catch_workers_output = yes
+decorate_workers_output = no

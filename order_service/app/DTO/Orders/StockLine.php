@@ -6,11 +6,17 @@ namespace App\DTO\Orders;
 
 use App\Models\Order;
 
+/**
+ * A release/commit line.
+ *
+ * It carries no store_id: the warehouse is owned by the catalog and read from
+ * the held reservation (see catalog StockReservationLedger::settleHeld), so the
+ * order must not re-derive it from the mutable product snapshot.
+ */
 final readonly class StockLine
 {
     public function __construct(
         public int $product_id,
-        public int $store_id,
         public int $quantity,
     ) {}
 
@@ -19,18 +25,12 @@ final readonly class StockLine
      */
     public static function listFromOrder(Order $order): array
     {
-        $order->loadMissing('items.productSnapshot');
+        $order->loadMissing('items');
 
         $lines = [];
         foreach ($order->items as $item) {
-            $storeId = $item->productSnapshot?->store_id;
-            if ($storeId === null) {
-                continue;
-            }
-
             $lines[] = new self(
                 (int) $item->product_id,
-                (int) $storeId,
                 (int) $item->quantity,
             );
         }
@@ -39,13 +39,12 @@ final readonly class StockLine
     }
 
     /**
-     * @return array{product_id: int, store_id: int, quantity: int}
+     * @return array{product_id: int, quantity: int}
      */
     public function toArray(): array
     {
         return [
             'product_id' => $this->product_id,
-            'store_id' => $this->store_id,
             'quantity' => $this->quantity,
         ];
     }

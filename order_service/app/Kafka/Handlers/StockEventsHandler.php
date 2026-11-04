@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Kafka\Handlers;
 
 use App\Enums\OrderEventType;
-use App\Messaging\FulfillmentEvents;
-use App\Messaging\StockReservationFailed;
-use App\Messaging\StockReserved;
+use App\Saga\FulfillmentEvents;
+use App\Saga\StockReservationFailed;
+use App\Saga\StockReserved;
 use App\Support\KafkaPayload;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Illuminate\Support\Facades\Log;

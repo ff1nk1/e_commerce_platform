@@ -45,7 +45,7 @@ flowchart LR
 
 Браузер открывает `app.localhost`. [`frontend/nginx.conf`](frontend/nginx.conf) режет трафик так: `/api` → `auth_service_app:8001`, `/` → Vite, `/storage` → MinIO (картинки каталога).
 
-JWT и роли проверяет только auth. [`ForwardRequestService`](auth_service/app/Services/Gateway/ForwardRequestService.php) проксирует запрос, [`GatewayIdentity`](auth_service/app/DTO/Auth/GatewayIdentity.php) вшивает `X-User-Id` / `X-User-Role` (для заказов [`JsonForwarder`](auth_service/app/Services/Gateway/Forwarders/JsonForwarder.php) ещё добавляет `user_id` в body и query). Маршруты — [`auth_service/routes/api.php`](auth_service/routes/api.php):
+JWT и роли проверяет только auth. [`ForwardRequestService`](auth_service/app/Services/Gateway/ForwardRequestService.php) проксирует запрос, [`GatewayIdentity`](auth_service/app/DTO/Auth/GatewayIdentity.php) вшивает `X-User-Id` / `X-User-Role` — единственный канал identity, в body/query `user_id` не дублируется. Маршруты — [`auth_service/routes/api.php`](auth_service/routes/api.php):
 
 | Кто | Пути gateway |
 |-----|----------------|
@@ -102,6 +102,8 @@ docker compose up -d --build
 `bootstrap.sh` копирует `.env.example` → `.env` (если файла ещё нет), генерирует пустые `APP_KEY` и ставит PHP `vendor/` через Docker. Пароли БД/Redis/MinIO/ClickHouse уже с локальными дефолтами — их обычно трогать не нужно.
 
 Laravel HTTP-контейнеры (`*_app`) слушают свои порты через **nginx + php-fpm** (общий образ `php-project-php-base:8.5`). Kafka/scheduler/outbox в тех же образах запускают `php artisan …` через CLI. Edge `frontend_nginx` / Traefik без изменений.
+
+Долгие gateway-маршруты (`/api/recommendations/*`, до ~120 с) в `auth_service` обслуживает отдельный php-fpm pool `[gateway]` (`GATEWAY_FPM_PORT=9001`, `GATEWAY_FPM_MAX_CHILDREN=40`), поэтому чаты не выедают воркеры логина. Проверка: `./scripts/load-chat-login.sh`. Детали — [ADR 0001](docs/adr/0001-gateway-in-auth.md).
 
 Логи, Mailpit, ClickHouse и CI: [docs/infrastructure.md](docs/infrastructure.md).
 

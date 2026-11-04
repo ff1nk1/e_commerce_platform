@@ -23,6 +23,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: catalog_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
       AWS_ENDPOINT: http://catalog-minio:9000
       LIVEWIRE_TEMPORARY_FILE_UPLOAD_DISK: local
@@ -73,9 +74,11 @@ services:
       - "127.0.0.1:6381:6379"
     volumes:
       - catalog_redisdata:/data
-    command: redis-server --appendonly yes
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
+    command: sh -c 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -143,6 +146,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: catalog_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
     depends_on:
       catalog_app:
@@ -172,6 +176,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: catalog_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
     depends_on:
       catalog_app:
@@ -199,6 +204,7 @@ services:
       DB_PORT: 5432
       REDIS_HOST: catalog_service_redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_local_secret}
       KAFKA_BROKERS: kafka:29092
     depends_on:
       catalog_app:

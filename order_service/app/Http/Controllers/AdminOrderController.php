@@ -6,6 +6,8 @@ namespace App\Http\Controllers;
 
 use App\DTO\Orders\OrderView;
 use App\Http\Requests\AdminListOrdersRequest;
+use App\Http\Resources\OrderResource;
+use App\Models\Order;
 use App\Services\Orders\FindOrderService;
 use App\Services\Orders\ListAllOrdersService;
 use App\Services\Orders\ShipOrderService;
@@ -25,7 +27,9 @@ final class AdminOrderController extends Controller
 
         $paginator = $this->listAllOrders->handle((int) ($validated['per_page'] ?? 15));
 
-        return response()->json($paginator);
+        return response()->json(
+            $paginator->through(static fn (Order $order): array => OrderResource::make($order)->resolve())
+        );
     }
 
     public function show(int $id): JsonResponse

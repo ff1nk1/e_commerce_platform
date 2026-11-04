@@ -11,6 +11,8 @@ use App\Http\Requests\ListOrdersRequest;
 use App\Http\Requests\PayOrderRequest;
 use App\Http\Requests\StoreOrderRequest;
 use App\Http\Requests\UserScopedOrderRequest;
+use App\Http\Resources\OrderResource;
+use App\Models\Order;
 use App\Services\Orders\CancelOrderService;
 use App\Services\Orders\CreateOrderService;
 use App\Services\Orders\FindUserOrderService;
@@ -37,7 +39,10 @@ final class OrderController extends Controller
             (int) ($validated['per_page'] ?? 15)
         );
 
-        return response()->json($paginator);
+        // Keep the Laravel paginator envelope, but whitelist each order.
+        return response()->json(
+            $paginator->through(static fn (Order $order): array => OrderResource::make($order)->resolve())
+        );
     }
 
     public function store(StoreOrderRequest $request): JsonResponse

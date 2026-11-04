@@ -8,9 +8,9 @@
         "php": "^8.3",
         "ecotone/dbal": "^1.328",
         "ecotone/laravel": "^1.328",
-        "illuminate/console": "^13.0",
-        "illuminate/database": "^13.0",
-        "illuminate/support": "^13.0",
+        "illuminate/console": "^12.0 || ^13.0",
+        "illuminate/database": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0",
         "mateusjunges/laravel-kafka": "^2.13",
         "ramsey/uuid": "^4.7"
     },

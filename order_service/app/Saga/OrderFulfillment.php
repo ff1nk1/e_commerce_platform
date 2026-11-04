@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Messaging;
+namespace App\Saga;
 
 use App\Enums\FulfillmentState;
 use App\Enums\OrderStatus;

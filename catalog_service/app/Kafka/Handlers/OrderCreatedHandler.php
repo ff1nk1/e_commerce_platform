@@ -6,9 +6,9 @@ namespace App\Kafka\Handlers;
 
 use App\Enums\CatalogEventType;
 use App\Enums\SagaStep;
-use App\Kafka\Saga\ApplyStockStep;
-use App\Kafka\Saga\StockSagaMessage;
 use App\Messaging\OrderCreatedMessage;
+use App\Saga\ApplyStockStep;
+use App\Saga\StockSagaMessage;
 use Ecotone\Modelling\Attribute\EventHandler;
 use Ecotone\Modelling\EventBus;
 use Illuminate\Support\Facades\Log;

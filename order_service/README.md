@@ -11,7 +11,7 @@ flowchart LR
   FE["Frontend"] --> GW["auth_service Gateway"]
   GW --> API["order HTTP API"]
   API --> PG["Postgres"]
-  API --> Redis["Redis idempotency/saga"]
+  API --> Redis["Redis lock + queue"]
   StripeWH["Stripe webhooks"] --> GW
   GW --> API
   Catalog["catalog product.*"] --> ProdCons["product consumer"]
@@ -144,12 +144,14 @@ sequenceDiagram
 
 ## Idempotency
 
-**Redis IdempotencyStore** (scoped):
+**DatabaseIdempotencyStore** (scoped): ответ хранится в Postgres `idempotency_keys`
+(`scope_key` unique), запись идёт в одной транзакции с доменом — без TTL и без
+расхождения с БД. Redis используется только под короткий lock (30 с).
 
 - create: `order:idempotency:create:{userId}:{key}`
 - pay: `order:idempotency:pay:{userId}:{orderId}:{key}`
 
-Паттерн: get cached → acquire lock → work → put response → release. Ключ клиента ограничен по длине; create/pay требуют заголовок `Idempotency-Key`.
+Паттерн: get cached → acquire lock → work → put response (в транзакции) → release. Ключ клиента ограничен по длине; create/pay требуют заголовок `Idempotency-Key`.
 
 ## Сага состояния (персистентная)
 
@@ -157,7 +159,7 @@ sequenceDiagram
 `ecotone_document_store` (Postgres), а не в Redis с TTL. Шаги: `order.created`,
 `stock.reserved`, `stock.reservation_failed`, `stock.release_requested`,
 `stock.commit_requested`. Идемпотентность шага держит сама сага через
-`state` / `releaseRequested` ([`app/Messaging/OrderFulfillment.php`](app/Messaging/OrderFulfillment.php)),
+`state` / `releaseRequested` ([`app/Saga/OrderFulfillment.php`](app/Saga/OrderFulfillment.php)),
 дедупликация входящих сообщений — таблица `messaging_inbox_dedup`.
 
 Сага каталога `StockFulfillment` (`catalog_service`) хранит статусы шагов

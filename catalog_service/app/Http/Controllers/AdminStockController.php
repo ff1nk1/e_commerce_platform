@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\DTO\Stock\StockData;
 use App\Http\Requests\StoreStockRequest;
 use App\Http\Requests\UpdateStockRequest;
+use App\Http\Resources\StockResource;
 use App\Models\Stock;
 use App\Services\Stock\CreateStockService;
 use App\Services\Stock\UpdateStockQuantityService;
@@ -37,14 +38,16 @@ final class AdminStockController extends Controller
             $q->where('product_id', (int) $request->input('product_id'));
         });
 
+        $paginator = $query->orderBy('id')->paginate($perPage);
+
         return response()->json(
-            $query->orderBy('id')->paginate($perPage)
+            $paginator->through(static fn (Stock $stock): array => StockResource::make($stock)->resolve())
         );
     }
 
     public function show(Stock $stock): JsonResponse
     {
-        return response()->json($stock->load(['product', 'store']));
+        return response()->json(StockResource::make($stock->load(['product', 'store'])));
     }
 
     public function store(StoreStockRequest $request): JsonResponse
@@ -53,7 +56,7 @@ final class AdminStockController extends Controller
 
         return response()->json([
             'message' => 'Stock created',
-            'stock' => $stock,
+            'stock' => StockResource::make($stock),
         ], 201);
     }
 
@@ -63,7 +66,7 @@ final class AdminStockController extends Controller
 
         return response()->json([
             'message' => 'Stock updated',
-            'stock' => $stock,
+            'stock' => StockResource::make($stock),
         ]);
     }
 }

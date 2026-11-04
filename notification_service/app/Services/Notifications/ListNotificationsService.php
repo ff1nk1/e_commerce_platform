@@ -6,7 +6,7 @@ namespace App\Services\Notifications;
 
 use App\DTO\Notifications\NotificationFilters;
 use App\Models\Notification;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Date;
 
 final class ListNotificationsService

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d9e53e4b35a10936236eaea6352fc228",
+    "content-hash": "5ae31dbee7c84cbd054d563fc895abfc",
     "packages": [
         {
             "name": "beberlei/assert",
@@ -4465,14 +4465,14 @@
             "dist": {
                 "type": "path",
                 "url": "../packages/messaging",
-                "reference": "8d38ac47fd7cb4f0e11a45d152c8e4ad82e2c2ca"
+                "reference": "94a4f097a1f17a82edf9656409f92860ea8ef30c"
             },
             "require": {
                 "ecotone/dbal": "^1.328",
                 "ecotone/laravel": "^1.328",
-                "illuminate/console": "^13.0",
-                "illuminate/database": "^13.0",
-                "illuminate/support": "^13.0",
+                "illuminate/console": "^12.0 || ^13.0",
+                "illuminate/database": "^12.0 || ^13.0",
+                "illuminate/support": "^12.0 || ^13.0",
                 "mateusjunges/laravel-kafka": "^2.13",
                 "php": "^8.3",
                 "ramsey/uuid": "^4.7"

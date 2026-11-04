@@ -14,9 +14,9 @@ use App\DTO\Orders\OrderLineSnapshot;
 use App\DTO\Orders\OrderView;
 use App\Enums\OrderStatus;
 use App\Events\OrderCreated;
-use App\Messaging\OrderPlaced;
 use App\Models\Order;
 use App\Models\ProductSnapshot;
+use App\Saga\OrderPlaced;
 use App\ValueObjects\Money;
 use Ecotone\Modelling\EventBus;
 use Illuminate\Support\Facades\DB;
@@ -63,9 +63,8 @@ final class CreateOrderService
                 return new CreateOrderResult($cached->status, $cached->body);
             }
 
-            $order = $this->persistOrder($data->userId, $data->email, $data->name, $data->items);
+            $order = $this->persistOrder($data->userId, $data->email, $data->name, $data->items, $scopeKey);
             $body = OrderView::fromOrder($order)->toArray();
-            $this->idempotency->put($scopeKey, new IdempotentResponse(201, $body));
 
             return new CreateOrderResult(201, $body);
         } finally {
@@ -76,9 +75,9 @@ final class CreateOrderService
     /**
      * @param  list<OrderItemRequest>  $items
      */
-    private function persistOrder(int $userId, string $email, string $name, array $items): Order
+    private function persistOrder(int $userId, string $email, string $name, array $items, string $scopeKey): Order
     {
-        return DB::transaction(function () use ($userId, $email, $name, $items) {
+        return DB::transaction(function () use ($userId, $email, $name, $items, $scopeKey) {
             $outboxItems = [];
             $total = Money::zero();
 
@@ -151,7 +150,16 @@ final class CreateOrderService
                 items: $outboxItems,
             )));
 
-            return $order->load(['items.productSnapshot', 'payments']);
+            $order = $order->load(['items.productSnapshot', 'payments']);
+
+            // Persist the idempotent response in the same transaction as the
+            // order and its outbox events, so it can never drift from the DB.
+            $this->idempotency->put(
+                $scopeKey,
+                new IdempotentResponse(201, OrderView::fromOrder($order)->toArray())
+            );
+
+            return $order;
         });
     }
 }

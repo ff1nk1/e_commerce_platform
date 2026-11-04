@@ -16,11 +16,6 @@ parameters:
 			count: 1
 			path: app/Models/Stock.php
 		-
-			message: '#^Method App\\Services\\Categories\\ListCategoriesService\:\:handle\(\) should return list\<array\<string, mixed\>\> but returns array\<mixed\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Services/Categories/ListCategoriesService.php
-		-
 			message: '#^Access to an undefined property App\\Models\\Stock\:\:\$available\.$#'
 			identifier: property.notFound
 			count: 1
@@ -61,10 +56,10 @@ parameters:
 			count: 1
 			path: app/Services/Stock/UpdateStockQuantityService.php
 		-
-			message: '#^Parameter \#2 \$items of class App\\Kafka\\Saga\\StockSagaMessage constructor expects list\<array\<string, mixed\>\>, non\-empty\-array\<mixed, mixed\> given\.$#'
+			message: '#^Parameter \#2 \$items of class App\\Saga\\StockSagaMessage constructor expects list\<array\<string, mixed\>\>, non\-empty\-array\<mixed, mixed\> given\.$#'
 			identifier: argument.type
 			count: 1
-			path: app/Kafka/Saga/StockSagaMessage.php
+			path: app/Saga/StockSagaMessage.php
 		-
 			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
 			identifier: argument.type
@@ -88,7 +83,7 @@ parameters:
 		-
 			message: '#^Cannot access property \$reserved on App\\Models\\Stock\|null\.$#'
 			identifier: property.nonObject
-			count: 22
+			count: 24
 			path: tests/Feature/OrderStockHandlersTest.php
 		-
 			message: '#^Cannot access property \$is_published on App\\Models\\Product\|null\.$#'

@@ -29,9 +29,45 @@ render_nginx() {
   envsubst '${NGINX_PORT}' < /etc/nginx/templates/laravel.conf.template > /etc/nginx/conf.d/laravel.conf
 }
 
+# Long-running gateway routes (recommendation chat) get their own php-fpm pool
+# so they cannot exhaust the [www] workers that serve /api/login and /api/refresh.
+# Opt-in per service: set GATEWAY_FPM_PORT (e.g. 9001) in compose.
+render_gateway_pool() {
+  local port="${GATEWAY_FPM_PORT:-}"
+  local max_children="${GATEWAY_FPM_MAX_CHILDREN:-40}"
+  local routes="${GATEWAY_ROUTES:-^/api/recommendations}"
+
+  mkdir -p /etc/nginx/gateway
+  rm -f /etc/nginx/gateway/*.conf /usr/local/etc/php-fpm.d/zz-gateway.conf
+
+  if [[ -z "$port" || "$port" == "9000" ]]; then
+    return 0
+  fi
+
+  export GATEWAY_FPM_PORT="$port" GATEWAY_FPM_MAX_CHILDREN="$max_children"
+  envsubst '${GATEWAY_FPM_PORT} ${GATEWAY_FPM_MAX_CHILDREN}' \
+    < /usr/local/etc/php-fpm.d/zz-gateway.conf.template \
+    > /usr/local/etc/php-fpm.d/zz-gateway.conf
+
+  cat > /etc/nginx/gateway/gateway.conf <<EOF
+# Rendered by entrypoint-http.sh — long-running gateway routes use the [gateway] pool.
+# These are Laravel routes (no .php file on disk), so always front-controller.
+location ~ ${routes} {
+    fastcgi_pass 127.0.0.1:${port};
+    fastcgi_index index.php;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME \$realpath_root/index.php;
+    fastcgi_param SCRIPT_NAME /index.php;
+    fastcgi_param DOCUMENT_ROOT \$realpath_root;
+    fastcgi_hide_header X-Powered-By;
+}
+EOF
+}
+
 run_http() {
   prepare_storage
   render_nginx
+  render_gateway_pool
 
   php-fpm --nodaemonize &
   local fpm_pid=$!

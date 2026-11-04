@@ -14,8 +14,6 @@ use App\Exceptions\SagaStepBusyException;
 use App\Kafka\Handlers\OrderCreatedHandler;
 use App\Kafka\Handlers\StockCommitHandler;
 use App\Kafka\Handlers\StockReleaseHandler;
-use App\Kafka\Saga\HoldStockStep;
-use App\Kafka\Saga\StockSagaMessage;
 use App\Messaging\OrderCreatedMessage;
 use App\Messaging\StockCommitRequested;
 use App\Messaging\StockReleaseRequested;
@@ -23,6 +21,8 @@ use App\Models\Product;
 use App\Models\Stock;
 use App\Models\StockReservation;
 use App\Models\Store;
+use App\Saga\HoldStockStep;
+use App\Saga\StockSagaMessage;
 use App\Services\Stock\ReserveStockService;
 use Ecotone\Modelling\EventBus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -160,6 +160,70 @@ final class OrderStockHandlersTest extends TestCase
         $changed = OutboxQueue::first('stock.changed');
         $this->assertNotNull($changed);
         $this->assertSame(8, $changed->payload['quantity']);
+    }
+
+    public function test_stock_release_uses_reservation_store_and_ignores_payload_store(): void
+    {
+        $storeA = Store::factory()->create();
+        $storeB = Store::factory()->create();
+        $product = Product::factory()->create(['store_id' => $storeA->id]);
+        $stockA = Stock::factory()->create([
+            'product_id' => $product->id,
+            'store_id' => $storeA->id,
+            'quantity' => 10,
+            'reserved' => 2,
+        ]);
+        // Reservation captured in store A at order time.
+        $this->holdForOrder(7001, $product->id, $storeA->id, 2);
+
+        // Product later "moved" to another store: the stale payload store must be
+        // ignored and the settlement must still hit the held reservation in A.
+        $message = $this->consumerMessage('stock.release_requested', [
+            'saga_id' => (string) Str::uuid(),
+            'order_id' => 7001,
+            'items' => [[
+                'product_id' => $product->id,
+                'store_id' => $storeB->id,
+                'quantity' => 2,
+            ]],
+        ]);
+
+        resolve(StockReleaseHandler::class)->onInbound($message);
+
+        $this->assertEquals(0, $stockA->fresh()->reserved);
+        $this->assertDatabaseHas('stock_reservations', [
+            'order_id' => 7001,
+            'product_id' => $product->id,
+            'store_id' => $storeA->id,
+            'status' => StockReservationStatus::Released->value,
+        ]);
+    }
+
+    public function test_stock_release_without_payload_store_uses_reservation(): void
+    {
+        $store = Store::factory()->create();
+        $product = Product::factory()->create(['store_id' => $store->id]);
+        $stock = Stock::factory()->create([
+            'product_id' => $product->id,
+            'store_id' => $store->id,
+            'quantity' => 10,
+            'reserved' => 3,
+        ]);
+        $this->holdForOrder(7002, $product->id, $store->id, 3);
+
+        resolve(StockReleaseHandler::class)->onInbound($this->consumerMessage('stock.release_requested', [
+            'saga_id' => (string) Str::uuid(),
+            'order_id' => 7002,
+            'items' => [[
+                'product_id' => $product->id,
+                'quantity' => 3,
+            ]],
+        ]));
+
+        $this->assertEquals(0, $stock->fresh()->reserved);
+        $changed = OutboxQueue::first('stock.changed');
+        $this->assertNotNull($changed);
+        $this->assertSame($store->id, $changed->payload['store_id']);
     }
 
     public function test_stock_release_missing_reservation_throws(): void

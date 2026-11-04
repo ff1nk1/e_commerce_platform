@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Gateway;
 
 use App\DTO\Auth\GatewayIdentity;
-use App\DTO\Auth\InjectedGatewayUser;
 use App\DTO\Gateway\ProxyOptions;
 use App\Enums\ProxyMode;
 use App\Http\Controllers\Controller;
@@ -75,8 +74,10 @@ final class GatewayController extends Controller
 
     public function orders(Request $request, string $path = ''): Response
     {
+        // Identity travels only in trusted X-User-* headers; downstream order
+        // service reads X-User-Id (see ResolveGatewayUserId) instead of body/query.
         return $this->forwardService($request, 'order', 'customer', $path, new ProxyOptions(
-            injectUser: InjectedGatewayUser::fromUser($this->authenticatedUser($request)),
+            identity: $this->gatewayIdentity($request),
         ));
     }
 
@@ -118,8 +119,10 @@ final class GatewayController extends Controller
 
     public function recommendations(Request $request, string $path = ''): Response
     {
+        // Single identity channel: X-User-Id headers, consumed by
+        // recommendation ResolveGatewayUserId. No body/query user id.
         return $this->forwardService($request, 'recommendation', 'api', $path, new ProxyOptions(
-            injectUser: InjectedGatewayUser::fromUser($this->authenticatedUser($request)),
+            identity: $this->gatewayIdentity($request),
             timeout: self::RECOMMENDATION_TIMEOUT,
         ));
     }

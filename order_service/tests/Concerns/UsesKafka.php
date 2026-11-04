@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Concerns;
 
-use App\Messaging\FulfillmentEvents;
-use App\Messaging\StockReservationFailed;
-use App\Messaging\StockReserved;
+use App\Saga\FulfillmentEvents;
+use App\Saga\StockReservationFailed;
+use App\Saga\StockReserved;
 use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Request;
 use Junges\Kafka\Facades\Kafka;

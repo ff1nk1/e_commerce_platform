@@ -2381,10 +2381,6 @@ components:
               type: string
             status:
               type: string
-            stripe_checkout_session_id:
-              type: [string, "null"]
-            stripe_payment_intent_id:
-              type: [string, "null"]
     Order:
       allOf:
         - $ref: "#/components/schemas/Timestamps"
@@ -2392,8 +2388,6 @@ components:
           properties:
             id:
               type: integer
-            saga_id:
-              type: string
             user_id:
               type: integer
             customer_email:

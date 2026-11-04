@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\DTO\Catalog\CategoryData;
 use App\Http\Requests\StoreCategoryRequest;
 use App\Http\Requests\UpdateCategoryRequest;
+use App\Http\Resources\CategoryResource;
 use App\Models\Category;
 use App\Services\Categories\CreateCategoryService;
 use App\Services\Categories\DeleteCategoryService;
@@ -30,8 +31,10 @@ final class AdminCatalogController extends Controller
         $defaultPerPage = 20;
         $perPage = max($minPerPage, min($maxPerPage, (int) $request->input('per_page', $defaultPerPage)));
 
+        $paginator = Category::with('parent')->paginate($perPage);
+
         return response()->json(
-            Category::with('parent')->paginate($perPage)
+            $paginator->through(static fn (Category $category): array => CategoryResource::make($category)->resolve())
         );
     }
 
@@ -41,20 +44,20 @@ final class AdminCatalogController extends Controller
         // $request->validated() вернет только те данные, которые прошли проверку в StoreCategoryRequest
         $category = $this->createCategory->handle(CategoryData::fromArray($request->validated()));
 
-        return response()->json(['message' => 'Категория создана', 'category' => $category], 201);
+        return response()->json(['message' => 'Категория создана', 'category' => CategoryResource::make($category)], 201);
     }
 
     public function update(UpdateCategoryRequest $request, Category $category): JsonResponse
     {
         $category = $this->updateCategory->handle($category, CategoryData::fromArray($request->validated()));
 
-        return response()->json(['message' => 'Категория обновлена', 'category' => $category]);
+        return response()->json(['message' => 'Категория обновлена', 'category' => CategoryResource::make($category)]);
     }
 
     // GET /api/admin/categories/{category}
     public function show(Category $category): JsonResponse
     {
-        return response()->json(['category' => $category->load('parent', 'children')]);
+        return response()->json(['category' => CategoryResource::make($category->load('parent', 'children'))]);
     }
 
     // DELETE /api/admin/categories/{category}

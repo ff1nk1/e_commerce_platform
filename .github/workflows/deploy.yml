@@ -83,8 +83,15 @@ jobs:
             infra/php-base/Dockerfile
           actionlint
 
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
       - name: Run lint-all
         run: ./scripts/lint-all.sh --no-fix
+
+      - name: Check dependency coupling
+        run: ./scripts/check-deps.sh
 
       - name: Composer audit
         run: |
@@ -94,13 +101,10 @@ jobs:
             (cd "$dir" && composer audit --no-interaction --locked)
           done
 
-      - name: Frontend lint, audit, build, and tests
+      - name: Frontend audit, build, and tests
         working-directory: frontend
         run: |
-          npm ci
           npm audit --audit-level=high
-          npm run lint
-          npm run format:check
           npm run test
           npm run build
 
