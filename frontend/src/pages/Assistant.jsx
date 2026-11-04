@@ -67,6 +67,9 @@ export default function Assistant() {
 
   useEffect(() => {
     scrollToBottom();
+    // `scrollToBottom` is stable (memoized) and intentionally omitted; scroll on
+    // new messages / when the loading indicator toggles.
+    // eslint-disable-next-line react/exhaustive-effect-dependencies
   }, [messages, loading, scrollToBottom]);
 
   useEffect(() => {

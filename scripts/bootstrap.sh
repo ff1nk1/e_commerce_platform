@@ -70,6 +70,24 @@ ensure_app_key() {
   fi
 }
 
+# Redis runs with --requirepass (see compose), so a literal "null" in .env makes
+# every cache/session/queue call fail with NOAUTH. Older .env files were copied
+# from an .env.example that had REDIS_PASSWORD=null; repair them in place.
+ensure_redis_password() {
+  local dir="$1"
+  local envfile="$ROOT/$dir/.env"
+
+  [[ -f "$envfile" ]] || return 0
+
+  if grep -qE '^REDIS_PASSWORD=(null|\(null\))?\s*$' "$envfile"; then
+    local tmp
+    tmp="$(mktemp)"
+    sed 's/^REDIS_PASSWORD=.*/REDIS_PASSWORD=redis_local_secret/' "$envfile" > "$tmp" \
+      && mv "$tmp" "$envfile"
+    log "${GREEN}Set${NC} ${dir}/.env REDIS_PASSWORD (was empty/null)"
+  fi
+}
+
 # True if vendor/autoload.php is visible inside the app container (bind-mount).
 # Prefer this over a host-path check: with `act` without --bind, Docker mounts
 # the host tree while the job sees a copy without gitignored vendor/.
@@ -131,6 +149,7 @@ PHP_ENV_DIRS=(
 )
 for d in "${PHP_ENV_DIRS[@]}"; do
   ensure_app_key "$d" || true
+  ensure_redis_password "$d"
 done
 
 # --- images + vendor ---

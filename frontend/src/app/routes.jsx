@@ -1,4 +1,7 @@
 import { lazy, Suspense } from "react";
+// This route module intentionally exports helper components alongside the
+// `router` config; Fast Refresh is not needed for it.
+/* eslint-disable react/only-export-components */
 import {
   createBrowserRouter,
   createRoutesFromElements,

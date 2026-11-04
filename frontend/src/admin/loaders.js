@@ -21,7 +21,7 @@ function pageParam(request) {
   return Math.max(1, Number(url.searchParams.get("page")) || 1);
 }
 
-export async function adminLayoutLoader() {
+export function adminLayoutLoader() {
   return requireAnalyst();
 }
 

@@ -75,7 +75,7 @@ final class GatewayController extends Controller
     public function orders(Request $request, string $path = ''): Response
     {
         // Identity travels only in trusted X-User-* headers; downstream order
-        // service reads X-User-Id (see ResolveGatewayUserId) instead of body/query.
+        // service reads them (see ResolveGatewayIdentity) instead of body/query.
         return $this->forwardService($request, 'order', 'customer', $path, new ProxyOptions(
             identity: $this->gatewayIdentity($request),
         ));

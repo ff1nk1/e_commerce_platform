@@ -1,9 +1,9 @@
-import axios from "axios";
+import { create } from "axios";
 import { refreshSession } from "../auth/session";
 
 const baseURL = import.meta.env.VITE_API_URL || "/api";
 
-export const api = axios.create({
+export const api = create({
   baseURL,
   headers: { Accept: "application/json" },
   withCredentials: true,
@@ -92,7 +92,7 @@ api.interceptors.response.use(
       !originalRequest.url?.includes("/registration");
 
     if (!shouldAttemptRefresh) {
-      return Promise.reject(error);
+      throw error;
     }
 
     if (isRefreshing) {
@@ -104,21 +104,22 @@ api.interceptors.response.use(
     isRefreshing = true;
     originalRequest._retry = true;
 
+    let refreshed;
     try {
-      const refreshed = await refreshSession();
-
-      if (!refreshed) {
-        processQueue(new Error("Session expired"));
-        return Promise.reject(error);
-      }
-
-      processQueue(null);
-      return api(originalRequest);
+      refreshed = await refreshSession();
     } catch (err) {
       processQueue(err);
-      return Promise.reject(err);
+      throw err;
     } finally {
       isRefreshing = false;
     }
+
+    if (!refreshed) {
+      processQueue(new Error("Session expired"));
+      throw error;
+    }
+
+    processQueue(null);
+    return api(originalRequest);
   },
 );

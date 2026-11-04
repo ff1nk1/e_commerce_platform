@@ -9,7 +9,7 @@ import "../styles/profile.css";
 const E164_PHONE_RE = /^\+[1-9]\d{9,14}$/;
 
 function normalizePhone(value) {
-  return String(value ?? "").replace(/[\s\-()]/g, "");
+  return String(value ?? "").replaceAll(/[\s\-()]/g, "");
 }
 
 function validatePhone(value) {

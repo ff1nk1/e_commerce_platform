@@ -36,10 +36,10 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
-        <env name="CACHE_STORE" value="array"/>
+        <env name="CACHE_STORE" value="array" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
-        <env name="QUEUE_CONNECTION" value="sync"/>
-        <env name="SESSION_DRIVER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
         <env name="KAFKA_CACHE_DRIVER" value="array"/>
         <env name="KAFKA_BROKERS" value="kafka:29092"/>
         <env name="OPENSEARCH_HOSTS" value="http://search_opensearch:9200"/>
@@ -52,5 +52,23 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!--
+            phpdotenv reads $_SERVER before $_ENV, and PHPUnit's force="true"
+            only writes $_ENV/putenv. Inside containers the compose environment
+            lands in $_SERVER, so mirror the values that must win here.
+        -->
+        <server name="APP_ENV" value="testing"/>
+        <server name="CACHE_STORE" value="array"/>
+        <server name="DB_CONNECTION" value="sqlite"/>
+        <server name="DB_DATABASE" value=":memory:"/>
+        <server name="DB_URL" value=""/>
+        <server name="DB_HOST" value=""/>
+        <server name="QUEUE_CONNECTION" value="sync"/>
+        <server name="SESSION_DRIVER" value="array"/>
+        <server name="KAFKA_CACHE_DRIVER" value="array"/>
+        <server name="OPENSEARCH_HOSTS" value="http://search_opensearch:9200"/>
+        <server name="OPENSEARCH_PRODUCTS_INDEX" value="products_test"/>
+        <server name="OPENSEARCH_CATEGORIES_INDEX" value="categories_test"/>
+        <server name="ALLOW_SKIP_ANALYTICS" value="true"/>
     </php>
 </phpunit>

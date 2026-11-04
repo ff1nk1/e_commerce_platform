@@ -16,15 +16,19 @@ trait UsesRedisCache
         $host = $this->envString('REDIS_HOST', '127.0.0.1');
         $port = $this->envString('REDIS_PORT', '6381');
         $db = $this->envString('REDIS_DB', '15');
+        // Redis runs with --requirepass, so tests must authenticate too.
+        $password = $this->envString('REDIS_PASSWORD', 'redis_local_secret');
 
         config([
             'cache.default' => 'redis',
             'database.redis.default.host' => $host,
             'database.redis.default.port' => $port,
             'database.redis.default.database' => $db,
+            'database.redis.default.password' => $password,
             'database.redis.cache.host' => $host,
             'database.redis.cache.port' => $port,
             'database.redis.cache.database' => $db,
+            'database.redis.cache.password' => $password,
         ]);
 
         Cache::forgetDriver('redis');
@@ -37,7 +41,8 @@ trait UsesRedisCache
     {
         $value = Env::get($key, Request::server($key) ?? getenv($key));
 
-        if ($value === false || $value === '') {
+        // Env::get() maps the literal "null" to null, which must not become "".
+        if (in_array($value, [false, null, ''], true)) {
             return $default;
         }
 

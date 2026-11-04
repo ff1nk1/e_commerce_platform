@@ -8,7 +8,7 @@
 
 Сервисы доверяют периметру. Единственный канал identity — доверенные заголовки `X-User-Id` / `X-User-Role` (и `X-User-Name` / `X-User-Email` для каталога), которые gateway ставит из JWT. Клиентские `X-User-*` JSON-прокси не пересылает.
 
-`user_id` **не** дублируется в body/query: прокси больше не добавляет его туда. Заказ и рекомендации читают `X-User-Id` (middleware `ResolveGatewayUserId`) — тело клиента не решает, чей это заказ.
+`user_id` **не** дублируется в body/query: прокси больше не добавляет его туда. Заказ и рекомендации читают `X-User-Id` (middleware `ResolveGatewayIdentity` в order, `ResolveGatewayUserId` в recommendation) — тело клиента не решает, чей это заказ. Контакт заказа (`email`/`name`) приходит теми же заголовками `X-User-Email` / `X-User-Name`; значения из заголовков перезаписывают тело.
 
 Админский JSON каталога и Filament дополнительно требуют `X-User-Id` и `X-User-Role: admin`.
 
@@ -16,7 +16,7 @@
 
 Помимо gateway, сервисы сами проверяют роль из `X-User-Role` (defense-in-depth, если запрос пришёл по внутренней сети напрямую):
 
-- order: `DenyAnalystWrites` (analyst — read-only) и `ResolveGatewayUserId`;
+- order: `DenyAnalystWrites` (analyst — read-only) и `ResolveGatewayIdentity` (`X-User-Id` → `user_id`, `X-User-Email` → `email`, `X-User-Name` → `name`);
 - recommendation: `EnsureGatewayRole` (только admin/analyst/user) и `ResolveGatewayUserId`;
 - analytic (Go): `requireRole` (только admin/analyst), `X-User-Role`.
 

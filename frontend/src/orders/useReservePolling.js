@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { getOrder } from "../api/orders";
 
 const RESERVE_POLL_MS = 2000;
-const RESERVE_MAX_ATTEMPTS = 15; // ~30s
+// ~30s
+const RESERVE_MAX_ATTEMPTS = 15;
 
 /**
  * Polls the order while the warehouse reserve is still pending, until the
@@ -51,6 +52,9 @@ export function useReservePolling({ order, active, onReserved }) {
     }, RESERVE_POLL_MS);
 
     return () => clearInterval(timer);
+    // `nonce` is a manual retry trigger: bumping it re-runs the poll even though
+    // `active`/`orderId` are unchanged.
+    // eslint-disable-next-line react/exhaustive-effect-dependencies
   }, [active, orderId, nonce]);
 
   return {

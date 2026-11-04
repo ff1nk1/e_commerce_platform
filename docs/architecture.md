@@ -22,6 +22,8 @@ flowchart LR
   Reco -->|"GET /api/catalog/products/id"| Catalog
 ```
 
+Подробный разбор слоёв (Traefik → frontend nginx → auth nginx → Laravel-прокси) и передаваемых заголовков — в [пути HTTP-запроса](request-flow.md).
+
 JWT проверяет только auth. Для админского JSON каталога и Filament gateway подставляет `X-User-Id` и `X-User-Role`. Для заказов и чата рекомендаций identity тоже идёт только в заголовке `X-User-Id` (а отдельные сервисы дополнительно проверяют `X-User-Role`); в body/query `user_id` не дублируется.
 
 Долгие маршруты (`/api/recommendations/*`, до ~120 с) в `auth_service` обслуживает отдельный php-fpm pool `[gateway]` (`GATEWAY_FPM_PORT=9001`), поэтому чаты не занимают воркеры `/api/login` и `/api/refresh` ([ADR 0001](adr/0001-gateway-in-auth.md)).

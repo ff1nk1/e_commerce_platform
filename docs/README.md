@@ -5,6 +5,7 @@
 | Документ | О чём |
 |----------|--------|
 | [Архитектура](architecture.md) | Gateway, Kafka, базы, внешние системы |
+| [Путь HTTP-запроса](request-flow.md) | Traefik, nginx-слои, auth-прокси, заголовки |
 | [Инфраструктура](infrastructure.md) | Логи, Mailpit, локальный запуск, CI |
 | [ADR](adr/) | Почему gateway, Kafka, отдельные хранилища, Stripe, слои `app/` |
 | [Сервисы](services/) | Назначение, зависимости, ENV, тесты каждого сервиса |

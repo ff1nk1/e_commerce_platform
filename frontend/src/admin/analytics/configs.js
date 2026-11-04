@@ -382,7 +382,7 @@ export function buildSelectOptions(config, data, selectedId) {
     });
   }
   const label = config.selector?.optionLabel ?? ((o) => o?.name || o?.id);
-  return Array.from(byId.values()).sort((a, b) =>
+  return Array.from(byId.values()).toSorted((a, b) =>
     String(label(a)).localeCompare(String(label(b)), "ru"),
   );
 }

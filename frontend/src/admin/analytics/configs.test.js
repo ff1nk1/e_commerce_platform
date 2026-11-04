@@ -7,8 +7,8 @@ import {
 
 describe("ANALYTICS_DIMENSIONS", () => {
   it("describes the five expected dimensions", () => {
-    expect(ANALYTICS_DIMENSION_IDS.sort()).toEqual(
-      ["categories", "orders", "search", "stores", "users"].sort(),
+    expect(ANALYTICS_DIMENSION_IDS.toSorted()).toEqual(
+      ["categories", "orders", "search", "stores", "users"].toSorted(),
     );
   });
 
@@ -40,7 +40,7 @@ describe("buildSelectOptions", () => {
       items: [{ id: 2, name: "Beta", orders_count: 5 }],
     };
     const options = buildSelectOptions(config, data, null);
-    expect(options.map((o) => o.name).sort()).toEqual(["Alpha", "Beta"]);
+    expect(options.map((o) => o.name).toSorted()).toEqual(["Alpha", "Beta"]);
   });
 
   it("sorts options by label", () => {

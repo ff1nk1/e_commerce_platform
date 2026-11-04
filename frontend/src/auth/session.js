@@ -32,7 +32,7 @@ let inflight = null;
  *
  * @returns {Promise<object|null>} the user, or null for guests
  */
-export async function fetchSessionUser() {
+export function fetchSessionUser() {
   if (inflight) return inflight;
 
   inflight = (async () => {

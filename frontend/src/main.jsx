@@ -5,7 +5,7 @@ import { CartProvider } from "./cart/CartContext.jsx";
 import "./styles/tokens.css";
 import "./styles/base.css";
 
-createRoot(document.getElementById("root")).render(
+createRoot(document.querySelector("#root")).render(
   <React.StrictMode>
     <CartProvider>
       <App />

@@ -29,28 +29,49 @@
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
-        <env name="CACHE_STORE" value="redis"/>
-        <env name="DB_CONNECTION" value="pgsql"/>
-        <env name="DB_HOST" value="order_service_db"/>
-        <env name="DB_PORT" value="5432"/>
-        <env name="DB_DATABASE" value="order_db_test"/>
-        <env name="DB_USERNAME" value="laravel"/>
-        <env name="DB_PASSWORD" value="secret"/>
-        <env name="DB_URL" value=""/>
-        <env name="REDIS_CLIENT" value="predis"/>
-        <env name="REDIS_HOST" value="order_service_redis"/>
-        <env name="REDIS_PASSWORD" value="redis_local_secret"/>
-        <env name="REDIS_PORT" value="6379"/>
-        <env name="REDIS_DB" value="15"/>
+        <env name="CACHE_STORE" value="redis" force="true"/>
+        <env name="DB_CONNECTION" value="pgsql" force="true"/>
+        <env name="DB_HOST" value="order_service_db" force="true"/>
+        <env name="DB_PORT" value="5432" force="true"/>
+        <env name="DB_DATABASE" value="order_db_test" force="true"/>
+        <env name="DB_USERNAME" value="laravel" force="true"/>
+        <env name="DB_PASSWORD" value="secret" force="true"/>
+        <env name="DB_URL" value="" force="true"/>
+        <env name="REDIS_CLIENT" value="predis" force="true"/>
+        <env name="REDIS_HOST" value="order_service_redis" force="true"/>
+        <env name="REDIS_PASSWORD" value="redis_local_secret" force="true"/>
+        <env name="REDIS_PORT" value="6379" force="true"/>
+        <env name="REDIS_DB" value="15" force="true"/>
         <env name="KAFKA_BROKERS" value="kafka:29092"/>
         <env name="LOG_CHANNEL" value="stderr"/>
         <env name="MAIL_MAILER" value="array"/>
-        <env name="QUEUE_CONNECTION" value="sync"/>
-        <env name="SESSION_DRIVER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <env name="STRIPE_SUCCESS_URL" value="https://app.localhost/orders/{ORDER_ID}?paid=1"/>
         <env name="STRIPE_CANCEL_URL" value="https://app.localhost/orders/{ORDER_ID}?canceled=1"/>
+        <!--
+            phpdotenv reads $_SERVER before $_ENV, and PHPUnit's force="true"
+            only writes $_ENV/putenv. Inside containers the compose environment
+            lands in $_SERVER, so mirror the values that must win here.
+        -->
+        <server name="APP_ENV" value="testing"/>
+        <server name="CACHE_STORE" value="redis"/>
+        <server name="DB_CONNECTION" value="pgsql"/>
+        <server name="DB_HOST" value="order_service_db"/>
+        <server name="DB_PORT" value="5432"/>
+        <server name="DB_DATABASE" value="order_db_test"/>
+        <server name="DB_USERNAME" value="laravel"/>
+        <server name="DB_PASSWORD" value="secret"/>
+        <server name="DB_URL" value=""/>
+        <server name="QUEUE_CONNECTION" value="sync"/>
+        <server name="SESSION_DRIVER" value="array"/>
+        <server name="REDIS_CLIENT" value="predis"/>
+        <server name="REDIS_HOST" value="order_service_redis"/>
+        <server name="REDIS_PASSWORD" value="redis_local_secret"/>
+        <server name="REDIS_PORT" value="6379"/>
+        <server name="REDIS_DB" value="15"/>
     </php>
 </phpunit>

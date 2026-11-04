@@ -61,7 +61,7 @@ describe("formatRate / formatInteger", () => {
   });
 
   it("formats integers with grouping", () => {
-    expect(formatInteger(1234)).toBe("1\u00a0234");
+    expect(formatInteger(1234)).toBe("1\u00A0234");
     expect(formatInteger("x")).toBe("0");
   });
 });

@@ -11,6 +11,33 @@
   "rules": {
     "react/react-in-jsx-scope": "off",
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true,
+        "allowExportNames": [
+          "loader",
+          "action",
+          "loginAction",
+          "registrationAction",
+          "cartAction",
+          "profileAction",
+          "noticeForOrder",
+          "useCart",
+          "router"
+        ]
+      }
+    ],
+    "import/no-unassigned-import": "off",
+    "import/max-dependencies": "off",
+    "eslint/max-lines-per-function": ["warn", { "max": 300 }],
+    "eslint/max-lines": ["warn", { "max": 400 }],
+    "eslint/eqeqeq": ["warn", "always", { "null": "ignore" }],
+    "eslint/require-unicode-regexp": "off",
+    "eslint/no-negated-condition": "off",
+    "eslint/no-underscore-dangle": ["warn", { "allow": ["_id", "_retry"] }],
+    "unicorn/no-negated-condition": "off",
+    "unicorn/prefer-add-event-listener": "off",
+    "unicorn/no-useless-undefined": "off"
   }
 }

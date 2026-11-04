@@ -18,16 +18,15 @@ import (
 
 // fakeReader replays a fixed message list and records commits.
 type fakeReader struct {
-	mu       sync.Mutex
-	msgs     []kafka.Message
-	pos      int
-	commits  [][]kafka.Message
-	closed   bool
-	commitCh chan struct{}
+	mu      sync.Mutex
+	msgs    []kafka.Message
+	pos     int
+	commits [][]kafka.Message
+	closed  bool
 }
 
 func newFakeReader(msgs []kafka.Message) *fakeReader {
-	return &fakeReader{msgs: msgs, commitCh: make(chan struct{}, len(msgs)+1)}
+	return &fakeReader{msgs: msgs}
 }
 
 func (f *fakeReader) FetchMessage(ctx context.Context) (kafka.Message, error) {
@@ -47,7 +46,6 @@ func (f *fakeReader) CommitMessages(_ context.Context, msgs ...kafka.Message) er
 	f.mu.Lock()
 	f.commits = append(f.commits, append([]kafka.Message(nil), msgs...))
 	f.mu.Unlock()
-	f.commitCh <- struct{}{}
 	return nil
 }
 
@@ -182,19 +180,41 @@ func newTestConsumers(st EventStore, r messageReader, dlq DLQPublisher) *Consume
 	return c
 }
 
-// runReaderUntilCommit runs the reader loop and cancels once the first commit
-// lands, so assertions see a fully accounted-for batch.
-func runReaderUntilCommit(t *testing.T, c *Consumers, r *fakeReader, sink consumerSink) {
+// committedEq reports whether the committed offsets equal want exactly.
+func committedEq(want ...int64) func([]int64) bool {
+	return func(got []int64) bool {
+		if len(got) != len(want) {
+			return false
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// runReaderUntil runs the reader loop and cancels once pred holds over the
+// committed offsets, so assertions see every message accounted for. Cancelling
+// on the first commit is not enough: the poison-pill path commits its offset
+// separately from the following good message.
+func runReaderUntil(t *testing.T, c *Consumers, r *fakeReader, sink consumerSink, pred func([]int64) bool) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- c.runReader(ctx, "test-group", []string{"user.events"}, sink) }()
 
-	select {
-	case <-r.commitCh:
-	case <-time.After(2 * time.Second):
-		cancel()
-		t.Fatal("timed out waiting for commit")
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if pred(r.committedOffsets()) {
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatalf("timed out waiting for commit; committed=%v", r.committedOffsets())
+		}
+		time.Sleep(time.Millisecond)
 	}
 	cancel()
 	select {
@@ -214,7 +234,7 @@ func TestRunReaderCommitsAfterFlush(t *testing.T) {
 	c := newTestConsumers(st, r, &fakeDLQ{})
 	sink := newUserSink(st, 100)
 
-	runReaderUntilCommit(t, c, r, sink)
+	runReaderUntil(t, c, r, sink, committedEq(7))
 
 	assert.Equal(t, 1, st.count(), "row written before commit")
 	assert.Equal(t, []int64{7}, r.committedOffsets())
@@ -232,7 +252,7 @@ func TestRunReaderRoutesPoisonPillToDLQ(t *testing.T) {
 	c := newTestConsumers(st, r, dlq)
 	sink := newUserSink(st, 100)
 
-	runReaderUntilCommit(t, c, r, sink)
+	runReaderUntil(t, c, r, sink, committedEq(9, 10))
 
 	require.Len(t, dlq.published, 1)
 	assert.Equal(t, int64(9), dlq.published[0].Offset)
@@ -260,7 +280,7 @@ func TestRunReaderRetriesTransientError(t *testing.T) {
 		st.setErr(nil)
 	}()
 
-	runReaderUntilCommit(t, c, r, sink)
+	runReaderUntil(t, c, r, sink, committedEq(1))
 
 	assert.Empty(t, dlq.published, "transient errors are not dead-lettered")
 	assert.Equal(t, 1, st.count())
