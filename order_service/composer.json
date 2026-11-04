@@ -13,7 +13,7 @@
         "ecotone/laravel": "^1.328",
         "shop/messaging": "^1.0",
         "predis/predis": "^3.6",
-        "stripe/stripe-php": "^17.0"
+        "stripe/stripe-php": "^22.1"
     },
     "require-dev": {
         "driftingly/rector-laravel": "^2.1",
