@@ -1,7 +1,7 @@
 import { useLoaderData, useSearchParams } from "react-router-dom";
 import AnalyticsDateFilter from "./AnalyticsDateFilter";
 import AnalyticsSection from "./analytics/Sections";
-import { buildSelectOptions } from "./analytics/configs";
+import { buildSelectOptions, resolveView } from "./analytics/configs";
 /**
  * Single config-driven renderer for every analytics dimension. The URL is the
  * one source of truth: `from`/`to`/space id come from the loader, and changing
@@ -30,7 +30,7 @@ export default function AdminAnalyticsDimension() {
   const onSelect = (value) =>
     setSearchParams(withRange({ [config.selector.param]: value }));
 
-  const view = spaceId ? config.detail : config.list;
+  const view = resolveView(config, spaceId);
   const selectOptions = hasSelector
     ? buildSelectOptions(config, data, spaceId)
     : [];

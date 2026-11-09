@@ -97,7 +97,12 @@ final class GatewayController extends Controller
 
     public function analytics(Request $request, string $path = ''): Response
     {
-        return $this->forwardService($request, 'analytic', 'index', $path);
+        // The analytic service guards /analytics with requireRole(X-User-Role),
+        // so the trusted identity must travel in headers like the other admin
+        // proxies. Without it a rebuilt analytic image answers 403.
+        return $this->forwardService($request, 'analytic', 'index', $path, new ProxyOptions(
+            identity: $this->gatewayIdentity($request),
+        ));
     }
 
     public function search(Request $request): Response

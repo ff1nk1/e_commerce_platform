@@ -361,6 +361,14 @@ export const ANALYTICS_DIMENSIONS = {
 export const ANALYTICS_DIMENSION_IDS = Object.keys(ANALYTICS_DIMENSIONS);
 
 /**
+ * Pick `detail` when a selector id is set; otherwise `list`, falling back to
+ * the single `view` of selector-less dimensions (users/orders/search).
+ */
+export function resolveView(config, spaceId) {
+  return spaceId ? config.detail : (config.list ?? config.view);
+}
+
+/**
  * Merge selector options (from API) with rows (from the list payload) so the
  * dropdown always has an entry for the currently selected dimension.
  */

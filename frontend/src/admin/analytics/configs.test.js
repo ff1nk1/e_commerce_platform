@@ -3,6 +3,7 @@ import {
   ANALYTICS_DIMENSIONS,
   ANALYTICS_DIMENSION_IDS,
   buildSelectOptions,
+  resolveView,
 } from "./configs";
 
 describe("ANALYTICS_DIMENSIONS", () => {
@@ -62,5 +63,21 @@ describe("buildSelectOptions", () => {
     expect(options).toHaveLength(1);
     expect(String(options[0].id)).toBe("7");
     expect(options[0].name).toBe("Gamma");
+  });
+});
+
+describe("resolveView (used by AdminAnalyticsDimension)", () => {
+  it("resolves section-bearing view for every dimension in list mode", () => {
+    for (const id of ANALYTICS_DIMENSION_IDS) {
+      const view = resolveView(ANALYTICS_DIMENSIONS[id], "");
+      expect((view?.sections?.length ?? 0) > 0, id).toBe(true);
+    }
+  });
+
+  it("resolves sections in detail mode for selectable dimensions", () => {
+    for (const id of ["stores", "categories"]) {
+      const view = resolveView(ANALYTICS_DIMENSIONS[id], "1");
+      expect((view?.sections?.length ?? 0) > 0, id).toBe(true);
+    }
   });
 });
