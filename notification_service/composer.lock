@@ -667,21 +667,21 @@
         },
         {
             "name": "ecotone/dbal",
-            "version": "1.328.2",
+            "version": "1.328.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ecotoneframework/dbal.git",
-                "reference": "f00b6e46d175ab5ba815ebccb639b3b3049bbe07"
+                "reference": "216e4b223bdcb29dfa49f765f208f8048e7b6509"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ecotoneframework/dbal/zipball/f00b6e46d175ab5ba815ebccb639b3b3049bbe07",
-                "reference": "f00b6e46d175ab5ba815ebccb639b3b3049bbe07",
+                "url": "https://api.github.com/repos/ecotoneframework/dbal/zipball/216e4b223bdcb29dfa49f765f208f8048e7b6509",
+                "reference": "216e4b223bdcb29dfa49f765f208f8048e7b6509",
                 "shasum": ""
             },
             "require": {
                 "doctrine/dbal": "^3.9|^4.0",
-                "ecotone/enqueue": "~1.328.2",
+                "ecotone/enqueue": "~1.328.3",
                 "enqueue/dsn": "^0.10.4"
             },
             "conflict": {
@@ -692,7 +692,7 @@
                 "doctrine/cache": "^1.0.0|^2.0",
                 "doctrine/orm": "^2.11|^3.0",
                 "doctrine/persistence": "^2.5|^3.4|^4.0",
-                "ecotone/jms-converter": "~1.328.2",
+                "ecotone/jms-converter": "~1.328.3",
                 "phpstan/phpstan": "^1.8|^2.0",
                 "phpunit/phpunit": "^10.5|^11.0|^12.0",
                 "symfony/expression-language": "^6.4|^7.0|^8.0"
@@ -716,7 +716,7 @@
                         "description": "Allows to use Enterprise features of Ecotone. For more information please write to support@simplycodedsoftware.com"
                     }
                 },
-                "release-time": "2026-10-10 11:29:09"
+                "release-time": "2026-10-29 20:17:56"
             },
             "autoload": {
                 "psr-4": {
@@ -749,7 +749,7 @@
                 "saga"
             ],
             "support": {
-                "source": "https://github.com/ecotoneframework/dbal/tree/1.328.2"
+                "source": "https://github.com/ecotoneframework/dbal/tree/1.328.3"
             },
             "funding": [
                 {
@@ -757,20 +757,20 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-10T11:29:45+00:00"
+            "time": "2026-10-29T20:18:29+00:00"
         },
         {
             "name": "ecotone/ecotone",
-            "version": "1.328.2",
+            "version": "1.328.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ecotoneframework/ecotone.git",
-                "reference": "51780d86e142ffc7af03a63527faf429e0f5d492"
+                "reference": "3781bb01c827bf9469a7f057906f7b01f720927d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ecotoneframework/ecotone/zipball/51780d86e142ffc7af03a63527faf429e0f5d492",
-                "reference": "51780d86e142ffc7af03a63527faf429e0f5d492",
+                "url": "https://api.github.com/repos/ecotoneframework/ecotone/zipball/3781bb01c827bf9469a7f057906f7b01f720927d",
+                "reference": "3781bb01c827bf9469a7f057906f7b01f720927d",
                 "shasum": ""
             },
             "require": {
@@ -811,7 +811,7 @@
                         "description": "Allows to use Enterprise features of Ecotone. For more information please write to support@simplycodedsoftware.com"
                     }
                 },
-                "release-time": "2026-10-10 11:29:09"
+                "release-time": "2026-10-29 20:17:56"
             },
             "autoload": {
                 "psr-4": {
@@ -847,7 +847,7 @@
                 "workflow"
             ],
             "support": {
-                "source": "https://github.com/ecotoneframework/ecotone/tree/1.328.2"
+                "source": "https://github.com/ecotoneframework/ecotone/tree/1.328.3"
             },
             "funding": [
                 {
@@ -855,24 +855,24 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-10T11:29:40+00:00"
+            "time": "2026-10-29T20:18:30+00:00"
         },
         {
             "name": "ecotone/enqueue",
-            "version": "1.328.2",
+            "version": "1.328.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ecotoneframework/enqueue.git",
-                "reference": "9ce81ea6ec1d728e0c3277e5fa4ad8da83f08202"
+                "reference": "4938c0e0a0a6f4d08e7c20e9f30fa4f12a5a8357"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ecotoneframework/enqueue/zipball/9ce81ea6ec1d728e0c3277e5fa4ad8da83f08202",
-                "reference": "9ce81ea6ec1d728e0c3277e5fa4ad8da83f08202",
+                "url": "https://api.github.com/repos/ecotoneframework/enqueue/zipball/4938c0e0a0a6f4d08e7c20e9f30fa4f12a5a8357",
+                "reference": "4938c0e0a0a6f4d08e7c20e9f30fa4f12a5a8357",
                 "shasum": ""
             },
             "require": {
-                "ecotone/ecotone": "~1.328.2",
+                "ecotone/ecotone": "~1.328.3",
                 "enqueue/dsn": "^0.10.4",
                 "queue-interop/queue-interop": "^0.8"
             },
@@ -900,7 +900,7 @@
                         "description": "Allows to use Enterprise features of Ecotone. For more information please write to support@simplycodedsoftware.com"
                     }
                 },
-                "release-time": "2026-10-10 11:29:09"
+                "release-time": "2026-10-29 20:17:56"
             },
             "autoload": {
                 "psr-4": {
@@ -930,7 +930,7 @@
                 "sqs"
             ],
             "support": {
-                "source": "https://github.com/ecotoneframework/enqueue/tree/1.328.2"
+                "source": "https://github.com/ecotoneframework/enqueue/tree/1.328.3"
             },
             "funding": [
                 {
@@ -938,7 +938,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-10T11:29:40+00:00"
+            "time": "2026-10-29T20:18:29+00:00"
         },
         {
             "name": "ecotone/laravel",
@@ -4873,16 +4873,16 @@
         },
         {
             "name": "symfony/dependency-injection",
-            "version": "v8.1.10",
+            "version": "v8.1.11",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/dependency-injection.git",
-                "reference": "9b34cad844bcbc878a05056e3ffac5377e0e140a"
+                "reference": "d678f8d0527ed592593901da3ba2e2c17f7d51c1"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/dependency-injection/zipball/9b34cad844bcbc878a05056e3ffac5377e0e140a",
-                "reference": "9b34cad844bcbc878a05056e3ffac5377e0e140a",
+                "url": "https://api.github.com/repos/symfony/dependency-injection/zipball/d678f8d0527ed592593901da3ba2e2c17f7d51c1",
+                "reference": "d678f8d0527ed592593901da3ba2e2c17f7d51c1",
                 "shasum": ""
             },
             "require": {
@@ -4930,7 +4930,7 @@
             "description": "Allows you to standardize and centralize the way objects are constructed in your application",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/dependency-injection/tree/v8.1.10"
+                "source": "https://github.com/symfony/dependency-injection/tree/v8.1.11"
             },
             "funding": [
                 {
@@ -4950,7 +4950,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-28T11:09:29+00:00"
+            "time": "2026-11-01T19:30:44+00:00"
         },
         {
             "name": "symfony/deprecation-contracts",
@@ -6838,16 +6838,16 @@
         },
         {
             "name": "symfony/service-contracts",
-            "version": "v3.7.3",
+            "version": "v3.8.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/service-contracts.git",
-                "reference": "15e6a07ec2a2c75ceb1b21dd98105ee8456d2257"
+                "reference": "052852a96fd5e5ebdb617dba22031e41a3300fb5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/service-contracts/zipball/15e6a07ec2a2c75ceb1b21dd98105ee8456d2257",
-                "reference": "15e6a07ec2a2c75ceb1b21dd98105ee8456d2257",
+                "url": "https://api.github.com/repos/symfony/service-contracts/zipball/052852a96fd5e5ebdb617dba22031e41a3300fb5",
+                "reference": "052852a96fd5e5ebdb617dba22031e41a3300fb5",
                 "shasum": ""
             },
             "require": {
@@ -6865,7 +6865,7 @@
                     "name": "symfony/contracts"
                 },
                 "branch-alias": {
-                    "dev-main": "3.7-dev"
+                    "dev-main": "3.8-dev"
                 }
             },
             "autoload": {
@@ -6901,7 +6901,7 @@
                 "standards"
             ],
             "support": {
-                "source": "https://github.com/symfony/service-contracts/tree/v3.7.3"
+                "source": "https://github.com/symfony/service-contracts/tree/v3.8.1"
             },
             "funding": [
                 {
@@ -6921,7 +6921,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-07-27T15:39:01+00:00"
+            "time": "2026-10-20T17:38:25+00:00"
         },
         {
             "name": "symfony/string",
