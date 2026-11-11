@@ -17,7 +17,7 @@
 Помимо gateway, сервисы сами проверяют роль из `X-User-Role` (defense-in-depth, если запрос пришёл по внутренней сети напрямую):
 
 - order: `DenyAnalystWrites` (analyst — read-only) и `ResolveGatewayIdentity` (`X-User-Id` → `user_id`, `X-User-Email` → `email`, `X-User-Name` → `name`);
-- recommendation: `EnsureGatewayRole` (только admin/analyst/user) и `ResolveGatewayUserId`;
+- recommendation: `EnsureGatewayRole` (только admin/analyst/customer) и `ResolveGatewayUserId`;
 - analytic (Go): `requireRole` (только admin/analyst), `X-User-Role`.
 
 ## Почему так

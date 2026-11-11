@@ -17,8 +17,12 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class EnsureGatewayRole
 {
-    /** @var list<string> */
-    public const ALLOWED = ['admin', 'analyst', 'user'];
+    /**
+     * Slugs must match the auth_service roles (RoleSeeder: customer/analyst/admin).
+     *
+     * @var list<string>
+     */
+    public const ALLOWED = ['admin', 'analyst', 'customer'];
 
     public function handle(Request $request, Closure $next): Response
     {

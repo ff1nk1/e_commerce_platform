@@ -309,7 +309,7 @@ Identity передаётся только там, где контроллер �
 | Сервис | Middleware | Что проверяет |
 |--------|------------|---------------|
 | order | [`ResolveGatewayIdentity`](../order_service/app/Http/Middleware/ResolveGatewayIdentity.php), [`DenyAnalystWrites`](../order_service/app/Http/Middleware/DenyAnalystWrites.php) | `X-User-Id`/`X-User-Email`/`X-User-Name` → `user_id`/`email`/`name`; `analyst` read-only |
-| recommendation | [`ResolveGatewayUserId`](../recommendation_service/app/Http/Middleware/ResolveGatewayUserId.php), [`EnsureGatewayRole`](../recommendation_service/app/Http/Middleware/EnsureGatewayRole.php) | `X-User-Id`; роль ∈ admin/analyst/user |
+| recommendation | [`ResolveGatewayUserId`](../recommendation_service/app/Http/Middleware/ResolveGatewayUserId.php), [`EnsureGatewayRole`](../recommendation_service/app/Http/Middleware/EnsureGatewayRole.php) | `X-User-Id`; роль ∈ admin/analyst/customer |
 | catalog (admin) | [`AuthenticateFromGatewayHeaders`](../catalog_service/app/Http/Middleware/AuthenticateFromGatewayHeaders.php) | `X-User-Id` numeric ≥ 1 **и** `X-User-Role: admin` |
 | notification | [`RequireGatewayRole`](../notification_service/app/Http/Middleware/RequireGatewayRole.php) | роль ∈ admin/analyst, analyst read-only |
 | analytic (Go) | `requireRole` в [`handlers.go`](../analytic_service/internal/httpapi/handlers.go) | `X-User-Role` ∈ admin/analyst |
